@@ -414,6 +414,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
 // ── QUOTE FORM ───────────────────────────────────────────────────
 const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config }) => {
   const [prodSearch, setProdSearch] = useState("");
+  const [uploading, setUploading]   = useState(null); // item id being uploaded
 
   const set = (k, v) => setQuote(q => recalc({ ...q, [k]: v }));
 
@@ -421,8 +422,34 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     const item = { id: Date.now(), productId: prod.id, sku: prod.sku,
                    name: prod.name, qty: 1, price: prod.price, cost: prod.cost||0,
                    currency: prod.currency||"COP", unit: prod.unit,
-                   discount: 0, tax: prod.tax !== undefined ? prod.tax : 19 };
+                   discount: 0, tax: prod.tax !== undefined ? prod.tax : 19,
+                   imageUrl: prod.imageUrl || prod.image_url || "" };
     setQuote(q => recalc({ ...q, items: [...q.items, item] }));
+  };
+
+  // ── Línea libre (producto manual) ──
+  const addFreeItem = () => {
+    const item = { id: Date.now(), productId: null, sku: "", name: "", qty: 1,
+                   price: 0, cost: 0, currency: "COP", unit: "pza",
+                   discount: 0, tax: 19, imageUrl: "", isFree: true };
+    setQuote(q => recalc({ ...q, items: [...q.items, item] }));
+  };
+
+  // ── Subir imagen a Supabase Storage ──
+  const uploadImage = async (itemId, file) => {
+    const allowed = ["image/jpeg","image/jpg","image/png","image/gif","image/webp","image/svg+xml"];
+    if (!allowed.includes(file.type)) { alert("Formato no soportado. Usa JPG, PNG, GIF, WEBP o SVG."); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("La imagen no puede pesar más de 5MB."); return; }
+    setUploading(itemId);
+    try {
+      const ext  = file.name.split(".").pop();
+      const path = `quotes/${Date.now()}-${itemId}.${ext}`;
+      const { error } = await sb.storage.from("product-images").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = sb.storage.from("product-images").getPublicUrl(path);
+      setQuote(q => recalc({ ...q, items: q.items.map(i => i.id===itemId ? { ...i, imageUrl: data.publicUrl } : i) }));
+    } catch(e) { alert("Error subiendo imagen: " + e.message); }
+    setUploading(null);
   };
 
   const updateItem = (id, k, v) =>
@@ -505,11 +532,17 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                    borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
           + Encabezado de Sección
         </button>
+        <button onClick={addFreeItem}
+          style={{ background:"rgba(245,158,11,.1)",border:`1px solid ${G.warn}`,color:G.warn,
+                   borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
+          + Línea Libre
+        </button>
       </div>
 
       <Card style={{ padding:0,overflow:"hidden",marginBottom:18 }}>
         <table>
           <thead><tr>
+            <th style={{width:44}}>Img</th>
             <th>SKU</th><th>Descripción</th><th style={{width:50}}>Mon.</th>
             <th style={{width:60}}>Qty</th><th style={{width:110}}>P. Unitario</th>
             <th style={{width:70}}>Dto%</th>
@@ -530,7 +563,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   // ── Fila de ENCABEZADO ──
                   rows.push(
                     <tr key={item.id}>
-                      <td colSpan={10} style={{ padding:"6px 8px",background:"rgba(59,130,246,.08)",
+                      <td colSpan={11} style={{ padding:"6px 8px",background:"rgba(59,130,246,.08)",
                                                 borderTop:`2px solid ${G.accent}` }}>
                         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                           <span style={{ color:G.accent,fontWeight:700,fontSize:13 }}>▸</span>
@@ -552,7 +585,28 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   const linePct     = lineNet > 0 ? Math.round((lineProfit/lineNet)*100) : 0;
                   rows.push(
                     <tr key={item.id}>
-                      <td style={{ fontFamily:G.mono,fontSize:12,color:G.accent,whiteSpace:"nowrap" }}>{item.sku}</td>
+                      <td style={{ padding:"4px",textAlign:"center",width:44 }}>
+                        <label style={{ cursor:"pointer",display:"block" }}>
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt="" style={{ width:36,height:36,objectFit:"cover",borderRadius:4,border:`1px solid ${G.border}` }} />
+                          ) : (
+                            <div style={{ width:36,height:36,borderRadius:4,border:`1px dashed ${G.border}`,
+                                          display:"flex",alignItems:"center",justifyContent:"center",
+                                          fontSize:16,color:G.muted,margin:"auto" }}>
+                              {uploading===item.id ? "..." : "📷"}
+                            </div>
+                          )}
+                          <input type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
+                            style={{ display:"none" }}
+                            onChange={e=>e.target.files[0] && uploadImage(item.id, e.target.files[0])} />
+                        </label>
+                      </td>
+                      <td style={{ fontFamily:G.mono,fontSize:12,color:G.accent,whiteSpace:"nowrap" }}>
+                        {item.isFree ? (
+                          <input value={item.sku||""} onChange={e=>setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,sku:e.target.value}:i)}))}
+                            placeholder="SKU" style={{ padding:"4px 6px",width:70,fontFamily:G.mono,fontSize:12,color:G.accent }} />
+                        ) : item.sku}
+                      </td>
                       <td>
                         <input value={item.name} onChange={e=>updateItem(item.id,"name",e.target.value)}
                           style={{ padding:"4px 8px" }} />
@@ -610,7 +664,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   if (sectionId !== "__root__" && isLastInSection && secTotals[sectionId] > 0) {
                     rows.push(
                       <tr key={`subtotal-${sectionId}`}>
-                        <td colSpan={7} style={{ textAlign:"right",padding:"6px 12px",
+                        <td colSpan={8} style={{ textAlign:"right",padding:"6px 12px",
                                                  background:"rgba(59,130,246,.05)",
                                                  color:G.muted,fontSize:12,fontStyle:"italic" }}>
                           Subtotal sección
@@ -628,7 +682,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               });
               if (!quote.items.length) {
                 rows.push(
-                  <tr key="empty"><td colSpan={10} style={{ textAlign:"center",color:G.muted,padding:24,fontStyle:"italic" }}>
+                  <tr key="empty"><td colSpan={11} style={{ textAlign:"center",color:G.muted,padding:24,fontStyle:"italic" }}>
                     Agrega productos del catálogo de arriba.
                   </td></tr>
                 );
@@ -757,7 +811,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
         </div>
 
         <table>
-          <thead><tr><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
+          <thead><tr><th style="width:54px">Img</th><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
           <tbody>
             ${(()=>{
               // compute section subtotals for PDF
@@ -785,10 +839,14 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
                 let sectionId  = "__root__";
                 for (let k=i; k>=0; k--) { if(quote.items[k].type==="header"){sectionId=quote.items[k].id;break;} }
                 const subtotalRow = (sectionId!=="__root__" && isLast && secMap[sectionId]>0)
-                  ? `<tr style="background:${pc}08"><td colspan="4" style="text-align:right;color:#64748b;font-style:italic;padding:5px 12px">Subtotal sección</td><td style="text-align:right;font-weight:700;color:${pc};padding:5px 12px">${fmtCOP(secMap[sectionId])}</td></tr>`
+                  ? `<tr style="background:${pc}08"><td colspan="5" style="text-align:right;color:#64748b;font-style:italic;padding:5px 12px">Subtotal sección</td><td style="text-align:right;font-weight:700;color:${pc};padding:5px 12px">${fmtCOP(secMap[sectionId])}</td></tr>`
                   : "";
+                const imgCell = it.imageUrl
+                  ? `<td style="width:54px;padding:3px"><img src="${it.imageUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #e2e8f0" crossorigin="anonymous"></td>`
+                  : `<td style="width:54px"></td>`;
                 return `<tr>
-                  <td><code>${it.sku}</code></td>
+                  ${imgCell}
+                  <td><code>${it.sku||""}</code></td>
                   <td>${it.name}${disc>0?` <span style="color:#ef4444;font-size:10px">(-${disc}%)</span>`:""}</td>
                   <td style="text-align:center">${it.qty} ${it.unit||""}</td>
                   <td style="text-align:right">${fmtCOP(netCOP)}</td>
@@ -798,10 +856,10 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
             })()}
           </tbody>
           <tfoot>
-            <tr><td colspan="4" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>
-            ${(quote.totalDisc>0)?`<tr><td colspan="4" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
-            ${(quote.taxAmt>0)?`<tr><td colspan="4" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
-            <tr class="total-row"><td colspan="4" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
+            <tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>
+            ${(quote.totalDisc>0)?`<tr><td colspan="6" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
+            ${(quote.taxAmt>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
+            <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
           </tfoot>
         </table>
 
@@ -823,7 +881,19 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
     `);
     w.document.close();
     w.focus();
-    setTimeout(()=>w.print(), 500);
+    // Wait for all images to load before printing
+    w.addEventListener("load", () => {
+      const imgs = w.document.querySelectorAll("img");
+      if (!imgs.length) { setTimeout(()=>w.print(), 300); return; }
+      let loaded = 0;
+      const tryPrint = () => { loaded++; if (loaded >= imgs.length) setTimeout(()=>w.print(), 300); };
+      imgs.forEach(img => {
+        if (img.complete) { tryPrint(); }
+        else { img.onload = tryPrint; img.onerror = tryPrint; }
+      });
+      // Fallback: print after 3 seconds regardless
+      setTimeout(()=>w.print(), 3000);
+    });
   };
 
   return (
@@ -1038,9 +1108,26 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("Todos");
+  const [uploadingImg, setUploadingImg] = useState(false);
 
   const cats = ["Todos", ...new Set(products.map(p=>p.category))];
-  const blank = () => ({ id:Date.now(),sku:"",name:"",category:"Servicios",cost:0,margin:40,price:0,unit:"pza" });
+  const blank = () => ({ id:Date.now(),sku:"",name:"",category:"Servicios",cost:0,margin:40,price:0,unit:"pza",imageUrl:"" });
+
+  const uploadProductImage = async (file) => {
+    const allowed = ["image/jpeg","image/jpg","image/png","image/gif","image/webp","image/svg+xml"];
+    if (!allowed.includes(file.type)) { alert("Formato no soportado. Usa JPG, PNG, GIF, WEBP o SVG."); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("La imagen no puede pesar más de 5MB."); return; }
+    setUploadingImg(true);
+    try {
+      const ext  = file.name.split(".").pop();
+      const path = `products/${Date.now()}.${ext}`;
+      const { error } = await sb.storage.from("product-images").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = sb.storage.from("product-images").getPublicUrl(path);
+      setCur(c => ({ ...c, imageUrl: data.publicUrl }));
+    } catch(e) { alert("Error subiendo imagen: " + e.message); }
+    setUploadingImg(false);
+  };
   const calcPrice = (cost, margin) => margin >= 100 ? 0 : Math.round((cost / (1 - margin/100)) * 100) / 100;
   const openNew = () => { setCur(blank()); setModal(true); };
   const openEdit = (p) => { setCur({...p}); setModal(true); };
@@ -1084,10 +1171,16 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
       </Card>
       <Card style={{ padding:0,overflow:"hidden" }}>
         <table>
-          <thead><tr><th>SKU</th><th>Producto / Servicio</th><th>Categoría</th><th>Moneda</th><th>Costo</th><th>Margen</th><th>P. Venta</th><th>Unidad</th><th></th></tr></thead>
+          <thead><tr><th style={{width:50}}>Img</th><th>SKU</th><th>Producto / Servicio</th><th>Categoría</th><th>Moneda</th><th>Costo</th><th>Margen</th><th>P. Venta</th><th>Unidad</th><th></th></tr></thead>
           <tbody>
             {filt.map(p=>(
               <tr key={p.id}>
+                <td style={{ padding:"4px 8px" }}>
+                  {p.imageUrl
+                    ? <img src={p.imageUrl} alt={p.name} style={{ width:38,height:38,objectFit:"cover",borderRadius:4,border:`1px solid ${G.border}` }} />
+                    : <div style={{ width:38,height:38,borderRadius:4,background:G.surface,border:`1px dashed ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted,fontSize:16 }}>📦</div>
+                  }
+                </td>
                 <td style={{ fontFamily:G.mono,color:G.accent,fontSize:12 }}>{p.sku}</td>
                 <td><strong>{p.name}</strong></td>
                 <td><span className="badge badge-blue">{p.category}</span></td>
@@ -1110,7 +1203,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
                 </td>
               </tr>
             ))}
-            {!filt.length && <tr><td colSpan={9} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin productos.</td></tr>}
+            {!filt.length && <tr><td colSpan={10} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin productos.</td></tr>}
           </tbody>
         </table>
       </Card>
@@ -1158,6 +1251,34 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
               <select value={cur.unit} onChange={e=>setCur({...cur,unit:e.target.value})}>
                 {["pza","hr","día","mes","año","kg","lt","m2","servicio","licencia","usuario"].map(u=><option key={u}>{u}</option>)}
               </select>
+            </Field>
+            <Field label="Foto del Producto (opcional)" style={{ gridColumn:"1/-1" }}>
+              <div style={{ display:"flex",gap:14,alignItems:"center" }}>
+                <label style={{ cursor:"pointer",flexShrink:0 }}>
+                  <div style={{ width:80,height:80,borderRadius:8,border:`2px dashed ${G.border}`,
+                                display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                                background:G.surface,overflow:"hidden" }}>
+                    {cur.imageUrl
+                      ? <img src={cur.imageUrl} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                      : <span style={{ fontSize:28 }}>{uploadingImg ? "⏳" : "📷"}</span>
+                    }
+                  </div>
+                  <input type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
+                    style={{ display:"none" }}
+                    onChange={e=>e.target.files[0] && uploadProductImage(e.target.files[0])} />
+                </label>
+                <div style={{ flex:1 }}>
+                  <p style={{ fontSize:12,color:G.muted,marginBottom:6 }}>
+                    Clic en el recuadro para subir una foto. Formatos: JPG, PNG, GIF, WEBP, SVG. Máx 5MB.
+                  </p>
+                  {cur.imageUrl && (
+                    <button onClick={()=>setCur({...cur,imageUrl:""})}
+                      style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+                      ✕ Quitar foto
+                    </button>
+                  )}
+                </div>
+              </div>
             </Field>
           </div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
@@ -1419,7 +1540,7 @@ export default function App() {
 
       // Products
       const { data: prods } = await sb.from("products").select("*").order("name");
-      if (prods && prods.length) setProducts(prods);
+      if (prods && prods.length) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||""})));
       else { await sb.from("products").insert(INIT_PRODUCTS.map(({id,...p})=>p)); 
              const { data: p2 } = await sb.from("products").select("*").order("name");
              if (p2) setProducts(p2); }
@@ -1480,7 +1601,8 @@ export default function App() {
   // ── CRUD: Products ───────────────────────────────────────────
   const saveProduct = async (p) => {
     const row = { sku:p.sku, name:p.name, category:p.category, currency:p.currency||"COP",
-                  cost:p.cost||0, margin:p.margin||0, price:p.price||0, unit:p.unit, tax:p.tax||19 };
+                  cost:p.cost||0, margin:p.margin||0, price:p.price||0, unit:p.unit, tax:p.tax||19,
+                  image_url: p.imageUrl||"" };
     if (p.id && typeof p.id === "number" && p.id > 1000000000) {
       const { data } = await sb.from("products").insert(row).select().single();
       if (data) setProducts(ps => [...ps.filter(x=>x.id!==p.id), data].sort((a,b)=>a.name.localeCompare(b.name)));
