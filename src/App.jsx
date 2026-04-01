@@ -331,10 +331,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
   };
 
   const filtered = quotes.filter(q => {
-    const ok = filterStatus === "Todos" || q.status === filterStatus;
+    const ok = filterStatus === "Todos" || (q.status||"").toLowerCase() === filterStatus.toLowerCase() || filterStatus === "Todos";
     const srch = search.toLowerCase();
-    return ok && (q.clientName.toLowerCase().includes(srch) ||
-                  String(q.number).includes(srch) || q.status.toLowerCase().includes(srch));
+    const name = (q.clientName || q.client_name || "").toLowerCase();
+    const status = (q.status || "").toLowerCase();
+    return (filterStatus === "Todos" || (q.status||"") === filterStatus) &&
+           (name.includes(srch) || String(q.number||"").includes(srch) || status.includes(srch));
   });
 
   return (
@@ -373,11 +375,11 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
               <tr key={q.id}>
                 <td><span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span></td>
                 <td>
-                  <div style={{ fontWeight:500 }}>{q.clientName}</div>
-                  <div style={{ color:G.muted,fontSize:12 }}>{q.clientEmail}</div>
+                  <div style={{ fontWeight:500 }}>{q.clientName||q.client_name}</div>
+                  <div style={{ color:G.muted,fontSize:12 }}>{q.clientEmail||q.client_email}</div>
                 </td>
                 <td style={{ color:G.muted }}>{q.date}</td>
-                <td style={{ color:G.muted }}>{q.validUntil}</td>
+                <td style={{ color:G.muted }}>{q.validUntil||q.valid_until}</td>
                 <td style={{ fontWeight:700,fontFamily:G.mono }}>{fmt(q.total||0)}</td>
                 <td><StatusBadge s={q.status} /></td>
                 <td>
@@ -1393,7 +1395,22 @@ export default function App() {
 
       // Quotes
       const { data: qs } = await sb.from("quotes").select("*").order("number", { ascending: false });
-      if (qs) { setQuotes(qs.map(q => ({ ...q, items: q.items||[] }))); }
+      if (qs) {
+        setQuotes(qs.map(q => ({
+          ...q,
+          items: q.items||[],
+          // normalize field names from snake_case to camelCase
+          clientName:    q.client_name    || q.clientName    || "",
+          clientEmail:   q.client_email   || q.clientEmail   || "",
+          clientContact: q.client_contact || q.clientContact || "",
+          clientId:      q.client_id      || q.clientId      || null,
+          validUntil:    q.valid_until    || q.validUntil    || "",
+          totalDisc:     q.total_disc     || q.totalDisc     || 0,
+          taxAmt:        q.tax_amt        || q.taxAmt        || 0,
+          totalCost:     q.total_cost     || q.totalCost     || 0,
+          profitPct:     q.profit_pct     || q.profitPct     || 0,
+        })));
+      }
 
       // Clients
       const { data: cls } = await sb.from("clients").select("*").order("name");
