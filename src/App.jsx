@@ -1022,28 +1022,28 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:36px;font-size:12.5px;line-height:1.5}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:20px;border-bottom:3px solid ${pc}}
-        .logo-circle{width:54px;height:54px;border-radius:50%;background:${pc};color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-        .company-name{font-size:20px;font-weight:700;color:${pc}}
-        .badge{background:${pc}22;color:${pc};padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block}
-        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
-        .info-box{background:#f8fafc;padding:12px 16px;border-radius:8px;border-left:3px solid ${pc}}
-        .lbl{font-size:10px;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:6px;letter-spacing:.06em}
-        table{width:100%;border-collapse:collapse;margin:16px 0}
-        th{background:${pc};color:#fff;padding:9px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-        td{padding:9px 12px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
+        body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:20px 28px;font-size:10px;line-height:1.4}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid ${pc}}
+        .logo-circle{width:38px;height:38px;border-radius:50%;background:${pc};color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .company-name{font-size:13px;font-weight:700;color:${pc}}
+        .badge{background:${pc}22;color:${pc};padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;display:inline-block}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+        .info-box{background:#f8fafc;padding:6px 10px;border-radius:6px;border-left:2px solid ${pc}}
+        .lbl{font-size:8px;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:3px;letter-spacing:.06em}
+        table{width:100%;border-collapse:collapse;margin:8px 0;font-size:10px}
+        th{background:${pc};color:#fff;padding:5px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+        td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
         tr:nth-child(even) td{background:#f8fafc}
-        .total-row td{font-weight:700;font-size:14px;border-top:2px solid ${pc};color:${pc};background:#fff}
-        .notes-box{background:#fffbeb;border-left:3px solid #f59e0b;padding:14px;margin-top:20px;border-radius:0 8px 8px 0;white-space:pre-line}
-        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 16px;border-radius:8px;margin-top:16px}
-        .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:10px}
-        code{font-family:monospace;color:${pc};font-size:11px}
+        .total-row td{font-weight:700;font-size:11px;border-top:2px solid ${pc};color:${pc};background:#fff}
+        .notes-box{background:#fffbeb;border-left:2px solid #f59e0b;padding:8px 10px;margin-top:10px;border-radius:0 6px 6px 0;white-space:pre-line;font-size:9px}
+        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 12px;border-radius:6px;margin-top:8px;font-size:9px}
+        .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:8px}
+        code{font-family:monospace;color:${pc};font-size:9px}
       </style></head><body>
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
             ${config.logoUrl
-              ? `<img src="${config.logoUrl}" alt="logo" style="height:60px;object-fit:contain">`
+              ? `<img src="${config.logoUrl}" alt="logo" style="height:40px;object-fit:contain">`
               : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
             <div>
               <div class="company-name">${config.companyName||"Mi Empresa"}</div>
@@ -1052,16 +1052,16 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
             </div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:24px;font-weight:700;color:${pc};letter-spacing:-.02em">COTIZACIÓN</div>
-            <div style="font-size:15px;color:#475569;font-weight:600">N° ${quote.number}</div>
-            <div style="margin:4px 0"><span class="badge">${quote.status}</span></div>
+            <div style="font-size:16px;font-weight:700;color:${pc};letter-spacing:-.02em">COTIZACIÓN</div>
+            <div style="font-size:12px;color:#475569;font-weight:600">N° ${quote.number}</div>
+            <div style="margin:2px 0"><span class="badge">${quote.status}</span></div>
           </div>
         </div>
 
         <div class="info-grid">
           <div class="info-box">
             <div class="lbl">Señor(a)</div>
-            <strong style="font-size:14px">${quote.clientName}</strong>
+            <strong style="font-size:11px">${quote.clientName}</strong>
             <div style="color:#64748b">${quote.clientContact||""}</div>
             <div style="color:#64748b">${quote.clientEmail||""}</div>
           </div>
@@ -1078,7 +1078,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
         </div>
 
         <table>
-          <thead><tr><th style="width:54px">Img</th><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
+          <thead><tr><th style="width:36px">Img</th><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
           <tbody>
             ${(()=>{
               // compute section subtotals for PDF
@@ -1109,8 +1109,8 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
                   ? `<tr style="background:${pc}08"><td colspan="5" style="text-align:right;color:#64748b;font-style:italic;padding:5px 12px">Subtotal sección</td><td style="text-align:right;font-weight:700;color:${pc};padding:5px 12px">${fmtCOP(secMap[sectionId])}</td></tr>`
                   : "";
                 const imgCell = it.imageUrl
-                  ? `<td style="width:54px;padding:3px"><img src="${it.imageUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #e2e8f0" crossorigin="anonymous"></td>`
-                  : `<td style="width:54px"></td>`;
+                  ? `<td style="width:36px;padding:2px"><img src="${it.imageUrl}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;border:1px solid #e2e8f0" crossorigin="anonymous"></td>`
+                  : `<td style="width:36px"></td>`;
                 return `<tr>
                   ${imgCell}
                   <td><code>${it.sku||""}</code></td>
