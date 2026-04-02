@@ -613,7 +613,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     p.sku.toLowerCase().includes(prodSearch.toLowerCase()));
 
   return (
-    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`} width={1200}
+    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`} width={1400}
            onClose={onClose} width={940}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
@@ -683,16 +683,16 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         </button>
       </div>
 
-      <Card style={{ padding:0,overflow:"hidden",marginBottom:18 }}>
-        <table>
+      <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible",marginBottom:18 }}>
+        <table style={{ minWidth:1100 }}>
           <thead><tr>
             <th style={{width:44}}>Img</th>
-            <th style={{width:90}}>SKU</th><th>Descripción</th><th style={{width:60}}>Mon.</th>
-            <th style={{width:70}}>Qty</th><th style={{width:150}}>P. Unitario</th>
+            <th style={{width:100}}>SKU</th><th>Descripción</th><th style={{width:60}}>Mon.</th>
+            <th style={{width:70}}>Qty</th><th style={{width:180}}>P. Unitario</th>
             <th style={{width:90}}>Dto%</th>
-            <th style={{width:100}}>IVA%</th>
-            <th style={{width:150}}>Subtotal</th>
-            <th style={{width:130,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
+            <th style={{width:110}}>IVA%</th>
+            <th style={{width:170}}>Subtotal</th>
+            <th style={{width:140,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
             <th style={{width:36}}></th>
           </tr></thead>
           <tbody>
@@ -835,7 +835,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
             })()}
           </tbody>
         </table>
-      </Card>
+      </Card></div>
 
       <div style={{ display:"flex",gap:14,justifyContent:"flex-end",marginBottom:18 }}>
         {/* Panel de utilidad — solo visible aquí, no se imprime */}
