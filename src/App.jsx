@@ -375,28 +375,54 @@ const recalc = (q) => {
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
 const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest }) => {
-  const [modal, setModal] = useState(null);
-  const [current, setCurrent] = useState(null);
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
 
+  // Draft persistence for quote form
+  const [modal, setModal] = useState(() => {
+    try { return localStorage.getItem("qa_draft_quote_modal") || null; } catch { return null; }
+  });
+  const [current, setCurrent] = useState(() => {
+    try {
+      const d = localStorage.getItem("qa_draft_quote");
+      return d ? JSON.parse(d) : null;
+    } catch { return null; }
+  });
+
+  useEffect(() => {
+    try {
+      if (current && (modal === "new" || modal === "edit")) {
+        localStorage.setItem("qa_draft_quote", JSON.stringify(current));
+        localStorage.setItem("qa_draft_quote_modal", modal);
+      }
+    } catch {}
+  }, [current, modal]);
+
+  const clearQuoteDraft = () => {
+    try { localStorage.removeItem("qa_draft_quote"); localStorage.removeItem("qa_draft_quote_modal"); } catch {}
+  };
+
   const openNew = () => {
-    const c0 = clients[0];
-    const num = quoteCounter++;
-    setCurrent(recalc({
-      id: Date.now(), number: num,
-      date: today(), validUntil: addDays(today(), 30),
-      clientId: c0?.id || null,
-      clientName: c0?.name || "",
-      clientContact: c0?.contact || "",
-      clientEmail: c0?.email || "",
-      status: "Pendiente", notes: config?.defaultNotes||"", discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
-    }));
+    // Only create new if no draft exists
+    const draft = localStorage.getItem("qa_draft_quote_modal");
+    if (!draft || draft === "null") {
+      const c0 = clients[0];
+      const num = quoteCounter++;
+      setCurrent(recalc({
+        id: Date.now(), number: num,
+        date: today(), validUntil: addDays(today(), 30),
+        clientId: c0?.id || null,
+        clientName: c0?.name || "",
+        clientContact: c0?.contact || "",
+        clientEmail: c0?.email || "",
+        status: "Pendiente", notes: config?.defaultNotes||"", discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
+      }));
+    }
     setModal("new");
   };
 
-  const openEdit = (q) => { setCurrent({ ...q }); setModal("edit"); };
+  const openEdit = (q) => { clearQuoteDraft(); setCurrent({ ...q }); setModal("edit"); };
   const openView = (q) => { setCurrent({ ...q }); setModal("view"); };
 
   const openRevision = async (q) => {
@@ -407,6 +433,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
 
   const save = async () => {
     await saveQuote(current);
+    clearQuoteDraft();
     setModal(null);
   };
 
@@ -506,9 +533,16 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
         </Card>
       </div>
 
+      {(modal === "new" || modal === "edit") && current && localStorage.getItem("qa_draft_quote") && (
+        <div style={{ background:"rgba(245,158,11,.12)",border:"1px solid rgba(245,158,11,.3)",
+                      borderRadius:8,padding:"8px 14px",marginBottom:12,fontSize:12,color:G.warn,
+                      display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <span>📝 Borrador recuperado — tus cambios se guardaron automáticamente</span>
+        </div>
+      )}
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
-          onSave={save} onClose={()=>setModal(null)} isNew={modal==="new"} config={config} />
+          onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config} />
       )}
       {modal === "view" && current && (
         <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config}
@@ -1266,6 +1300,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
   const isExisting = cur && products.some(p=>p.id===cur.id);
   const save = async () => {
     await saveProduct(cur);
+    clearDraft();
     setModal(false);
   };
   const remove = async (id) => {
