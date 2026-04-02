@@ -1683,19 +1683,28 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
 };
 
 // ── CONFIGURACIÓN ────────────────────────────────────────────────
+const ConfigSection = ({ title, children }) => (
+  <Card style={{ marginBottom:20 }}>
+    <p style={{ fontWeight:700,fontSize:14,marginBottom:16,color:G.accentH,
+                borderBottom:`1px solid ${G.border}`,paddingBottom:10 }}>{title}</p>
+    <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>{children}</div>
+  </Card>
+);
+
 const ConfigView = ({ config, setConfig }) => {
   const [saved, setSaved] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const set = (k, v) => setConfig(c => ({ ...c, [k]: v }));
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  // Local state for personal profile to avoid re-render jumps
+  const [personal, setPersonal] = useState(() => config.personal || {
+    companyName:"", vendorEmail:"", vendorPhone:"", nit:"",
+    primaryColor:"#0d6e6e", logoUrl:"", bankName:"", bankType:"Ahorros", bankAccount:"", accountHolder:""
+  });
 
-  const Section = ({ title, children }) => (
-    <Card style={{ marginBottom:20 }}>
-      <p style={{ fontWeight:700,fontSize:14,marginBottom:16,color:G.accentH,
-                  borderBottom:`1px solid ${G.border}`,paddingBottom:10 }}>{title}</p>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>{children}</div>
-    </Card>
-  );
+  const set = (k, v) => setConfig(c => ({ ...c, [k]: v }));
+  const setP = (k, v) => setPersonal(p => ({ ...p, [k]: v }));
+  const savePersonal = () => setConfig(c => ({ ...c, personal: personal }));
+  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const Section = ConfigSection;
 
   return (
     <div style={{ padding:30,maxWidth:860 }}>
@@ -1798,37 +1807,37 @@ const ConfigView = ({ config, setConfig }) => {
       </Section>
 
       <Section title="👤 Perfil Personal">
-        <p style={{ color:G.muted,fontSize:12,marginBottom:14,gridColumn:"1/-1" }}>
-          Usado cuando creas cotizaciones a título personal. Tiene su propio logo y datos bancarios.
+        <p style={{ color:G.muted,fontSize:12,marginBottom:6,gridColumn:"1/-1" }}>
+          Usado cuando creas cotizaciones a título personal. Escribe y luego guarda con el botón de abajo.
         </p>
         <Field label="Tu Nombre" style={{ gridColumn:"1/-1" }}>
-          <input value={config.personal?.companyName||""} onChange={e=>set("personal",{...config.personal,companyName:e.target.value})} placeholder="Jorge Mejia Jaramillo" />
+          <input value={personal.companyName||""} onChange={e=>setP("companyName",e.target.value)} placeholder="Jorge Mejia Jaramillo" />
         </Field>
         <Field label="Email Personal">
-          <input value={config.personal?.vendorEmail||""} onChange={e=>set("personal",{...config.personal,vendorEmail:e.target.value})} />
+          <input value={personal.vendorEmail||""} onChange={e=>setP("vendorEmail",e.target.value)} />
         </Field>
         <Field label="Teléfono">
-          <input value={config.personal?.vendorPhone||""} onChange={e=>set("personal",{...config.personal,vendorPhone:e.target.value})} />
+          <input value={personal.vendorPhone||""} onChange={e=>setP("vendorPhone",e.target.value)} />
         </Field>
-        <Field label="CC / NIT Personal">
-          <input value={config.personal?.nit||""} onChange={e=>set("personal",{...config.personal,nit:e.target.value})} placeholder="Cédula o NIT" />
+        <Field label="CC / Cédula">
+          <input value={personal.nit||""} onChange={e=>setP("nit",e.target.value)} placeholder="Número de cédula" />
         </Field>
-        <Field label="Color Principal Personal">
+        <Field label="Color Principal">
           <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-            <input type="color" value={config.personal?.primaryColor||"#0d6e6e"} onChange={e=>set("personal",{...config.personal,primaryColor:e.target.value})}
+            <input type="color" value={personal.primaryColor||"#0d6e6e"} onChange={e=>setP("primaryColor",e.target.value)}
               style={{ width:48,height:36,padding:2,cursor:"pointer" }} />
-            <input value={config.personal?.primaryColor||"#0d6e6e"} onChange={e=>set("personal",{...config.personal,primaryColor:e.target.value})} style={{ flex:1 }} />
+            <input value={personal.primaryColor||"#0d6e6e"} onChange={e=>setP("primaryColor",e.target.value)} style={{ flex:1 }} />
           </div>
         </Field>
         <Field label="Logo Personal">
           <div style={{ display:"flex",gap:12,alignItems:"center",flexWrap:"wrap" }}>
-            {config.personal?.logoUrl && (
-              <img src={config.personal.logoUrl} alt="logo personal" style={{ height:40,objectFit:"contain",
+            {personal.logoUrl && (
+              <img src={personal.logoUrl} alt="logo personal" style={{ height:40,objectFit:"contain",
                 border:`1px solid ${G.border}`,borderRadius:6,padding:4,background:"#fff" }} />
             )}
             <label style={{ display:"inline-block",padding:"7px 16px",background:G.accent,
                             color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:500 }}>
-              {config.personal?.logoUrl ? "🔄 Cambiar" : "📁 Subir logo"}
+              {personal.logoUrl ? "🔄 Cambiar" : "📁 Subir logo"}
               <input type="file" accept="image/*" style={{ display:"none" }}
                 onChange={async e => {
                   const file = e.target.files[0];
@@ -1839,29 +1848,33 @@ const ConfigView = ({ config, setConfig }) => {
                     const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
                     if (error) throw error;
                     const { data } = sb.storage.from("product-images").getPublicUrl(path);
-                    set("personal", {...config.personal, logoUrl: data.publicUrl + "?t=" + Date.now()});
+                    setP("logoUrl", data.publicUrl + "?t=" + Date.now());
                   } catch(e) { alert("Error: " + e.message); }
                 }} />
             </label>
-            {config.personal?.logoUrl && (
-              <button onClick={()=>set("personal",{...config.personal,logoUrl:""})}
-                style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:12,fontFamily:G.font }}>
-                ✕ Quitar
-              </button>
+            {personal.logoUrl && (
+              <button onClick={()=>setP("logoUrl","")}
+                style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:12,fontFamily:G.font }}>✕ Quitar</button>
             )}
           </div>
         </Field>
-        <Field label="Banco Personal">
-          <input value={config.personal?.bankName||""} onChange={e=>set("personal",{...config.personal,bankName:e.target.value})} />
+        <Field label="Titular Cuenta">
+          <input value={personal.accountHolder||""} onChange={e=>setP("accountHolder",e.target.value)} />
+        </Field>
+        <Field label="Banco">
+          <input value={personal.bankName||""} onChange={e=>setP("bankName",e.target.value)} />
         </Field>
         <Field label="Tipo de Cuenta">
-          <select value={config.personal?.bankType||"Ahorros"} onChange={e=>set("personal",{...config.personal,bankType:e.target.value})}>
+          <select value={personal.bankType||"Ahorros"} onChange={e=>setP("bankType",e.target.value)}>
             {["Ahorros","Corriente"].map(t=><option key={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="Número de Cuenta" style={{ gridColumn:"1/-1" }}>
-          <input value={config.personal?.bankAccount||""} onChange={e=>set("personal",{...config.personal,bankAccount:e.target.value})} />
+          <input value={personal.bankAccount||""} onChange={e=>setP("bankAccount",e.target.value)} />
         </Field>
+        <div style={{ gridColumn:"1/-1" }}>
+          <Btn variant="outline" onClick={savePersonal}>💾 Guardar Perfil Personal</Btn>
+        </div>
       </Section>
 
       <Card style={{ marginBottom:20 }}>
