@@ -2151,10 +2151,7 @@ export default function App() {
 
       // Products
       const { data: prods } = await sb.from("products").select("*").order("name");
-      if (prods && prods.length) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||""})));
-      else { await sb.from("products").insert(INIT_PRODUCTS.map(({id,...p})=>p)); 
-             const { data: p2 } = await sb.from("products").select("*").order("name");
-             if (p2) setProducts(p2); }
+      if (prods) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||""})));
 
       // Payment requests
       const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
