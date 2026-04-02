@@ -379,34 +379,26 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
 
-  // Draft persistence for quote form
-  const [modal, setModal] = useState(() => {
-    try { return localStorage.getItem("qa_draft_quote_modal") || null; } catch { return null; }
-  });
-  const [current, setCurrent] = useState(() => {
-    try {
-      const d = localStorage.getItem("qa_draft_quote");
-      return d ? JSON.parse(d) : null;
-    } catch { return null; }
-  });
+  const [modal, setModal] = useState(null);
+  const [current, setCurrent] = useState(null);
 
+  // Auto-save draft when editing quote
   useEffect(() => {
     try {
       if (current && (modal === "new" || modal === "edit")) {
         localStorage.setItem("qa_draft_quote", JSON.stringify(current));
-        localStorage.setItem("qa_draft_quote_modal", modal);
       }
     } catch {}
-  }, [current, modal]);
+  }, [current]);
 
   const clearQuoteDraft = () => {
     try { localStorage.removeItem("qa_draft_quote"); localStorage.removeItem("qa_draft_quote_modal"); } catch {}
   };
 
   const openNew = () => {
-    // Only create new if no draft exists
-    const draft = localStorage.getItem("qa_draft_quote_modal");
-    if (!draft || draft === "null") {
+    const draft = localStorage.getItem("qa_draft_quote");
+    if (draft) { try { setCurrent(JSON.parse(draft)); } catch { setCurrent(null); } }
+    else {
       const c0 = clients[0];
       const num = quoteCounter++;
       setCurrent(recalc({
@@ -1295,8 +1287,16 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
     setUploadingImg(false);
   };
   const calcPrice = (cost, margin) => margin >= 100 ? 0 : Math.round((cost / (1 - margin/100)) * 100) / 100;
-  const openNew = () => { setCur(blank()); setModal(true); };
-  const openEdit = (p) => { setCur({...p}); setModal(true); };
+  const clearDraft = () => {
+    try { localStorage.removeItem("qa_draft_product"); localStorage.removeItem("qa_draft_product_modal"); } catch {}
+  };
+  const openNew = () => {
+    const draft = localStorage.getItem("qa_draft_product");
+    if (draft) { try { setCur(JSON.parse(draft)); } catch { setCur(blank()); } }
+    else { setCur(blank()); }
+    setModal(true);
+  };
+  const openEdit = (p) => { clearDraft(); setCur({...p}); setModal(true); };
   const isExisting = cur && products.some(p=>p.id===cur.id);
   const save = async () => {
     await saveProduct(cur);
