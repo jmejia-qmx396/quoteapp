@@ -661,7 +661,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     const c = clients.find(c => String(c.id) === String(id));
     if (c) setQuote(q => ({ ...q, clientId: c.id, clientName: c.name,
                              clientContact: c.contact, clientEmail: c.email,
-                             clientRut: c.rut||"" }));
+                             clientRut: c.rfc||"" }));
   };
 
   const filtProd = products.filter(p =>
@@ -1814,7 +1814,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 
   // Look up client RUT from clients list
   const clientObj = clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
-  const clientRut = quote.clientRut || quote.client_rut || clientObj?.rut || "";
+  const clientRut = quote.clientRut || quote.client_rut || clientObj?.rfc || "";
 
   const [pr, setPr] = useState({
     isNew: true,
