@@ -667,8 +667,8 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     p.sku.toLowerCase().includes(prodSearch.toLowerCase()));
 
   return (
-    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`} width={1400}
-           onClose={onClose} width={940}>
+    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`}
+           onClose={onClose} width={1400}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
           <select value={String(quote.clientId||"")} onChange={e=>selectClient(e.target.value)}>
