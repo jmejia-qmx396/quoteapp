@@ -811,13 +811,6 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,cost,gmPct:gm}:i)}));
                           }} placeholder="0" />
                       </td>
-                      {/* Precio en COP para USD — solo informativo */}
-                      {item.currency==="USD" && item.priceCOP > 0 && (
-                        <div style={{ fontSize:9,color:G.muted,textAlign:"right",
-                                      marginTop:2,fontFamily:G.mono,paddingRight:8 }}>
-                          ={fmt(item.priceCOP)} COP
-                        </div>
-                      )}
                       {/* GM% — calcula precio en moneda original */}
                       <td>
                         <input type="number" min={0} max={99}
@@ -849,6 +842,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                             const gm = price>0?Math.round((1-cost/price)*100):0;
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
                           }} />
+                        {item.currency==="USD" && item.priceCOP>0 && (
+                          <div style={{ fontSize:9,color:G.muted,textAlign:"right",
+                                        fontFamily:G.mono,paddingRight:4,marginTop:2 }}>
+                            ={fmt(item.priceCOP)} COP
+                          </div>
+                        )}
                       </td>
                       <td>
                         <input type="number" min={0} max={100} value={item.discount||0}
