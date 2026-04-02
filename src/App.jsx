@@ -348,29 +348,31 @@ const sectionSubtotals = (items) => {
 // ── RECALCULAR TOTALES ────────────────────────────────────────────
 const recalc = (q) => {
   const trm = Number(q.trm) || 1;
-  // Separamos encabezados (type==="header") de productos reales
-  const productItems = q.items.filter(i => i.type !== "header");
   const items = q.items.map(i => {
-    if (i.type === "header") return i; // los encabezados no tienen cálculos
+    if (i.type === "header") return i;
     const priceCOP = i.currency === "USD" ? Number(i.price) * trm : Number(i.price);
     const costCOP  = i.currency === "USD" ? Number(i.cost||0) * trm : Number(i.cost||0);
     const discAmt  = priceCOP * ((Number(i.discount)||0) / 100);
-    const netCOP   = priceCOP - discAmt;               // precio neto sin IVA
+    const netCOP   = priceCOP - discAmt;
     const itemTax  = i.tax !== undefined ? Number(i.tax) : 19;
-    const taxAmt   = netCOP * (itemTax / 100);         // IVA de la línea
-    const lineNet  = Number(i.qty) * netCOP;           // subtotal línea sin IVA
+    const taxAmt   = netCOP * (itemTax / 100);
+    const lineNet  = Number(i.qty) * netCOP;
     const lineTax  = Number(i.qty) * taxAmt;
     return { ...i, priceCOP, costCOP, discAmt, netCOP, itemTax, taxAmt, lineNet, lineTax };
   });
-  const subtotal  = items.filter(i=>i.type!=="header").reduce((s,i) => s + Number(i.qty)*i.priceCOP, 0);
-  const totalDisc = items.filter(i=>i.type!=="header").reduce((s,i) => s + Number(i.qty)*i.discAmt,  0);
-  const totalTax  = items.filter(i=>i.type!=="header").reduce((s,i) => s + (i.lineTax||0), 0);
-  const totalCost = items.filter(i=>i.type!=="header").reduce((s,i) => s + Number(i.qty)*i.costCOP,  0);
-  const netSub    = subtotal - totalDisc;
-  const totalSale = netSub + totalTax;
+  const prods     = items.filter(i=>i.type!=="header");
+  const subtotal  = prods.reduce((s,i) => s + Number(i.qty)*i.priceCOP, 0);
+  const totalDisc = prods.reduce((s,i) => s + Number(i.qty)*i.discAmt,  0);
+  const totalTax  = prods.reduce((s,i) => s + (i.lineTax||0), 0);
+  const totalCost = prods.reduce((s,i) => s + Number(i.qty)*i.costCOP,  0);
+  // Split taxable vs non-taxable (after discount)
+  const subtotalConIva   = prods.filter(i=>i.itemTax>0).reduce((s,i)=>s+Number(i.qty)*i.netCOP, 0);
+  const subtotalSinIva   = prods.filter(i=>i.itemTax===0).reduce((s,i)=>s+Number(i.qty)*i.netCOP, 0);
+  const totalSale = subtotalConIva + totalTax + subtotalSinIva;
   const profit    = totalSale - totalCost;
   const profitPct = totalSale > 0 ? Math.round((profit / totalSale) * 100) : 0;
-  return { ...q, items, subtotal, totalDisc, discountAmt: totalDisc, taxAmt: totalTax, total: totalSale, totalCost, profit, profitPct };
+  return { ...q, items, subtotal, totalDisc, discountAmt: totalDisc, taxAmt: totalTax,
+           subtotalConIva, subtotalSinIva, total: totalSale, totalCost, profit, profitPct };
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
@@ -855,14 +857,14 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         </div>
         <div style={{ width:290,background:G.surface,borderRadius:8,padding:14 }}>
           {(() => {
-            const productItems = (quote.items||[]).filter(i=>i.type!=="header");
-            const hasZeroTax = productItems.some(i=>(i.tax!==undefined?Number(i.tax):19)===0);
-            const netSub = (quote.subtotal||0) - (quote.totalDisc||0);
+            const hasSinIva = (quote.subtotalSinIva||0) > 0;
+            const hasConIva = (quote.subtotalConIva||0) > 0;
             const rows = [
-              ["Subtotal bruto", fmt(quote.subtotal||0), G.text],
+              ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
               ...(quote.totalDisc>0 ? [[`- Descuentos`, `-${fmt(quote.totalDisc||0)}`, G.danger]] : []),
               ...(quote.taxAmt>0 ? [[`+ IVA`, fmt(quote.taxAmt||0), G.text]] : []),
-              ...(hasZeroTax && quote.taxAmt>0 ? [[`Subtotal sin IVA`, fmt(netSub), G.muted]] : []),
+              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
+              ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
             ];
             return rows.map(([l,v,c])=>(
               <div key={l} style={{ display:"flex",justifyContent:"space-between",
@@ -1004,9 +1006,11 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
             })()}
           </tbody>
           <tfoot>
-            <tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>
+            ${(quote.subtotalConIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">Subtotal con IVA</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotalConIva||0)}</td></tr>`:""}
+            ${(!quote.subtotalConIva&&!quote.subtotalSinIva)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>`:""}
             ${(quote.totalDisc>0)?`<tr><td colspan="6" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
             ${(quote.taxAmt>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
+            ${(quote.subtotalSinIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">Subtotal sin IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.subtotalSinIva||0)}</td></tr>`:""}
             <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
           </tfoot>
         </table>
@@ -1143,14 +1147,14 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
       <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:16 }}>
         <div style={{ width:280,background:G.surface,borderRadius:8,padding:14 }}>
           {(() => {
-            const productItems = safeItems.filter(i=>i.type!=="header");
-            const hasZeroTax = productItems.some(i=>(i.tax!==undefined?Number(i.tax):19)===0);
-            const netSub = (quote.subtotal||0) - (quote.totalDisc||0);
+            const hasSinIva = (quote.subtotalSinIva||0) > 0;
+            const hasConIva = (quote.subtotalConIva||0) > 0;
             const rows = [
-              ["Subtotal", fmt(quote.subtotal||0), G.text],
+              ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
               ...(quote.totalDisc>0?[[`- Descuentos`,`-${fmt(quote.totalDisc||0)}`,G.danger]]:[]),
               ...(quote.taxAmt>0?[[`+ IVA`,fmt(quote.taxAmt||0),G.text]]:[]),
-              ...(hasZeroTax && quote.taxAmt>0?[[`Subtotal sin IVA`,fmt(netSub),G.muted]]:[]),
+              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
+              ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
             ];
             return rows.map(([l,v,c])=>(
               <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"4px 0",
