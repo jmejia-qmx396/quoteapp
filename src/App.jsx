@@ -529,7 +529,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     setQuote(q => recalc({ ...q, items: q.items.filter(i => i.id !== id) }));
 
   const selectClient = (id) => {
-    const c = clients.find(c => c.id === Number(id));
+    const c = clients.find(c => String(c.id) === String(id));
     if (c) setQuote(q => ({ ...q, clientId: c.id, clientName: c.name,
                              clientContact: c.contact, clientEmail: c.email }));
   };
@@ -543,22 +543,10 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
            onClose={onClose} width={940}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
-          <div style={{ position:"relative" }}>
-            <input
-              list="client-list"
-              value={quote.clientName||""}
-              onChange={e => {
-                const val = e.target.value;
-                setQuote(q => ({...q, clientName: val}));
-                const found = clients.find(c => c.name === val);
-                if (found) selectClient(String(found.id));
-              }}
-              placeholder="Buscar o escribir cliente…"
-            />
-            <datalist id="client-list">
-              {clients.map(c=><option key={c.id} value={c.name} />)}
-            </datalist>
-          </div>
+          <select value={String(quote.clientId||"")} onChange={e=>selectClient(e.target.value)}>
+            <option value="">— Seleccionar cliente —</option>
+            {clients.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
+          </select>
         </Field>
         <Field label="Estado">
           <select value={quote.status} onChange={e=>set("status",e.target.value)}>
@@ -827,7 +815,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 };
 
 // ── QUOTE PREVIEW / PDF ──────────────────────────────────────────
-const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
+const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = null }) => {
   const handlePrint = () => {
     const w = window.open("","_blank","width=900,height=700");
     const pc = config.primaryColor || "#0d6e6e";
@@ -978,6 +966,8 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
     });
   };
 
+  const safeItems = quote.items || [];
+  const safeQuote = {...quote, items: safeItems};
   return (
     <Modal title={`Vista Previa — Cotización #${quote.number}`} onClose={onClose} width={740}>
       <div style={{ background:G.surface,borderRadius:8,padding:20,marginBottom:16 }}>
@@ -1011,10 +1001,10 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
           <thead><tr><th>Ref.</th><th>Descripción</th><th style={{textAlign:"center"}}>Cant.</th><th style={{textAlign:"right"}}>P. Unit.</th><th style={{textAlign:"right"}}>Subtotal</th></tr></thead>
           <tbody>
             {(() => {
-              const secTotals = sectionSubtotals(quote.items);
+              const secTotals = sectionSubtotals(safeItems);
               const rows = [];
-              quote.items.forEach((it, idx) => {
-                const nextItem = quote.items[idx+1];
+              safeItems.forEach((it, idx) => {
+                const nextItem = safeItems[idx+1];
                 const isLastInSection = !nextItem || nextItem.type === "header";
                 if (it.type==="header") {
                   rows.push(
@@ -1047,7 +1037,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
                 // Subtotal de sección en preview
                 let sectionId = "__root__";
                 for (let k = idx; k >= 0; k--) {
-                  if (quote.items[k].type === "header") { sectionId = quote.items[k].id; break; }
+                  if (safeItems[k].type === "header") { sectionId = safeItems[k].id; break; }
                 }
                 if (sectionId !== "__root__" && isLastInSection && secTotals[sectionId] > 0) {
                   rows.push(
@@ -1067,7 +1057,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
               });
               return rows;
             })()}
-            {!quote.items.filter(i=>i.type!=="header").length && <tr><td colSpan={5} style={{ textAlign:"center",color:G.muted,padding:16 }}>Sin ítems.</td></tr>}
+            {!safeItems.filter(i=>i.type!=="header").length && <tr><td colSpan={5} style={{ textAlign:"center",color:G.muted,padding:16 }}>Sin ítems.</td></tr>}
           </tbody>
         </table>
       </Card>
