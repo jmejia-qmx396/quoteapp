@@ -95,6 +95,9 @@ input,select,textarea{background:${G.surface};border:1px solid ${G.border};color
   font-family:${G.font};font-size:13px;border-radius:6px;padding:7px 10px;outline:none;width:100%;transition:.15s}
 input:focus,select:focus,textarea:focus{border-color:${G.accent}}
 button{font-family:${G.font};cursor:pointer;border:none;border-radius:6px;transition:.15s;font-size:13px}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
 table{border-collapse:collapse;width:100%}
 .qa-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 th{background:${G.surface};color:${G.muted};font-weight:600;font-size:11px;letter-spacing:.08em;
@@ -684,12 +687,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         <table>
           <thead><tr>
             <th style={{width:44}}>Img</th>
-            <th>SKU</th><th>Descripción</th><th style={{width:50}}>Mon.</th>
-            <th style={{width:60}}>Qty</th><th style={{width:110}}>P. Unitario</th>
-            <th style={{width:70}}>Dto%</th>
-            <th style={{width:70}}>IVA%</th>
-            <th>Subtotal</th>
-            <th style={{background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
+            <th style={{width:80}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
+            <th style={{width:70}}>Qty</th><th style={{width:130}}>P. Unitario</th>
+            <th style={{width:80}}>Dto%</th>
+            <th style={{width:80}}>IVA%</th>
+            <th style={{width:130}}>Subtotal</th>
+            <th style={{width:120,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -860,10 +863,10 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
             const hasSinIva = (quote.subtotalSinIva||0) > 0;
             const hasConIva = (quote.subtotalConIva||0) > 0;
             const rows = [
+              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
               ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
               ...(quote.totalDisc>0 ? [[`- Descuentos`, `-${fmt(quote.totalDisc||0)}`, G.danger]] : []),
               ...(quote.taxAmt>0 ? [[`+ IVA`, fmt(quote.taxAmt||0), G.text]] : []),
-              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
               ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
             ];
             return rows.map(([l,v,c])=>(
@@ -1150,10 +1153,10 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
             const hasSinIva = (quote.subtotalSinIva||0) > 0;
             const hasConIva = (quote.subtotalConIva||0) > 0;
             const rows = [
+              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
               ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
               ...(quote.totalDisc>0?[[`- Descuentos`,`-${fmt(quote.totalDisc||0)}`,G.danger]]:[]),
               ...(quote.taxAmt>0?[[`+ IVA`,fmt(quote.taxAmt||0),G.text]]:[]),
-              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
               ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
             ];
             return rows.map(([l,v,c])=>(
