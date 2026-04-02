@@ -854,15 +854,24 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
           </div>
         </div>
         <div style={{ width:290,background:G.surface,borderRadius:8,padding:14 }}>
-          {[["Subtotal bruto", fmt(quote.subtotal||0), G.text],
-            ...(quote.totalDisc>0 ? [[`- Descuentos`, `-${fmt(quote.totalDisc||0)}`, G.danger]] : []),
-            [`+ IVA`, fmt(quote.taxAmt||0), G.text]].map(([l,v,c])=>(
-            <div key={l} style={{ display:"flex",justifyContent:"space-between",
-                                   padding:"5px 0",borderBottom:`1px solid ${G.border}`,
-                                   fontSize:12,color:G.muted }}>
-              <span>{l}</span><span style={{ fontFamily:G.mono,color:c}}>{v}</span>
-            </div>
-          ))}
+          {(() => {
+            const productItems = (quote.items||[]).filter(i=>i.type!=="header");
+            const hasZeroTax = productItems.some(i=>(i.tax!==undefined?Number(i.tax):19)===0);
+            const netSub = (quote.subtotal||0) - (quote.totalDisc||0);
+            const rows = [
+              ["Subtotal bruto", fmt(quote.subtotal||0), G.text],
+              ...(quote.totalDisc>0 ? [[`- Descuentos`, `-${fmt(quote.totalDisc||0)}`, G.danger]] : []),
+              ...(quote.taxAmt>0 ? [[`+ IVA`, fmt(quote.taxAmt||0), G.text]] : []),
+              ...(hasZeroTax && quote.taxAmt>0 ? [[`Subtotal sin IVA`, fmt(netSub), G.muted]] : []),
+            ];
+            return rows.map(([l,v,c])=>(
+              <div key={l} style={{ display:"flex",justifyContent:"space-between",
+                                     padding:"5px 0",borderBottom:`1px solid ${G.border}`,
+                                     fontSize:12,color:G.muted }}>
+                <span>{l}</span><span style={{ fontFamily:G.mono,color:c}}>{v}</span>
+              </div>
+            ));
+          })()}
           <div style={{ display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontWeight:700,fontSize:15 }}>
             <span>TOTAL COP</span>
             <span style={{ fontFamily:G.mono,color:G.accent }}>{fmt(quote.total||0)}</span>
@@ -1133,15 +1142,23 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
 
       <div style={{ display:"flex",justifyContent:"flex-end",marginBottom:16 }}>
         <div style={{ width:280,background:G.surface,borderRadius:8,padding:14 }}>
-          {[["Subtotal", fmt(quote.subtotal||0), G.text],
-            ...(quote.totalDisc>0?[[`- Descuentos`,`-${fmt(quote.totalDisc||0)}`,G.danger]]:[]),
-            ...(quote.taxAmt>0?[[`+ IVA`,fmt(quote.taxAmt||0),G.text]]:[])
-          ].map(([l,v,c])=>(
-            <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"4px 0",
-                                   borderBottom:`1px solid ${G.border}`,fontSize:12,color:G.muted }}>
-              <span>{l}</span><span style={{ fontFamily:G.mono,color:c }}>{v}</span>
-            </div>
-          ))}
+          {(() => {
+            const productItems = safeItems.filter(i=>i.type!=="header");
+            const hasZeroTax = productItems.some(i=>(i.tax!==undefined?Number(i.tax):19)===0);
+            const netSub = (quote.subtotal||0) - (quote.totalDisc||0);
+            const rows = [
+              ["Subtotal", fmt(quote.subtotal||0), G.text],
+              ...(quote.totalDisc>0?[[`- Descuentos`,`-${fmt(quote.totalDisc||0)}`,G.danger]]:[]),
+              ...(quote.taxAmt>0?[[`+ IVA`,fmt(quote.taxAmt||0),G.text]]:[]),
+              ...(hasZeroTax && quote.taxAmt>0?[[`Subtotal sin IVA`,fmt(netSub),G.muted]]:[]),
+            ];
+            return rows.map(([l,v,c])=>(
+              <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"4px 0",
+                                     borderBottom:`1px solid ${G.border}`,fontSize:12,color:G.muted }}>
+                <span>{l}</span><span style={{ fontFamily:G.mono,color:c }}>{v}</span>
+              </div>
+            ));
+          })()}
           <div style={{ display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontWeight:700,fontSize:16 }}>
             <span>TOTAL</span>
             <span style={{ fontFamily:G.mono,color:G.accent }}>{fmt(quote.total||0)}</span>
@@ -1269,7 +1286,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
   const [uploadingImg, setUploadingImg] = useState(false);
 
   const cats = ["Todos", ...categories.map(c=>c.name)];
-  const blank = () => ({ id:Date.now(),sku:"",name:"",category:"Servicios",cost:0,margin:40,price:0,unit:"pza",imageUrl:"" });
+  const blank = () => ({ id:Date.now(),sku:"",name:"",category:"Servicios",cost:0,margin:30,price:0,unit:"pza",imageUrl:"" });
 
   const uploadProductImage = async (file) => {
     const allowed = ["image/jpeg","image/jpg","image/png","image/gif","image/webp","image/svg+xml"];
@@ -2241,37 +2258,35 @@ export default function App() {
 
   // Create a new revision of an existing quote
   const createRevision = async (q) => {
-    // Mark current as not latest
-    await sb.from("quotes").update({ is_latest: false }).eq("id", q.id);
-    setQuotes(qs => qs.map(x => x.id===q.id ? {...x, is_latest: false} : x));
-
-    // Determine parent: if q already has a parent, use that; otherwise use q itself
-    const rootId = q.parent_id || q.id;
-    const newVersion = (q.version||1) + 1;
-
-    // If approved, add "Adicionales" section automatically
-    let newItems = [...(q.items||[])];
     if (q.status === "Aprobada") {
+      // ── Aprobada: editar en el mismo registro, solo agregar sección Adicionales ──
+      const newItems = [...(q.items||[])];
       const alreadyHasAdicionales = newItems.some(i => i.type==="header" && i.name==="Adicionales");
       if (!alreadyHasAdicionales) {
         newItems.push({ id: Date.now(), type:"header", name:"Adicionales" });
       }
+      // Return the same quote with adicionales section added, same id
+      return recalc({ ...q, items: newItems });
+    } else {
+      // ── No aprobada: crear nueva versión ──
+      await sb.from("quotes").update({ is_latest: false }).eq("id", q.id);
+      setQuotes(qs => qs.map(x => x.id===q.id ? {...x, is_latest: false} : x));
+      const rootId = q.parent_id || q.id;
+      const newVersion = (q.version||1) + 1;
+      return recalc({
+        id: Date.now(), number: q.number,
+        date: today(), validUntil: q.validUntil,
+        clientId: q.clientId||q.client_id,
+        clientName: q.clientName||q.client_name||"",
+        clientContact: q.clientContact||q.client_contact||"",
+        clientEmail: q.clientEmail||q.client_email||"",
+        status: "Pendiente",
+        notes: q.notes||"", discount: q.discount||0,
+        trm: q.trm||4200, currency: q.currency||"COP",
+        items: [...(q.items||[])],
+        version: newVersion, parent_id: rootId, is_latest: true,
+      });
     }
-
-    const newQ = recalc({
-      id: Date.now(), number: q.number,
-      date: today(), validUntil: q.validUntil,
-      clientId: q.clientId||q.client_id,
-      clientName: q.clientName||q.client_name||"",
-      clientContact: q.clientContact||q.client_contact||"",
-      clientEmail: q.clientEmail||q.client_email||"",
-      status: q.status === "Aprobada" ? "Aprobada" : "Pendiente",
-      notes: q.notes||"", discount: q.discount||0,
-      trm: q.trm||4200, currency: q.currency||"COP",
-      items: newItems,
-      version: newVersion, parent_id: rootId, is_latest: true,
-    });
-    return newQ;
   };
 
   const deleteQuote = async (id) => {
