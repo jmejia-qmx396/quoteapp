@@ -599,7 +599,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
           onCreatePayment={()=>{ setModal(null); setPaymentQuote(current); }} />
       )}
       {paymentQuote && (
-        <PaymentRequestModal quote={paymentQuote} config={config}
+        <PaymentRequestModal quote={paymentQuote} config={config} clients={clients}
           paymentRequests={paymentRequests}
           onSave={async (pr)=>{ await savePaymentRequest(pr); setPaymentQuote(null); }}
           onClose={()=>setPaymentQuote(null)} />
@@ -1807,10 +1807,14 @@ const LoginView = ({ onLogin }) => {
 };
 
 // ── PAYMENT REQUEST MODAL ────────────────────────────────────────
-const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose }) => {
+const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, clients = [] }) => {
   // Count existing payment requests for this quote to generate number
   const existing = paymentRequests.filter(p => p.quote_id === quote.id || p.quote_id === quote.parent_id);
   const prNumber = `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`;
+
+  // Look up client RUT from clients list
+  const clientObj = clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
+  const clientRut = quote.clientRut || quote.client_rut || clientObj?.rut || "";
 
   const [pr, setPr] = useState({
     isNew: true,
@@ -1818,7 +1822,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose }
     number: prNumber,
     date: new Date().toISOString().split("T")[0],
     clientName: quote.clientName || quote.client_name || "",
-    clientIdNumber: quote.clientRut || quote.client_rut || "",
+    clientIdNumber: clientRut,
     concept: "",
     usePercentage: true,
     percentage: 80,
