@@ -178,33 +178,42 @@ const Card = ({ children, style = {} }) => (
   </div>
 );
 
-const Modal = ({ title, onClose, children, width = 680, fullScreen = false }) => {
-  const isFullScreen = fullScreen || width >= 1200;
-  return (
-  <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",
-                display:"flex",
-                alignItems: isFullScreen ? "stretch" : "flex-end",
-                justifyContent:"center",
-                zIndex:1000,padding:0 }}
-       onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{ background:G.card,border:`1px solid ${G.border}`,
-                  borderRadius: isFullScreen ? 0 : "12px 12px 0 0",
-                  width:"100%",
-                  maxWidth: isFullScreen ? "100%" : width,
-                  height: isFullScreen ? "100%" : "auto",
-                  maxHeight: isFullScreen ? "100%" : "95vh",
-                  overflow:"auto",
-                  display:"flex",flexDirection:"column" }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                    padding:"12px 20px",borderBottom:`1px solid ${G.border}`,
-                    position:"sticky",top:0,background:G.card,zIndex:1,flexShrink:0 }}>
-        <span style={{ fontWeight:700,fontSize:15 }}>{title}</span>
-        <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
-                                           fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
+const Modal = ({ title, onClose, children, width = 680 }) => {
+  const isFullScreen = width >= 1200;
+  if (isFullScreen) {
+    return (
+      <div style={{ position:"fixed",top:0,left:0,right:0,bottom:0,
+                    background:G.card,zIndex:1000,display:"flex",flexDirection:"column" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"12px 24px",borderBottom:`1px solid ${G.border}`,
+                      background:G.surface,flexShrink:0 }}>
+          <span style={{ fontWeight:700,fontSize:16 }}>{title}</span>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
+                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ flex:1,overflowY:"auto",padding:"20px 24px" }}>{children}</div>
       </div>
-      <div style={{ padding:"16px 20px",flex:1,overflowY:"auto" }}>{children}</div>
+    );
+  }
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",
+                  display:"flex",alignItems:"flex-end",justifyContent:"center",
+                  zIndex:1000,padding:0 }}
+         onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:G.card,border:`1px solid ${G.border}`,
+                    borderRadius:"12px 12px 0 0",
+                    width:"100%",maxWidth:width,
+                    maxHeight:"95vh",overflow:"auto" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"16px 20px",borderBottom:`1px solid ${G.border}`,
+                      position:"sticky",top:0,background:G.card,zIndex:1 }}>
+          <span style={{ fontWeight:700,fontSize:15 }}>{title}</span>
+          <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
+                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ padding:"16px 20px" }}>{children}</div>
+      </div>
     </div>
-  </div>
   );
 };
 
