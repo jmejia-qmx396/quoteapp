@@ -1723,7 +1723,7 @@ const ConfigView = ({ config, setConfig }) => {
                     setUploadingLogo(true);
                     try {
                       const ext = file.name.split(".").pop();
-                      const path = \`logos/company-logo.\${ext}\`;
+                      const path = "logos/company-logo." + ext;
                       const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
                       if (error) throw error;
                       const { data } = sb.storage.from("product-images").getPublicUrl(path);
