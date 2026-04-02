@@ -189,6 +189,7 @@ const NAV = [
   { id:"clients",     label:"Clientes",     icon:"👥" },
   { id:"products",    label:"Catálogo",     icon:"📦" },
   { id:"categories",  label:"Categorías",   icon:"🏷️" },
+  { id:"payments",    label:"Cuentas Cobro", icon:"🧾" },
   { id:"config",      label:"Mi Empresa",   icon:"⚙️" },
 ];
 
@@ -330,9 +331,10 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest }) => {
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
+  const [paymentQuote, setPaymentQuote] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
 
@@ -466,7 +468,14 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
           onSave={save} onClose={()=>setModal(null)} isNew={modal==="new"} config={config} />
       )}
       {modal === "view" && current && (
-        <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config} />
+        <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config}
+          onCreatePayment={()=>{ setModal(null); setPaymentQuote(current); }} />
+      )}
+      {paymentQuote && (
+        <PaymentRequestModal quote={paymentQuote} config={config}
+          paymentRequests={paymentRequests}
+          onSave={async (pr)=>{ await savePaymentRequest(pr); setPaymentQuote(null); }}
+          onClose={()=>setPaymentQuote(null)} />
       )}
     </div>
   );
@@ -534,10 +543,22 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
            onClose={onClose} width={940}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
-          <select value={quote.clientId || ""} onChange={e=>selectClient(e.target.value)}>
-            {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-            {!clients.length && <option>— Sin clientes —</option>}
-          </select>
+          <div style={{ position:"relative" }}>
+            <input
+              list="client-list"
+              value={quote.clientName||""}
+              onChange={e => {
+                const val = e.target.value;
+                setQuote(q => ({...q, clientName: val}));
+                const found = clients.find(c => c.name === val);
+                if (found) selectClient(String(found.id));
+              }}
+              placeholder="Buscar o escribir cliente…"
+            />
+            <datalist id="client-list">
+              {clients.map(c=><option key={c.id} value={c.name} />)}
+            </datalist>
+          </div>
         </Field>
         <Field label="Estado">
           <select value={quote.status} onChange={e=>set("status",e.target.value)}>
@@ -1077,9 +1098,10 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
         </div>
       )}
 
-      <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+      <div style={{ display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap" }}>
         <Btn variant="ghost" onClick={onClose}>Cerrar</Btn>
         <Btn variant="outline" onClick={onEdit}>✏️ Editar</Btn>
+        {onCreatePayment && <Btn variant="outline" onClick={onCreatePayment} style={{color:G.success,borderColor:G.success}}>🧾 Cuenta de Cobro</Btn>}
         <Btn variant="primary" onClick={handlePrint}>🖨️ Imprimir / PDF</Btn>
       </div>
     </Modal>
@@ -1598,6 +1620,371 @@ const LoginView = ({ onLogin }) => {
   );
 };
 
+// ── PAYMENT REQUEST MODAL ────────────────────────────────────────
+const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose }) => {
+  // Count existing payment requests for this quote to generate number
+  const existing = paymentRequests.filter(p => p.quote_id === quote.id || p.quote_id === quote.parent_id);
+  const prNumber = `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`;
+
+  const [pr, setPr] = useState({
+    isNew: true,
+    quoteId: quote.id,
+    number: prNumber,
+    date: new Date().toISOString().split("T")[0],
+    clientName: quote.clientName || quote.client_name || "",
+    clientIdNumber: "",
+    concept: "",
+    usePercentage: true,
+    percentage: 80,
+    amount: Math.round((quote.total||0) * 0.8),
+    accountHolder: config.accountHolder || config.companyName || "",
+    nit: config.nit || "",
+    bankName: config.bankName || "",
+    bankAccount: config.bankAccount || "",
+    bankType: config.bankType || "Ahorros",
+  });
+
+  const set = (k,v) => setPr(p => ({...p, [k]:v}));
+
+  const updateAmount = (pct) => {
+    set("percentage", pct);
+    set("amount", Math.round((quote.total||0) * pct / 100));
+  };
+
+  const handlePrint = () => {
+    const w = window.open("","_blank","width=800,height=600");
+    const pc = config.primaryColor || "#0d6e6e";
+    const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
+    w.document.write(`
+      <html><head><title>Cuenta de Cobro ${pr.number}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:50px;font-size:13px}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid ${pc}}
+        .logo-circle{width:54px;height:54px;border-radius:50%;background:${pc};color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center}
+        .company{font-size:18px;font-weight:700;color:${pc}}
+        .title{font-size:28px;font-weight:700;color:${pc};text-align:right}
+        .meta{text-align:right;color:#64748b;font-size:13px;margin-top:6px}
+        .senor-box{background:${pc};color:#fff;padding:6px 16px;font-weight:700;font-size:12px;display:inline-block;border-radius:4px;margin-bottom:8px}
+        .vendor-box{background:${pc};color:#fff;padding:6px 16px;font-weight:700;font-size:12px;display:inline-block;border-radius:4px;margin-bottom:8px}
+        .body{text-align:center;margin:40px 0}
+        .client-name{font-size:24px;font-weight:700;margin-bottom:6px}
+        .client-id{color:#64748b;margin-bottom:24px}
+        .debe{font-size:20px;font-weight:700;margin-bottom:4px}
+        .company-name{font-size:24px;font-weight:700;color:${pc};margin-bottom:4px}
+        .nit{color:#64748b;margin-bottom:20px}
+        .concept{font-size:15px;margin-bottom:16px;color:#475569}
+        .valor-label{font-size:16px;font-weight:600;margin-bottom:8px}
+        .valor{font-size:32px;font-weight:700;color:${pc}}
+        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:16px 24px;border-radius:8px;margin-top:30px;font-size:13px;display:inline-block;text-align:left}
+        .footer{margin-top:50px;text-align:center;color:#94a3b8;font-size:10px;border-top:1px solid #e2e8f0;padding-top:14px}
+      </style></head><body>
+        <div class="header">
+          <div style="display:flex;align-items:center;gap:14px">
+            ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
+            <div>
+              <div class="company">${config.companyName||""}</div>
+              <div style="color:#64748b;font-size:12px">${config.slogan||""}</div>
+            </div>
+          </div>
+          <div>
+            <div class="title">Cuenta de Cobro</div>
+            <div class="meta"><strong>Número:</strong> ${pr.number}</div>
+            <div class="meta"><strong>Fecha:</strong> ${pr.date}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px">
+          <div>
+            <div class="senor-box">Señor@</div>
+            <div style="font-size:15px;font-weight:600">${pr.clientName}</div>
+            ${pr.clientIdNumber ? `<div style="color:#64748b">CC / NIT: ${pr.clientIdNumber}</div>` : ""}
+          </div>
+          <div style="text-align:right">
+            <div class="vendor-box">Vendedor</div>
+            <div style="font-weight:600">${config.vendorName||""}</div>
+            <div style="color:#64748b">${config.vendorPhone||""}</div>
+            <div style="color:#64748b">${config.vendorEmail||""}</div>
+            ${config.website?`<div style="color:${pc}">${config.website}</div>`:""}
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="client-name">${pr.clientName}</div>
+          ${pr.clientIdNumber ? `<div class="client-id">CC ${pr.clientIdNumber}</div>` : ""}
+          <div class="debe">DEBE A:</div>
+          <div class="company-name">${pr.accountHolder||config.companyName}</div>
+          <div class="nit">NIT ${pr.nit}</div>
+          <div class="concept">${pr.concept}</div>
+          <div class="valor-label">EL VALOR DE:</div>
+          <div class="valor">${fmtCOP(pr.amount)}</div>
+        </div>
+
+        <div style="text-align:center">
+          <div class="bank-box">
+            Consignar a nombre de: <strong>${pr.accountHolder}</strong><br>
+            Nit: <strong>${pr.nit}</strong><br>
+            Cuenta ${pr.bankType} ${pr.bankName}: <strong>${pr.bankAccount}</strong>
+          </div>
+        </div>
+
+        <div class="footer">${config.companyName||""} · ${pr.number} · ${pr.date}</div>
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>w.print(), 400);
+  };
+
+  return (
+    <Modal title={`Nueva Cuenta de Cobro — #${pr.number}`} onClose={onClose} width={680}>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
+        <Field label="Número"><input value={pr.number} onChange={e=>set("number",e.target.value)} /></Field>
+        <Field label="Fecha"><input type="date" value={pr.date} onChange={e=>set("date",e.target.value)} /></Field>
+        <Field label="Nombre del Cliente" style={{ gridColumn:"1/-1" }}>
+          <input value={pr.clientName} onChange={e=>set("clientName",e.target.value)} />
+        </Field>
+        <Field label="CC / NIT del Cliente">
+          <input value={pr.clientIdNumber} onChange={e=>set("clientIdNumber",e.target.value)} placeholder="CC o NIT" />
+        </Field>
+        <Field label="Total Cotización">
+          <div style={{ padding:"7px 10px",background:G.surface,border:`1px solid ${G.border}`,borderRadius:6,
+                        fontFamily:G.mono,color:G.accent,fontWeight:700 }}>
+            {fmt(quote.total||0)}
+          </div>
+        </Field>
+        <Field label="Concepto" style={{ gridColumn:"1/-1" }}>
+          <textarea rows={2} value={pr.concept} onChange={e=>set("concept",e.target.value)}
+            placeholder="Ej: Anticipo trabajos casa 10 Saint Regis" />
+        </Field>
+      </div>
+
+      {/* Valor */}
+      <Card style={{ marginBottom:16,background:G.surface }}>
+        <p style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>Valor a Cobrar</p>
+        <div style={{ display:"flex",gap:10,marginBottom:10 }}>
+          <button onClick={()=>set("usePercentage",true)}
+            style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
+                     background: pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
+                     border:`1px solid ${pr.usePercentage?G.accent:G.border}`,
+                     color: pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
+            % de la cotización
+          </button>
+          <button onClick={()=>set("usePercentage",false)}
+            style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
+                     background: !pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
+                     border:`1px solid ${!pr.usePercentage?G.accent:G.border}`,
+                     color: !pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
+            Valor fijo
+          </button>
+        </div>
+        {pr.usePercentage ? (
+          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:8 }}>
+                {[10,20,30,40,50,60,70,80,90,100].map(p=>(
+                  <button key={p} onClick={()=>updateAmount(p)}
+                    style={{ padding:"4px 10px",borderRadius:16,cursor:"pointer",fontFamily:G.font,fontSize:12,
+                             background: pr.percentage===p?"rgba(59,130,246,.15)":"transparent",
+                             border:`1px solid ${pr.percentage===p?G.accent:G.border}`,
+                             color: pr.percentage===p?G.accent:G.muted }}>
+                    {p}%
+                  </button>
+                ))}
+              </div>
+              <input type="number" min={0} max={100} value={pr.percentage}
+                onChange={e=>updateAmount(Number(e.target.value))}
+                placeholder="%" style={{ width:80 }} />
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:11,color:G.muted,marginBottom:2 }}>Valor calculado</div>
+              <div style={{ fontFamily:G.mono,fontSize:20,fontWeight:700,color:G.accent }}>{fmt(pr.amount)}</div>
+            </div>
+          </div>
+        ) : (
+          <input type="number" min={0} value={pr.amount}
+            onChange={e=>set("amount",Number(e.target.value))}
+            placeholder="Valor en COP" />
+        )}
+      </Card>
+
+      {/* Datos bancarios */}
+      <Card style={{ marginBottom:16,background:G.surface }}>
+        <p style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>Datos para Consignación</p>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+          <Field label="Titular" style={{ gridColumn:"1/-1" }}>
+            <input value={pr.accountHolder} onChange={e=>set("accountHolder",e.target.value)} />
+          </Field>
+          <Field label="NIT"><input value={pr.nit} onChange={e=>set("nit",e.target.value)} /></Field>
+          <Field label="Banco"><input value={pr.bankName} onChange={e=>set("bankName",e.target.value)} /></Field>
+          <Field label="Tipo de Cuenta">
+            <select value={pr.bankType} onChange={e=>set("bankType",e.target.value)}>
+              {["Ahorros","Corriente"].map(t=><option key={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="Número de Cuenta">
+            <input value={pr.bankAccount} onChange={e=>set("bankAccount",e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+        <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+        <Btn variant="outline" onClick={handlePrint}>🖨️ Vista Previa / PDF</Btn>
+        <Btn variant="success" onClick={async()=>{ await onSave(pr); handlePrint(); }}>💾 Guardar y Generar</Btn>
+      </div>
+    </Modal>
+  );
+};
+
+// ── PAYMENT REQUESTS VIEW ─────────────────────────────────────────
+const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config }) => {
+  const [modal, setModal] = useState(null);
+  const [search, setSearch] = useState("");
+
+  const filt = paymentRequests.filter(p =>
+    (p.number||"").toLowerCase().includes(search.toLowerCase()) ||
+    (p.client_name||"").toLowerCase().includes(search.toLowerCase()) ||
+    (p.concept||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getQuote = (id) => quotes.find(q => q.id === id);
+
+  return (
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+        <div>
+          <h1 style={{ fontSize:22,fontWeight:700 }}>Cuentas de Cobro</h1>
+          <p style={{ color:G.muted }}>{paymentRequests.length} cuenta(s) generada(s)</p>
+        </div>
+      </div>
+
+      <Card style={{ marginBottom:16 }}>
+        <input placeholder="Buscar por número, cliente o concepto…" value={search}
+          onChange={e=>setSearch(e.target.value)} />
+      </Card>
+
+      <div style={{ overflowX:"auto" }}>
+        <Card style={{ padding:0,overflow:"visible",minWidth:700 }}>
+          <table style={{ minWidth:700 }}>
+            <thead><tr>
+              <th>Número</th><th>Fecha</th><th>Cliente</th><th>Concepto</th><th>Valor</th><th>Cotización</th><th></th>
+            </tr></thead>
+            <tbody>
+              {filt.map(p => {
+                const q = getQuote(p.quote_id);
+                return (
+                  <tr key={p.id}>
+                    <td style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>{p.number}</td>
+                    <td style={{ color:G.muted }}>{p.date}</td>
+                    <td><strong>{p.client_name}</strong></td>
+                    <td style={{ color:G.muted,fontSize:12,maxWidth:200 }}>{p.concept}</td>
+                    <td style={{ fontFamily:G.mono,fontWeight:700,color:G.success }}>{fmt(p.amount||0)}</td>
+                    <td>{q ? <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span> : "-"}</td>
+                    <td>
+                      <div style={{ display:"flex",gap:6 }}>
+                        <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
+                        <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm("¿Eliminar?")) deletePaymentRequest(p.id); }}>✕</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filt.length && <tr><td colSpan={7} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin cuentas de cobro.</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      {modal && (
+        <PrintPaymentRequest pr={modal} config={config} onClose={()=>setModal(null)} />
+      )}
+    </div>
+  );
+};
+
+// ── PRINT EXISTING PAYMENT REQUEST ───────────────────────────────
+const PrintPaymentRequest = ({ pr, config, onClose }) => {
+  useEffect(() => {
+    const pc = config.primaryColor || "#0d6e6e";
+    const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
+    const w = window.open("","_blank","width=800,height=600");
+    w.document.write(`
+      <html><head><title>Cuenta de Cobro ${pr.number}</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:50px;font-size:13px}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid ${pc}}
+        .logo-circle{width:54px;height:54px;border-radius:50%;background:${pc};color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center}
+        .company{font-size:18px;font-weight:700;color:${pc}}
+        .title{font-size:28px;font-weight:700;color:${pc};text-align:right}
+        .meta{text-align:right;color:#64748b;font-size:13px;margin-top:6px}
+        .senor-box{background:${pc};color:#fff;padding:6px 16px;font-weight:700;font-size:12px;display:inline-block;border-radius:4px;margin-bottom:8px}
+        .vendor-box{background:${pc};color:#fff;padding:6px 16px;font-weight:700;font-size:12px;display:inline-block;border-radius:4px;margin-bottom:8px}
+        .body{text-align:center;margin:40px 0}
+        .client-name{font-size:24px;font-weight:700;margin-bottom:6px}
+        .debe{font-size:20px;font-weight:700;margin-bottom:4px}
+        .company-name{font-size:24px;font-weight:700;color:${pc};margin-bottom:4px}
+        .nit{color:#64748b;margin-bottom:20px}
+        .concept{font-size:15px;margin-bottom:16px;color:#475569}
+        .valor-label{font-size:16px;font-weight:600;margin-bottom:8px}
+        .valor{font-size:32px;font-weight:700;color:${pc}}
+        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:16px 24px;border-radius:8px;margin-top:30px;font-size:13px;display:inline-block;text-align:left}
+        .footer{margin-top:50px;text-align:center;color:#94a3b8;font-size:10px;border-top:1px solid #e2e8f0;padding-top:14px}
+      </style></head><body>
+        <div class="header">
+          <div style="display:flex;align-items:center;gap:14px">
+            ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
+            <div><div class="company">${config.companyName||""}</div><div style="color:#64748b;font-size:12px">${config.slogan||""}</div></div>
+          </div>
+          <div>
+            <div class="title">Cuenta de Cobro</div>
+            <div class="meta"><strong>Número:</strong> ${pr.number}</div>
+            <div class="meta"><strong>Fecha:</strong> ${pr.date}</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px">
+          <div>
+            <div class="senor-box">Señor@</div>
+            <div style="font-size:15px;font-weight:600">${pr.client_name}</div>
+            ${pr.client_id_number ? `<div style="color:#64748b">CC / NIT: ${pr.client_id_number}</div>` : ""}
+          </div>
+          <div style="text-align:right">
+            <div class="vendor-box">Vendedor</div>
+            <div style="font-weight:600">${config.vendorName||""}</div>
+            <div style="color:#64748b">${config.vendorPhone||""}</div>
+            <div style="color:#64748b">${config.vendorEmail||""}</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="client-name">${pr.client_name}</div>
+          ${pr.client_id_number ? `<div style="color:#64748b;margin-bottom:24px">CC ${pr.client_id_number}</div>` : ""}
+          <div class="debe">DEBE A:</div>
+          <div class="company-name">${pr.account_holder||config.companyName}</div>
+          <div class="nit">NIT ${pr.nit}</div>
+          <div class="concept">${pr.concept}</div>
+          <div class="valor-label">EL VALOR DE:</div>
+          <div class="valor">${fmtCOP(pr.amount)}</div>
+        </div>
+        <div style="text-align:center">
+          <div class="bank-box">
+            Consignar a nombre de: <strong>${pr.account_holder}</strong><br>
+            Nit: <strong>${pr.nit}</strong><br>
+            Cuenta ${pr.bank_type} ${pr.bank_name}: <strong>${pr.bank_account}</strong>
+          </div>
+        </div>
+        <div class="footer">${config.companyName||""} · ${pr.number} · ${pr.date}</div>
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); onClose(); }, 400);
+  }, []);
+  return null;
+};
+
 // ── CATEGORÍAS ───────────────────────────────────────────────────
 const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   const [newName, setNewName] = useState("");
@@ -1693,6 +2080,7 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [config, setConfig]     = useState(INIT_CONFIG);
   const [categories, setCategories] = useState([]);
+  const [paymentRequests, setPaymentRequests] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   useEffect(() => {
@@ -1734,6 +2122,10 @@ export default function App() {
       else { await sb.from("products").insert(INIT_PRODUCTS.map(({id,...p})=>p)); 
              const { data: p2 } = await sb.from("products").select("*").order("name");
              if (p2) setProducts(p2); }
+
+      // Payment requests
+      const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
+      if (prs) setPaymentRequests(prs);
 
       // Categories
       const { data: cats } = await sb.from("categories").select("*").order("name");
@@ -1865,6 +2257,29 @@ export default function App() {
     setCategories(cs => cs.filter(c => c.id !== id));
   };
 
+  // ── CRUD: Payment Requests ─────────────────────────────────
+  const savePaymentRequest = async (pr) => {
+    const row = {
+      quote_id: pr.quoteId||null, number: pr.number, date: pr.date,
+      client_name: pr.clientName, client_id_number: pr.clientIdNumber||"",
+      concept: pr.concept, amount: pr.amount||0, percentage: pr.percentage||null,
+      account_holder: pr.accountHolder, nit: pr.nit, bank_name: pr.bankName,
+      bank_account: pr.bankAccount, bank_type: pr.bankType, created_by: user.id
+    };
+    if (pr.isNew) {
+      const { data } = await sb.from("payment_requests").insert(row).select().single();
+      if (data) setPaymentRequests(ps => [data, ...ps]);
+      return data;
+    } else {
+      await sb.from("payment_requests").update(row).eq("id", pr.id);
+      setPaymentRequests(ps => ps.map(p => p.id===pr.id ? {...pr,...row} : p));
+    }
+  };
+  const deletePaymentRequest = async (id) => {
+    await sb.from("payment_requests").delete().eq("id", id);
+    setPaymentRequests(ps => ps.filter(p => p.id!==id));
+  };
+
   // ── Save Config ──────────────────────────────────────────────
   const saveConfigDB = async (cfg) => {
     const { data } = await sb.from("config").select("id").limit(1).single();
@@ -1899,6 +2314,7 @@ export default function App() {
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
                                    createRevision={createRevision}
+                                   paymentRequests={paymentRequests} savePaymentRequest={savePaymentRequest}
                                    clients={clients} products={products} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient} />}
@@ -1906,6 +2322,9 @@ export default function App() {
                                    saveProduct={saveProduct} deleteProduct={deleteProduct}
                                    categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
+          {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes}
+                                   savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
+                                   config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
