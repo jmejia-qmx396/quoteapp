@@ -232,29 +232,70 @@ const StatusBadge = ({ s }) => {
 
 // ── DASHBOARD ────────────────────────────────────────────────────
 const Dashboard = ({ quotes, clients, products }) => {
-  const total = quotes.reduce((s, q) => s + (q.total||0), 0);
-  const approved = quotes.filter(q => q.status === "Aprobada");
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  const lastOfMonth  = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split("T")[0];
+
+  const [dateFrom, setDateFrom] = useState(firstOfMonth);
+  const [dateTo,   setDateTo]   = useState(lastOfMonth);
+
+  // Only latest versions
+  const latestQuotes = quotes.filter(q => q.isLatest !== false);
+
+  // Filter by date range
+  const inRange = latestQuotes.filter(q => {
+    const d = q.date || "";
+    return d >= dateFrom && d <= dateTo;
+  });
+
+  const approvedInRange  = inRange.filter(q => q.status === "Aprobada");
+  const approvedTotal    = approvedInRange.reduce((s,q) => s+(q.total||0), 0);
+  const pendingInRange   = inRange.filter(q => q.status === "Pendiente" || q.status === "Enviada");
+  const pendingTotal     = pendingInRange.reduce((s,q) => s+(q.total||0), 0);
+
+  const monthName = now.toLocaleString("es-CO", { month:"long", year:"numeric" });
+
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
-      <h1 style={{ fontSize:22,fontWeight:700,marginBottom:6 }}>Dashboard</h1>
-      <p style={{ color:G.muted,marginBottom:24 }}>Resumen general de tu negocio</p>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12 }}>
+        <div>
+          <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
+          <p style={{ color:G.muted,fontSize:13 }}>Resumen del período seleccionado</p>
+        </div>
+        {/* Filtro de fechas */}
+        <Card style={{ padding:"10px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap" }}>
+          <span style={{ fontSize:12,color:G.muted,fontWeight:600 }}>📅 Período:</span>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+            style={{ width:140,padding:"5px 8px",fontSize:12 }} />
+          <span style={{ color:G.muted }}>—</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+            style={{ width:140,padding:"5px 8px",fontSize:12 }} />
+          <button onClick={()=>{ setDateFrom(firstOfMonth); setDateTo(lastOfMonth); }}
+            style={{ fontSize:11,color:G.accent,background:"none",border:"none",cursor:"pointer",
+                     fontFamily:G.font,padding:"4px 8px",borderRadius:4,
+                     background:"rgba(59,130,246,.1)" }}>
+            Este mes
+          </button>
+        </Card>
+      </div>
 
+      {/* KPIs del período */}
       <div style={{ display:"flex",gap:16,marginBottom:24,flexWrap:"wrap" }}>
-        <StatCard label="Total Cotizado" value={fmt(total)} icon="💰" color={G.accent} />
-        <StatCard label="Cotizaciones" value={quotes.length} icon="📋" color={G.success} />
-        <StatCard label="Aprobadas" value={approved.length} icon="✅" color={G.success} />
-        <StatCard label="Clientes" value={clients.length} icon="👥" color={G.warn} />
+        <StatCard label="Aprobadas — Valor" value={fmt(approvedTotal)} icon="✅" color={G.success} />
+        <StatCard label="Aprobadas — Cant." value={approvedInRange.length} icon="🏆" color={G.success} />
+        <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)} icon="⏳" color={G.warn} />
+        <StatCard label="Clientes Totales" value={clients.length} icon="👥" color={G.accent} />
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20 }}>
         <Card>
-          <p style={{ fontWeight:700,marginBottom:14 }}>Últimas Cotizaciones</p>
-          {quotes.slice(-5).reverse().map(q => (
+          <p style={{ fontWeight:700,marginBottom:14 }}>Cotizaciones Recientes</p>
+          {latestQuotes.slice(0,6).map(q => (
             <div key={q.id} style={{ display:"flex",justifyContent:"space-between",
                                      padding:"8px 0",borderBottom:`1px solid ${G.border}` }}>
               <div>
                 <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span>
-                <span style={{ marginLeft:8 }}>{q.clientName}</span>
+                <span style={{ marginLeft:8,fontSize:13 }}>{q.clientName||q.client_name}</span>
               </div>
               <div style={{ display:"flex",gap:10,alignItems:"center" }}>
                 <span style={{ color:G.muted,fontSize:12 }}>{fmt(q.total||0)}</span>
@@ -262,19 +303,20 @@ const Dashboard = ({ quotes, clients, products }) => {
               </div>
             </div>
           ))}
-          {!quotes.length && <p style={{ color:G.muted }}>Sin cotizaciones aún.</p>}
+          {!latestQuotes.length && <p style={{ color:G.muted }}>Sin cotizaciones aún.</p>}
         </Card>
 
         <Card>
-          <p style={{ fontWeight:700,marginBottom:14 }}>Estado de Cotizaciones</p>
-          {[["Pendiente","warn"],["Aprobada","green"],["Rechazada","red"],["Enviada","blue"]].map(([s,c])=>{
-            const cnt = quotes.filter(q=>q.status===s).length;
-            const pct = quotes.length ? Math.round(cnt/quotes.length*100) : 0;
+          <p style={{ fontWeight:700,marginBottom:14 }}>Estado — Período Seleccionado</p>
+          {[["Pendiente","warn"],["Enviada","blue"],["Aprobada","green"],["Rechazada","red"]].map(([s,c])=>{
+            const cnt = inRange.filter(q=>q.status===s).length;
+            const pct = inRange.length ? Math.round(cnt/inRange.length*100) : 0;
+            const val = inRange.filter(q=>q.status===s).reduce((sum,q)=>sum+(q.total||0),0);
             return (
               <div key={s} style={{ marginBottom:12 }}>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                  <span style={{ fontSize:12 }}>{s}</span>
-                  <span style={{ fontSize:12,color:G.muted }}>{cnt} ({pct}%)</span>
+                  <span style={{ fontSize:12 }}>{s} ({cnt})</span>
+                  <span style={{ fontSize:12,color:G.muted }}>{fmt(val)}</span>
                 </div>
                 <div style={{ background:G.border,borderRadius:4,height:6 }}>
                   <div style={{ width:`${pct}%`,height:6,borderRadius:4,
@@ -284,6 +326,7 @@ const Dashboard = ({ quotes, clients, products }) => {
               </div>
             );
           })}
+          {!inRange.length && <p style={{ color:G.muted,fontSize:12 }}>Sin cotizaciones en este período.</p>}
         </Card>
       </div>
     </div>
