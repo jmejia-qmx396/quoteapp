@@ -1996,6 +1996,27 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
   const clientObj = clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
   const clientRut = quote.clientRut || quote.client_rut || clientObj?.rfc || "";
 
+  const [profile, setProfile] = useState(quote.profile || "empresa");
+
+  const getProfileData = (prof) => {
+    if (prof === "personal" && config.personal) {
+      return {
+        accountHolder: config.personal.accountHolder || config.personal.companyName || "",
+        nit: config.personal.nit || "",
+        bankName: config.personal.bankName || "",
+        bankAccount: config.personal.bankAccount || "",
+        bankType: config.personal.bankType || "Ahorros",
+      };
+    }
+    return {
+      accountHolder: config.accountHolder || config.companyName || "",
+      nit: config.nit || "",
+      bankName: config.bankName || "",
+      bankAccount: config.bankAccount || "",
+      bankType: config.bankType || "Ahorros",
+    };
+  };
+
   const [pr, setPr] = useState({
     isNew: true,
     quoteId: quote.id,
@@ -2007,14 +2028,15 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
     usePercentage: true,
     percentage: 80,
     amount: Math.round((quote.total||0) * 0.8),
-    accountHolder: config.accountHolder || config.companyName || "",
-    nit: config.nit || "",
-    bankName: config.bankName || "",
-    bankAccount: config.bankAccount || "",
-    bankType: config.bankType || "Ahorros",
+    ...getProfileData(quote.profile || "empresa"),
   });
 
   const set = (k,v) => setPr(p => ({...p, [k]:v}));
+
+  const switchProfile = (prof) => {
+    setProfile(prof);
+    setPr(p => ({ ...p, ...getProfileData(prof) }));
+  };
 
   const updateAmount = (pct) => {
     set("percentage", pct);
@@ -2023,7 +2045,8 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 
   const handlePrint = () => {
     const w = window.open("","_blank","width=800,height=600");
-    const pc = config.primaryColor || "#0d6e6e";
+    const prof = profile === "personal" && config.personal ? {...config, ...config.personal} : config;
+    const pc = prof.primaryColor || "#0d6e6e";
     const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     w.document.write(`
       <html><head><title>Cuenta de Cobro ${pr.number}</title>
@@ -2052,7 +2075,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
       </style></head><body>
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
-            ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
+            ${prof.logoUrl ? `<img src="${prof.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(prof.companyName||"C")[0]}</div>`}
             <div>
               <div class="company">${config.companyName||""}</div>
               <div style="color:#64748b;font-size:12px">${config.slogan||""}</div>
@@ -2073,10 +2096,10 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
           </div>
           <div style="text-align:right">
             <div class="vendor-box">Vendedor</div>
-            <div style="font-weight:600">${config.vendorName||""}</div>
-            <div style="color:#64748b">${config.vendorPhone||""}</div>
-            <div style="color:#64748b">${config.vendorEmail||""}</div>
-            ${config.website?`<div style="color:${pc}">${config.website}</div>`:""}
+            <div style="font-weight:600">${prof.vendorName||""}</div>
+            <div style="color:#64748b">${prof.vendorPhone||""}</div>
+            <div style="color:#64748b">${prof.vendorEmail||""}</div>
+            ${prof.website?`<div style="color:${pc}">${prof.website}</div>`:""}
           </div>
         </div>
 
@@ -2109,6 +2132,19 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 
   return (
     <Modal title={`Nueva Cuenta de Cobro — #${pr.number}`} onClose={onClose} width={680}>
+      {/* Selector de perfil */}
+      <div style={{ display:"flex",gap:10,alignItems:"center",marginBottom:16 }}>
+        <span style={{ fontSize:12,color:G.muted,fontWeight:600 }}>Cobrar como:</span>
+        {["empresa","personal"].map(p=>(
+          <button key={p} onClick={()=>switchProfile(p)}
+            style={{ padding:"5px 16px",borderRadius:20,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,
+                     background: profile===p ? `rgba(59,130,246,.2)` : "transparent",
+                     border:`1px solid ${profile===p ? G.accent : G.border}`,
+                     color: profile===p ? G.accent : G.muted }}>
+            {p==="empresa" ? "🏢 Casa Inteligente" : "👤 Personal"}
+          </button>
+        ))}
+      </div>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Número"><input value={pr.number} onChange={e=>set("number",e.target.value)} /></Field>
         <Field label="Fecha"><input type="date" value={pr.date} onChange={e=>set("date",e.target.value)} /></Field>
