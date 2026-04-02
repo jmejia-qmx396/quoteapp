@@ -37,6 +37,22 @@ const INIT_CONFIG = {
   defaultNotes: "- Esta cotización tiene una validéz de 10 días.\n- Forma de pago:\n  80% Anticipado.\n  20% Contra entrega.",
   logoUrl: "",
   primaryColor: "#0d6e6e",
+  // Perfil personal
+  personal: {
+    companyName: "Jorge Mejia Jaramillo",
+    slogan: "",
+    vendorName: "Jorge Mejia Jaramillo",
+    vendorPhone: "3182854896",
+    vendorEmail: "jmejia@casainteligente.com",
+    website: "",
+    nit: "",
+    bankName: "Bancolombia",
+    bankAccount: "",
+    bankType: "Ahorros",
+    accountHolder: "Jorge Mejia Jaramillo",
+    logoUrl: "",
+    primaryColor: "#0d6e6e",
+  },
 };
 
 // ── Quote counter (en memoria, se sincroniza con Supabase) ──────
@@ -58,6 +74,7 @@ const normalizeQuote = (q) => ({
   version:       q.version        || 1,
   parentId:      q.parent_id      || null,
   isLatest:      q.is_latest      !== false,
+  profile:       q.profile        || 'empresa',
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -1015,7 +1032,11 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = null }) => {
   const handlePrint = () => {
     const w = window.open("","_blank","width=900,height=700");
-    const pc = config.primaryColor || "#0d6e6e";
+    // Use personal profile if quote has profile="personal"
+    const prof = (quote.profile === "personal" && config.personal)
+      ? { ...config, ...config.personal }
+      : config;
+    const pc = prof.primaryColor || "#0d6e6e";
     const fmtCOP = (n) => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     w.document.write(`
       <html><head><title>Cotización #${quote.number}</title>
@@ -1042,14 +1063,14 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
       </style></head><body>
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
-            ${config.logoUrl
-              ? `<img src="${config.logoUrl}" alt="logo" style="height:50px;object-fit:contain">`
+            ${prof.logoUrl
+              ? `<img src="${prof.logoUrl}" alt="logo" style="height:50px;object-fit:contain">`
               : `<div style="display:flex;align-items:center;gap:10px">
                   <div class="logo-circle">${(config.companyName||"C")[0]}</div>
                   <div>
-                    <div class="company-name">${config.companyName||"Mi Empresa"}</div>
-                    <div style="color:#64748b;font-size:10px">${config.slogan||""}</div>
-                    ${config.website?`<div style="color:${pc};font-size:9px">${config.website}</div>`:""}
+                    <div class="company-name">${prof.companyName||"Mi Empresa"}</div>
+                    <div style="color:#64748b;font-size:10px">${prof.slogan||""}</div>
+                    ${prof.website?`<div style="color:${pc};font-size:9px">${prof.website}</div>`:""}
                   </div>
                  </div>`}
           </div>
@@ -1069,9 +1090,9 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
           </div>
           <div class="info-box">
             <div class="lbl">Vendedor</div>
-            <strong>${config.vendorName||""}</strong>
-            <div style="color:#64748b">${config.vendorPhone||""}</div>
-            <div style="color:#64748b">${config.vendorEmail||""}</div>
+            <strong>${prof.vendorName||""}</strong>
+            <div style="color:#64748b">${prof.vendorPhone||""}</div>
+            <div style="color:#64748b">${prof.vendorEmail||""}</div>
             <div style="margin-top:8px;font-size:11px;color:#94a3b8">
               Fecha: <strong style="color:#1e293b">${quote.date}</strong> &nbsp;|&nbsp;
               Válida hasta: <strong style="color:#1e293b">${quote.validUntil}</strong>
@@ -1139,13 +1160,13 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
         ${(config.bankName||config.bankAccount)?`
         <div class="bank-box">
           <div class="lbl" style="color:#16a34a">Datos para Consignación</div>
-          <div>Consignar a nombre de: <strong>${config.accountHolder||config.companyName}</strong></div>
-          <div>NIT: <strong>${config.nit||""}</strong></div>
-          <div>Cuenta ${config.bankType} ${config.bankName}: <strong>${config.bankAccount}</strong></div>
+          <div>Consignar a nombre de: <strong>${prof.accountHolder||config.companyName}</strong></div>
+          <div>NIT: <strong>${prof.nit||""}</strong></div>
+          <div>Cuenta ${prof.bankType} ${prof.bankName}: <strong>${prof.bankAccount}</strong></div>
         </div>`:""}
 
         <div class="footer">
-          <span>${config.companyName||"QuoteApp"} · ${config.nit||""}</span>
+          <span>${prof.companyName||"QuoteApp"} · ${prof.nit||""}</span>
           <span>Cotización válida hasta ${quote.validUntil} · Página 1 de 1</span>
         </div>
       </body></html>
@@ -1773,6 +1794,73 @@ const ConfigView = ({ config, setConfig }) => {
         </Field>
         <Field label="Número de Cuenta" style={{ gridColumn:"1/-1" }}>
           <input value={config.bankAccount} onChange={e=>set("bankAccount",e.target.value)} placeholder="000.000.000.00" />
+        </Field>
+      </Section>
+
+      <Section title="👤 Perfil Personal">
+        <p style={{ color:G.muted,fontSize:12,marginBottom:14,gridColumn:"1/-1" }}>
+          Usado cuando creas cotizaciones a título personal. Tiene su propio logo y datos bancarios.
+        </p>
+        <Field label="Tu Nombre" style={{ gridColumn:"1/-1" }}>
+          <input value={config.personal?.companyName||""} onChange={e=>set("personal",{...config.personal,companyName:e.target.value})} placeholder="Jorge Mejia Jaramillo" />
+        </Field>
+        <Field label="Email Personal">
+          <input value={config.personal?.vendorEmail||""} onChange={e=>set("personal",{...config.personal,vendorEmail:e.target.value})} />
+        </Field>
+        <Field label="Teléfono">
+          <input value={config.personal?.vendorPhone||""} onChange={e=>set("personal",{...config.personal,vendorPhone:e.target.value})} />
+        </Field>
+        <Field label="CC / NIT Personal">
+          <input value={config.personal?.nit||""} onChange={e=>set("personal",{...config.personal,nit:e.target.value})} placeholder="Cédula o NIT" />
+        </Field>
+        <Field label="Color Principal Personal">
+          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+            <input type="color" value={config.personal?.primaryColor||"#0d6e6e"} onChange={e=>set("personal",{...config.personal,primaryColor:e.target.value})}
+              style={{ width:48,height:36,padding:2,cursor:"pointer" }} />
+            <input value={config.personal?.primaryColor||"#0d6e6e"} onChange={e=>set("personal",{...config.personal,primaryColor:e.target.value})} style={{ flex:1 }} />
+          </div>
+        </Field>
+        <Field label="Logo Personal">
+          <div style={{ display:"flex",gap:12,alignItems:"center",flexWrap:"wrap" }}>
+            {config.personal?.logoUrl && (
+              <img src={config.personal.logoUrl} alt="logo personal" style={{ height:40,objectFit:"contain",
+                border:`1px solid ${G.border}`,borderRadius:6,padding:4,background:"#fff" }} />
+            )}
+            <label style={{ display:"inline-block",padding:"7px 16px",background:G.accent,
+                            color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:500 }}>
+              {config.personal?.logoUrl ? "🔄 Cambiar" : "📁 Subir logo"}
+              <input type="file" accept="image/*" style={{ display:"none" }}
+                onChange={async e => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  try {
+                    const ext = file.name.split(".").pop();
+                    const path = "logos/personal-logo." + ext;
+                    const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
+                    if (error) throw error;
+                    const { data } = sb.storage.from("product-images").getPublicUrl(path);
+                    set("personal", {...config.personal, logoUrl: data.publicUrl + "?t=" + Date.now()});
+                  } catch(e) { alert("Error: " + e.message); }
+                }} />
+            </label>
+            {config.personal?.logoUrl && (
+              <button onClick={()=>set("personal",{...config.personal,logoUrl:""})}
+                style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:12,fontFamily:G.font }}>
+                ✕ Quitar
+              </button>
+            )}
+          </div>
+        </Field>
+        <Field label="Banco Personal">
+          <input value={config.personal?.bankName||""} onChange={e=>set("personal",{...config.personal,bankName:e.target.value})} />
+        </Field>
+        <Field label="Tipo de Cuenta">
+          <select value={config.personal?.bankType||"Ahorros"} onChange={e=>set("personal",{...config.personal,bankType:e.target.value})}>
+            {["Ahorros","Corriente"].map(t=><option key={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Número de Cuenta" style={{ gridColumn:"1/-1" }}>
+          <input value={config.personal?.bankAccount||""} onChange={e=>set("personal",{...config.personal,bankAccount:e.target.value})} />
         </Field>
       </Section>
 
@@ -2501,7 +2589,7 @@ export default function App() {
 
   // ── CRUD: Quotes ─────────────────────────────────────────────
   const saveQuote = async (q) => {
-    const row = { number:q.number, date:q.date, valid_until:q.validUntil,
+    const row = { number:q.number, date:q.date, valid_until:q.validUntil, profile:q.profile||'empresa',
       client_id:q.clientId||null, client_name:q.clientName, client_contact:q.clientContact,
       client_email:q.clientEmail, client_rut:q.clientRut||"", status:q.status, notes:q.notes, discount:q.discount||0,
       trm:q.trm||4200, subtotal:q.subtotal||0, total_disc:q.totalDisc||0,
