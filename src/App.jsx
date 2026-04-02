@@ -2116,14 +2116,25 @@ export default function App() {
   const [paymentRequests, setPaymentRequests] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
+  const dataLoaded = useRef(false);
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
-      if (data.session?.user) { setUser(data.session.user); loadAll(data.session.user); }
-      else setLoading(false);
+      if (data.session?.user) {
+        setUser(data.session.user);
+        if (!dataLoaded.current) { dataLoaded.current = true; loadAll(data.session.user); }
+        else setLoading(false);
+      } else setLoading(false);
     });
     const { data: listener } = sb.auth.onAuthStateChange((_e, session) => {
-      if (session?.user) { setUser(session.user); loadAll(session.user); }
-      else { setUser(null); setLoading(false); }
+      if (session?.user) {
+        setUser(session.user);
+        // Only load data on first login, not on tab refocus
+        if (!dataLoaded.current) { dataLoaded.current = true; loadAll(session.user); }
+      } else {
+        setUser(null);
+        dataLoaded.current = false;
+        setLoading(false);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
