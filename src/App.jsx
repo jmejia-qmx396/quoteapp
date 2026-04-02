@@ -178,28 +178,35 @@ const Card = ({ children, style = {} }) => (
   </div>
 );
 
-const Modal = ({ title, onClose, children, width = 680 }) => (
-  <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.7)",
-                display:"flex",alignItems:"flex-end",justifyContent:"center",
+const Modal = ({ title, onClose, children, width = 680, fullScreen = false }) => {
+  const isFullScreen = fullScreen || width >= 1200;
+  return (
+  <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.75)",
+                display:"flex",
+                alignItems: isFullScreen ? "stretch" : "flex-end",
+                justifyContent:"center",
                 zIndex:1000,padding:0 }}
        onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div style={{ background:G.card,border:`1px solid ${G.border}`,
-                  borderRadius:"12px 12px 0 0",
-                  width:"100%",maxWidth:Math.min(width, window.innerWidth-20),
-                  maxHeight:"95vh",overflow:"auto",
-                  animation:"slideUp .2s ease" }}>
-      <style>{`@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+                  borderRadius: isFullScreen ? 0 : "12px 12px 0 0",
+                  width:"100%",
+                  maxWidth: isFullScreen ? "100%" : width,
+                  height: isFullScreen ? "100%" : "auto",
+                  maxHeight: isFullScreen ? "100%" : "95vh",
+                  overflow:"auto",
+                  display:"flex",flexDirection:"column" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                    padding:"16px 20px",borderBottom:`1px solid ${G.border}`,
-                    position:"sticky",top:0,background:G.card,zIndex:1 }}>
+                    padding:"12px 20px",borderBottom:`1px solid ${G.border}`,
+                    position:"sticky",top:0,background:G.card,zIndex:1,flexShrink:0 }}>
         <span style={{ fontWeight:700,fontSize:15 }}>{title}</span>
         <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
                                            fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
       </div>
-      <div style={{ padding:"16px 20px" }}>{children}</div>
+      <div style={{ padding:"16px 20px",flex:1,overflowY:"auto" }}>{children}</div>
     </div>
   </div>
-);
+  );
+};
 
 const Field = ({ label, children, style = {} }) => (
   <div style={{ marginBottom:14, ...style }}>
