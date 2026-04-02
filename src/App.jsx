@@ -2,6 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase client ───────────────────────────────────────────────
+// ── Hook: detectar mobile ────────────────────────────────────────
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
 const SUPA_URL = "https://sivewzjtgyylnpsdpwwd.supabase.co";
 const SUPA_KEY = "sb_publishable__0KaY2d7V8AHFtaSy7JHAw_UGKb3Zsa";
 const sb = createClient(SUPA_URL, SUPA_KEY);
@@ -87,19 +97,7 @@ tr:hover td{background:rgba(59,130,246,.04)}
 .badge-warn{background:rgba(245,158,11,.15);color:${G.warn}}
 .badge-red{background:rgba(239,68,68,.15);color:${G.danger}}
 
-/* ── RESPONSIVE MOBILE ── */
-@media (max-width: 768px) {
-  .desktop-only { display: none !important; }
-  .mobile-card { background:${G.card};border:1px solid ${G.border};border-radius:10px;padding:14px;margin-bottom:10px; }
-  .mobile-card-row { display:flex;justify-content:space-between;align-items:center;margin-bottom:6px; }
-  .mobile-label { font-size:11px;color:${G.muted};text-transform:uppercase;letter-spacing:.06em; }
-  .mobile-value { font-weight:600;text-align:right; }
-  .mobile-actions { display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid ${G.border}; }
-}
-@media (min-width: 769px) {
-  .mobile-only { display: none !important; }
-  .mobile-nav { display: none !important; }
-}
+
 `;
 
 // ── Componentes base ──────────────────────────────────────────────
@@ -183,64 +181,72 @@ const NAV = [
   { id:"config",    label:"Mi Empresa",   icon:"⚙️" },
 ];
 
-const Sidebar = ({ view, setView, user, logout }) => (
-  <>
-    {/* Desktop sidebar */}
-    <div className="desktop-only" style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
-                display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
-      <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
-        <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
-          ◈ QuoteApp
-        </div>
-        <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
-      </div>
-      <nav style={{ flex:1,padding:"14px 10px" }}>
-        {NAV.map(n => (
-          <div key={n.id} onClick={() => setView(n.id)}
-            style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-                     borderRadius:7,marginBottom:2,cursor:"pointer",
-                     background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
-                     color: view === n.id ? G.accentH : G.muted,
-                     fontWeight: view === n.id ? 600 : 400,
-                     transition:".15s" }}>
-            <span>{n.icon}</span>{n.label}
+const Sidebar = ({ view, setView, user, logout, isMobile }) => {
+  return (
+    <>
+      {/* Desktop sidebar */}
+      {!isMobile && (
+        <div style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
+                      display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
+          <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
+            <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
+              ◈ QuoteApp
+            </div>
+            <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
           </div>
-        ))}
-      </nav>
-      <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
-        <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
-        <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
-          Cerrar sesión
-        </button>
-      </div>
-    </div>
-
-    {/* Mobile top header */}
-    <div className="mobile-only" style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,
-                background:G.surface,borderBottom:`1px solid ${G.border}`,
-                padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-      <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:16,color:G.accent }}>◈ QuoteApp</span>
-      <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer" }}>
-        Salir
-      </button>
-    </div>
-
-    {/* Mobile bottom navigation */}
-    <div className="mobile-only" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:100,
-                background:G.surface,borderTop:`1px solid ${G.border}`,
-                display:"flex",justifyContent:"space-around",padding:"8px 0" }}>
-      {NAV.map(n => (
-        <div key={n.id} onClick={() => setView(n.id)}
-          style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                   padding:"4px 8px",borderRadius:8,cursor:"pointer",minWidth:56,
-                   color: view === n.id ? G.accent : G.muted }}>
-          <span style={{ fontSize:20 }}>{n.icon}</span>
-          <span style={{ fontSize:9,fontWeight: view===n.id?700:400 }}>{n.label.split(" ")[0]}</span>
+          <nav style={{ flex:1,padding:"14px 10px" }}>
+            {NAV.map(n => (
+              <div key={n.id} onClick={() => setView(n.id)}
+                style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
+                         borderRadius:7,marginBottom:2,cursor:"pointer",
+                         background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
+                         color: view === n.id ? G.accentH : G.muted,
+                         fontWeight: view === n.id ? 600 : 400,
+                         transition:".15s" }}>
+                <span>{n.icon}</span>{n.label}
+              </div>
+            ))}
+          </nav>
+          <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
+            <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
+            <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+              Cerrar sesión
+            </button>
+          </div>
         </div>
-      ))}
-    </div>
-  </>
-);
+      )}
+
+      {/* Mobile top header */}
+      {isMobile && (
+        <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,
+                      background:G.surface,borderBottom:`1px solid ${G.border}`,
+                      padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:16,color:G.accent }}>◈ QuoteApp</span>
+          <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer" }}>
+            Salir
+          </button>
+        </div>
+      )}
+
+      {/* Mobile bottom navigation */}
+      {isMobile && (
+        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:100,
+                      background:G.surface,borderTop:`1px solid ${G.border}`,
+                      display:"flex",justifyContent:"space-around",padding:"8px 0" }}>
+          {NAV.map(n => (
+            <div key={n.id} onClick={() => setView(n.id)}
+              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                       padding:"4px 8px",borderRadius:8,cursor:"pointer",minWidth:56,
+                       color: view === n.id ? G.accent : G.muted }}>
+              <span style={{ fontSize:20 }}>{n.icon}</span>
+              <span style={{ fontSize:9,fontWeight: view===n.id?700:400 }}>{n.label.split(" ")[0]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
 
 // ── STATUS BADGE ─────────────────────────────────────────────────
 const StatusBadge = ({ s }) => {
@@ -350,6 +356,7 @@ const recalc = (q) => {
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
 const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, products, config }) => {
+  const isMobile = useIsMobile();
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
   const [search, setSearch] = useState("");
@@ -417,7 +424,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
       </Card>
 
       {/* Desktop table */}
-      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
+      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr>
             <th>#</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
@@ -451,10 +458,10 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
             )}
           </tbody>
         </table>
-      </Card>
+      </Card>}
 
       {/* Mobile cards */}
-      <div className="mobile-only">
+      {isMobile && <div>
         {filtered.map(q => (
           <div key={q.id} className="mobile-card">
             <div className="mobile-card-row">
@@ -484,7 +491,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
             Sin cotizaciones. Toca "+ Nueva Cotización".
           </div>
         )}
-      </div>
+      </div>}
 
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
@@ -1113,6 +1120,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
 
 // ── CLIENTES ─────────────────────────────────────────────────────
 const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
+  const isMobile = useIsMobile();
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -1146,7 +1154,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
         <input placeholder="Buscar por nombre o email…" value={search} onChange={e=>setSearch(e.target.value)} />
       </Card>
       {/* Desktop table */}
-      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
+      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RFC</th><th></th></tr></thead>
           <tbody>
@@ -1168,10 +1176,10 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
             {!filt.length && <tr><td colSpan={6} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin clientes registrados.</td></tr>}
           </tbody>
         </table>
-      </Card>
+      </Card>}
 
       {/* Mobile cards */}
-      <div className="mobile-only">
+      {isMobile && <div>
         {filt.map(c=>(
           <div key={c.id} className="mobile-card">
             <div style={{ fontWeight:700,fontSize:16,marginBottom:4 }}>{c.name}</div>
@@ -1186,7 +1194,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
           </div>
         ))}
         {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin clientes registrados.</div>}
-      </div>
+      </div>}
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Cliente":"Nuevo Cliente"} onClose={()=>setModal(false)}>
@@ -1209,6 +1217,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
 
 // ── CATÁLOGO ─────────────────────────────────────────────────────
 const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => {
+  const isMobile = useIsMobile();
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -1275,7 +1284,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
         </div>
       </Card>
       {/* Desktop table */}
-      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
+      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr><th style={{width:50}}>Img</th><th>SKU</th><th>Producto / Servicio</th><th>Categoría</th><th>Moneda</th><th>Costo</th><th>Margen</th><th>P. Venta</th><th>Unidad</th><th></th></tr></thead>
           <tbody>
@@ -1312,10 +1321,10 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
             {!filt.length && <tr><td colSpan={10} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin productos.</td></tr>}
           </tbody>
         </table>
-      </Card>
+      </Card>}
 
       {/* Mobile cards */}
-      <div className="mobile-only">
+      {isMobile && <div>
         {filt.map(p=>(
           <div key={p.id} className="mobile-card">
             <div style={{ display:"flex",gap:12,alignItems:"flex-start" }}>
@@ -1357,7 +1366,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
           </div>
         ))}
         {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin productos.</div>}
-      </div>
+      </div>}
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Producto":"Nuevo Producto"} onClose={()=>setModal(false)}>
@@ -1630,6 +1639,8 @@ const LoginView = ({ onLogin }) => {
 
 // ── APP ROOT ──────────────────────────────────────────────────────
 export default function App() {
+  // ⚠️ ALL hooks must be at the top — before any conditional returns
+  const isMobile = useIsMobile();
   const [view, setView]         = useState("dashboard");
   const [user, setUser]         = useState(null);
   const [profile, setProfile]   = useState(null);
@@ -1794,11 +1805,11 @@ export default function App() {
     <>
       <style>{css}</style>
       <div style={{ display:"flex",minHeight:"100vh" }}>
-        <Sidebar view={view} setView={setView} user={user} logout={logout} />
-        <main style={{ flex:1,overflowY:"auto",
+        <Sidebar view={view} setView={setView} user={user} logout={logout} isMobile={isMobile} />
+        <main style={{ flex:1,overflowY:"auto",overflowX:"auto",
                        paddingTop:"env(safe-area-inset-top)" }}>
           {/* Mobile spacer for fixed top header */}
-          <div className="mobile-only" style={{ height:52 }} />
+          {isMobile && <div style={{ height:52 }} />}
           {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
@@ -1809,7 +1820,7 @@ export default function App() {
                                    saveProduct={saveProduct} deleteProduct={deleteProduct} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {/* Mobile spacer for fixed bottom nav */}
-          <div className="mobile-only" style={{ height:70 }} />
+          {isMobile && <div style={{ height:70 }} />}
         </main>
       </div>
     </>
