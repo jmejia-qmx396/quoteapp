@@ -61,6 +61,7 @@ const normalizeQuote = (q) => ({
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
+const fmtInput = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:0}).format(n) : "";
 const fmt    = (n) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits:0 }).format(n);
 const fmtUSD = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 const fmtCur = (n, cur) => cur === "USD" ? fmtUSD(n) : fmt(n);
@@ -766,27 +767,31 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                           {item.currency||"COP"}
                         </span>
                       </td>
-                      {/* Costo */}
+                      {/* Costo — siempre en moneda original del producto */}
                       <td>
                         <input type="number" min={0}
                           value={item.cost||""}
                           onChange={e=>{
-                            const cost = e.target.value === "" ? 0 : Number(e.target.value);
-                            const price = item.priceCOP||Number(item.price||0);
+                            const cost = e.target.value===""?0:Number(e.target.value);
+                            const price = Number(item.price||0); // en moneda original
                             const gm = price>0?Math.round((1-cost/price)*100):0;
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,cost,gmPct:gm}:i)}));
                           }}
-                          style={{ padding:"4px 8px",width:"100%" }} placeholder="0" />
+                          style={{ padding:"4px 8px",width:"100%",fontFamily:G.mono,textAlign:"right" }} placeholder="" />
                       </td>
-                      {/* GM% */}
+                      {/* GM% — calcula precio en moneda original */}
                       <td>
                         <input type="number" min={0} max={99}
                           value={item.gmPct !== undefined ? (item.gmPct||"") :
-                            (() => { const p=item.priceCOP||Number(item.price||1); const c=item.costCOP||Number(item.cost||0); return p>0?Math.round((1-c/p)*100)||"":0; })()
+                            (() => {
+                              const p = Number(item.price||1);
+                              const c = Number(item.cost||0);
+                              return p>0&&c>0 ? Math.round((1-c/p)*100)||"" : "";
+                            })()
                           }
                           onChange={e=>{
-                            const gm = e.target.value === "" ? 0 : Number(e.target.value);
-                            const cost = item.costCOP||Number(item.cost||0);
+                            const gm = e.target.value===""?0:Number(e.target.value);
+                            const cost = Number(item.cost||0); // en moneda original
                             const newPrice = gm<100&&cost>0 ? Math.round(cost/(1-gm/100)) : Number(item.price||0);
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,gmPct:gm,price:newPrice}:i)}));
                           }}
@@ -803,11 +808,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                           value={item.price||""}
                           onChange={e=>{
                             const price = e.target.value===""?0:Number(e.target.value);
-                            const cost = item.costCOP||Number(item.cost||0);
+                            const cost = Number(item.cost||0);
                             const gm = price>0?Math.round((1-cost/price)*100):0;
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
                           }}
-                          style={{ padding:"4px 8px",width:"100%" }} />
+                          style={{ padding:"4px 8px",width:"100%",
+                                   fontFamily:G.mono,textAlign:"right",letterSpacing:".02em" }} />
                       </td>
                       <td>
                         <input type="number" min={0} max={100} value={item.discount||0}
