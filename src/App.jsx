@@ -244,6 +244,7 @@ const NAV = [
   { id:"clients",     label:"Clientes",     icon:"👥" },
   { id:"products",    label:"Catálogo",     icon:"📦" },
   { id:"categories",  label:"Categorías",   icon:"🏷️" },
+  { id:"suppliers",   label:"Proveedores",  icon:"🏭" },
   { id:"payments",    label:"Cuentas Cobro", icon:"🧾" },
   { id:"config",      label:"Mi Empresa",   icon:"⚙️" },
 ];
@@ -1405,7 +1406,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
 };
 
 // ── CATÁLOGO ─────────────────────────────────────────────────────
-const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categories = [], saveCategory, deleteCategory }) => {
+const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categories = [], saveCategory, deleteCategory, suppliers = [] }) => {
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -1574,6 +1575,18 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
             </Field>
             <Field label="Nombre del Producto" style={{ gridColumn:"1/-1" }}>
               <input value={cur.name} onChange={e=>setCur({...cur,name:e.target.value})} placeholder="Descripción del producto o servicio" />
+            </Field>
+            <Field label="Proveedor Principal">
+              <select value={cur.supplierMain||""} onChange={e=>setCur({...cur,supplierMain:e.target.value})}>
+                <option value="">— Sin proveedor —</option>
+                {suppliers.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Proveedor Secundario">
+              <select value={cur.supplierSecondary||""} onChange={e=>setCur({...cur,supplierSecondary:e.target.value})}>
+                <option value="">— Sin proveedor —</option>
+                {suppliers.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
             </Field>
             <Field label="Moneda del Producto">
               <select value={cur.currency||"COP"} onChange={e=>setCur({...cur,currency:e.target.value})}>
@@ -2201,6 +2214,78 @@ const PrintPaymentRequest = ({ pr, config, onClose }) => {
   return null;
 };
 
+// ── PROVEEDORES ──────────────────────────────────────────────────
+const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
+  const [newName, setNewName] = useState("");
+  const [editId, setEditId]   = useState(null);
+  const [editName, setEditName] = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    await saveSupplier({ isNew: true, name: newName.trim() });
+    setNewName("");
+    setSaving(false);
+  };
+  const startEdit = (s) => { setEditId(s.id); setEditName(s.name); };
+  const saveEdit = async () => {
+    if (!editName.trim()) return;
+    await saveSupplier({ id: editId, name: editName.trim() });
+    setEditId(null);
+  };
+  const remove = async (id) => {
+    if (window.confirm("¿Eliminar proveedor?")) await deleteSupplier(id);
+  };
+
+  return (
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))",maxWidth:600 }}>
+      <div style={{ marginBottom:24 }}>
+        <h1 style={{ fontSize:22,fontWeight:700 }}>Proveedores</h1>
+        <p style={{ color:G.muted }}>Administra tus proveedores</p>
+      </div>
+      <Card style={{ marginBottom:20 }}>
+        <p style={{ fontWeight:700,marginBottom:12,fontSize:13 }}>Nuevo Proveedor</p>
+        <div style={{ display:"flex",gap:10 }}>
+          <input value={newName} onChange={e=>setNewName(e.target.value)}
+            placeholder="Nombre del proveedor…"
+            onKeyDown={e=>e.key==="Enter"&&add()} style={{ flex:1 }} />
+          <Btn onClick={add} variant="primary" style={{ whiteSpace:"nowrap" }}>
+            {saving ? "..." : "+ Agregar"}
+          </Btn>
+        </div>
+      </Card>
+      <Card style={{ padding:0,overflow:"hidden" }}>
+        {suppliers.map((s,idx) => (
+          <div key={s.id} style={{ display:"flex",alignItems:"center",gap:10,
+                                    padding:"12px 16px",borderBottom:idx<suppliers.length-1?`1px solid ${G.border}`:"none" }}>
+            {editId === s.id ? (
+              <>
+                <input value={editName} onChange={e=>setEditName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&saveEdit()}
+                  style={{ flex:1,padding:"5px 10px" }} autoFocus />
+                <Btn size="sm" variant="success" onClick={saveEdit}>✓</Btn>
+                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>✕</Btn>
+              </>
+            ) : (
+              <>
+                <span style={{ flex:1,fontSize:14,fontWeight:500 }}>🏭 {s.name}</span>
+                <Btn size="sm" variant="outline" onClick={()=>startEdit(s)}>✏️</Btn>
+                <Btn size="sm" variant="danger" onClick={()=>remove(s.id)}>✕</Btn>
+              </>
+            )}
+          </div>
+        ))}
+        {!suppliers.length && (
+          <div style={{ padding:24,textAlign:"center",color:G.muted }}>
+            Sin proveedores. Agrega el primero arriba.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
 // ── CATEGORÍAS ───────────────────────────────────────────────────
 const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   const [newName, setNewName] = useState("");
@@ -2296,6 +2381,7 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [config, setConfig]     = useState(INIT_CONFIG);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [paymentRequests, setPaymentRequests] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
@@ -2345,11 +2431,15 @@ export default function App() {
 
       // Products
       const { data: prods } = await sb.from("products").select("*").order("name");
-      if (prods) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||""})));
+      if (prods) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||"", supplierMain: p.supplier_main||"", supplierSecondary: p.supplier_secondary||""})));
 
       // Payment requests
       const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
       if (prs) setPaymentRequests(prs);
+
+      // Suppliers
+      const { data: sups } = await sb.from("suppliers").select("*").order("name");
+      if (sups) setSuppliers(sups);
 
       // Categories
       const { data: cats } = await sb.from("categories").select("*").order("name");
@@ -2446,7 +2536,7 @@ export default function App() {
   const saveProduct = async (p) => {
     const row = { sku:p.sku, name:p.name, category:p.category, currency:p.currency||"COP",
                   cost:p.cost||0, margin:p.margin||0, price:p.price||0, unit:p.unit, tax:p.tax||19,
-                  image_url: p.imageUrl||"" };
+                  image_url: p.imageUrl||"", supplier_main:p.supplierMain||"", supplier_secondary:p.supplierSecondary||"" };
     if (p.id && typeof p.id === "number" && p.id > 1000000000) {
       const { data } = await sb.from("products").insert(row).select().single();
       if (data) setProducts(ps => [...ps.filter(x=>x.id!==p.id), data].sort((a,b)=>a.name.localeCompare(b.name)));
@@ -2459,6 +2549,22 @@ export default function App() {
   const deleteProduct = async (id) => {
     await sb.from("products").delete().eq("id", id);
     setProducts(ps => ps.filter(p=>p.id!==id));
+  };
+
+  // ── CRUD: Suppliers ─────────────────────────────────────────
+  const saveSupplier = async (s) => {
+    if (s.isNew) {
+      const { data, error } = await sb.from("suppliers").insert({ name: s.name }).select().single();
+      if (error) { alert("Error: " + error.message); return; }
+      if (data) setSuppliers(ss => [...ss, data].sort((a,b)=>a.name.localeCompare(b.name)));
+    } else {
+      await sb.from("suppliers").update({ name: s.name }).eq("id", s.id);
+      setSuppliers(ss => ss.map(x => x.id===s.id ? {...x, name: s.name} : x));
+    }
+  };
+  const deleteSupplier = async (id) => {
+    await sb.from("suppliers").delete().eq("id", id);
+    setSuppliers(ss => ss.filter(s => s.id !== id));
   };
 
   // ── CRUD: Categories ────────────────────────────────────────
@@ -2546,8 +2652,10 @@ export default function App() {
                                    }} />}
           {view==="products"  && <ProductsView products={products} setProducts={setProducts}
                                    saveProduct={saveProduct} deleteProduct={deleteProduct}
-                                   categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
+                                   categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory}
+                                   suppliers={suppliers} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
+          {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
           {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes}
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
                                    config={config} />}
