@@ -1662,6 +1662,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
 // ── CONFIGURACIÓN ────────────────────────────────────────────────
 const ConfigView = ({ config, setConfig }) => {
   const [saved, setSaved] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const set = (k, v) => setConfig(c => ({ ...c, [k]: v }));
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
 
