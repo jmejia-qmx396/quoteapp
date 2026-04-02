@@ -774,8 +774,13 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                       </td>
                       <td>
                         <input type="number" min={0} value={item.price}
-                          onChange={e=>updateItem(item.id,"price",e.target.value)}
-                          style={{ padding:"4px 8px" }} />
+                          onChange={e=>{
+                            const price = Number(e.target.value);
+                            const cost = item.costCOP||Number(item.cost||0);
+                            const gm = price>0?Math.round((1-cost/price)*100):0;
+                            setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
+                          }}
+                          style={{ padding:"4px 8px",width:"100%" }} />
                       </td>
                       <td>
                         <input type="number" min={0} max={100} value={item.discount||0}
@@ -785,9 +790,35 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                       <td>
                         <select value={item.tax !== undefined ? item.tax : 19}
                           onChange={e=>updateItem(item.id,"tax",Number(e.target.value))}
-                          style={{ padding:"4px 6px",fontSize:12 }}>
+                          style={{ padding:"4px 8px",fontSize:13,width:"100%",fontWeight:600 }}>
                           {[0,5,8,19].map(t=><option key={t} value={t}>{t}%</option>)}
                         </select>
+                      </td>
+                      {/* Costo */}
+                      <td>
+                        <input type="number" min={0}
+                          value={item.cost||0}
+                          onChange={e=>{
+                            const cost = Number(e.target.value);
+                            const price = item.priceCOP||Number(item.price||0);
+                            const gm = price>0?Math.round((1-cost/price)*100):0;
+                            setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,cost,gmPct:gm}:i)}));
+                          }}
+                          style={{ padding:"4px 8px",width:"100%" }} />
+                      </td>
+                      {/* GM% */}
+                      <td>
+                        <input type="number" min={0} max={99}
+                          value={item.gmPct !== undefined ? item.gmPct :
+                            (() => { const p=item.priceCOP||Number(item.price||1); const c=item.costCOP||Number(item.cost||0); return p>0?Math.round((1-c/p)*100):0; })()
+                          }
+                          onChange={e=>{
+                            const gm = Number(e.target.value);
+                            const cost = item.costCOP||Number(item.cost||0);
+                            const newPrice = gm<100&&cost>0 ? Math.round(cost/(1-gm/100)) : Number(item.price||0);
+                            setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,gmPct:gm,price:newPrice}:i)}));
+                          }}
+                          style={{ padding:"4px 8px",width:"100%" }} placeholder="%" />
                       </td>
                       <td style={{ fontFamily:G.mono,fontWeight:600,whiteSpace:"nowrap" }}>
                         {fmt(lineNet)}
