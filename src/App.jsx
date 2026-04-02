@@ -149,7 +149,7 @@ const Modal = ({ title, onClose, children, width = 680 }) => (
        onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div style={{ background:G.card,border:`1px solid ${G.border}`,
                   borderRadius:"12px 12px 0 0",
-                  width:"100%",maxWidth:width,
+                  width:"100%",maxWidth:Math.min(width, window.innerWidth-20),
                   maxHeight:"95vh",overflow:"auto",
                   animation:"slideUp .2s ease" }}>
       <style>{`@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
@@ -613,7 +613,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     p.sku.toLowerCase().includes(prodSearch.toLowerCase()));
 
   return (
-    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`}
+    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`} width={1200}
            onClose={onClose} width={940}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
@@ -687,13 +687,13 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         <table>
           <thead><tr>
             <th style={{width:44}}>Img</th>
-            <th style={{width:80}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
-            <th style={{width:70}}>Qty</th><th style={{width:130}}>P. Unitario</th>
-            <th style={{width:80}}>Dto%</th>
-            <th style={{width:90}}>IVA%</th>
-            <th style={{width:130}}>Subtotal</th>
-            <th style={{width:120,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
-            <th></th>
+            <th style={{width:90}}>SKU</th><th>Descripción</th><th style={{width:60}}>Mon.</th>
+            <th style={{width:70}}>Qty</th><th style={{width:150}}>P. Unitario</th>
+            <th style={{width:90}}>Dto%</th>
+            <th style={{width:100}}>IVA%</th>
+            <th style={{width:150}}>Subtotal</th>
+            <th style={{width:130,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
+            <th style={{width:36}}></th>
           </tr></thead>
           <tbody>
             {(() => {
