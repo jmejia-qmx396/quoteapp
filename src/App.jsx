@@ -1704,8 +1704,43 @@ const ConfigView = ({ config, setConfig }) => {
               style={{ flex:1 }} placeholder="#0d6e6e" />
           </div>
         </Field>
-        <Field label="URL del Logo (opcional)">
-          <input value={config.logoUrl} onChange={e=>set("logoUrl",e.target.value)} placeholder="https://miempresa.com/logo.png" />
+        <Field label="Logo de la Empresa">
+          <div style={{ display:"flex",gap:12,alignItems:"center",flexWrap:"wrap" }}>
+            {config.logoUrl && (
+              <img src={config.logoUrl} alt="logo" style={{ height:48,objectFit:"contain",
+                border:`1px solid ${G.border}`,borderRadius:6,padding:4,background:"#fff" }} />
+            )}
+            <div style={{ flex:1 }}>
+              <label style={{ display:"inline-block",padding:"7px 16px",background:G.accent,
+                              color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:500 }}>
+                {uploadingLogo ? "Subiendo..." : config.logoUrl ? "🔄 Cambiar logo" : "📁 Subir logo"}
+                <input type="file" accept="image/*" style={{ display:"none" }}
+                  onChange={async e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 2*1024*1024) { alert("El logo no puede pesar más de 2MB"); return; }
+                    setUploadingLogo(true);
+                    try {
+                      const ext = file.name.split(".").pop();
+                      const path = \`logos/company-logo.\${ext}\`;
+                      const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
+                      if (error) throw error;
+                      const { data } = sb.storage.from("product-images").getPublicUrl(path);
+                      set("logoUrl", data.publicUrl + "?t=" + Date.now());
+                    } catch(e) { alert("Error: " + e.message); }
+                    setUploadingLogo(false);
+                  }} />
+              </label>
+              {config.logoUrl && (
+                <button onClick={()=>set("logoUrl","")}
+                  style={{ marginLeft:8,background:"none",border:"none",color:G.danger,
+                           cursor:"pointer",fontSize:12,fontFamily:G.font }}>
+                  ✕ Quitar logo
+                </button>
+              )}
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>PNG, JPG, SVG — máx 2MB</p>
+            </div>
+          </div>
         </Field>
       </Section>
 
