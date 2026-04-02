@@ -449,6 +449,25 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     } catch {}
   }, [current]);
 
+  // Listen for new quote from client view
+  useEffect(() => {
+    const handler = (e) => {
+      const c = e.detail;
+      const num = quoteCounter++;
+      setCurrent(recalc({
+        id: Date.now(), number: num,
+        date: today(), validUntil: addDays(today(), 30),
+        clientId: c.id, clientName: c.name,
+        clientContact: c.contact, clientEmail: c.email, clientRut: c.rfc||"",
+        status: "Pendiente", notes: config?.defaultNotes||"",
+        discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
+      }));
+      setModal("new");
+    };
+    document.addEventListener("newQuoteForClient", handler);
+    return () => document.removeEventListener("newQuoteForClient", handler);
+  }, [config]);
+
   const clearQuoteDraft = () => {
     try { localStorage.removeItem("qa_draft_quote"); localStorage.removeItem("qa_draft_quote_modal"); } catch {}
   };
@@ -1286,26 +1305,27 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
 };
 
 // ── CLIENTES ─────────────────────────────────────────────────────
-const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
+const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuoteForClient }) => {
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
 
-  const blank = () => ({ id:Date.now(),name:"",contact:"",email:"",phone:"",rfc:"" });
+  const blank = () => ({ id:Date.now(),name:"",contact:"",email:"",phone:"",rfc:"",building:"",address:"" });
   const openNew = () => { setCur(blank()); setModal(true); };
   const openEdit = (c) => { setCur({...c}); setModal(true); };
   const isExisting = cur && clients.some(c=>c.id===cur.id);
-  const save = async () => {
-    await saveClient(cur);
-    setModal(false);
-  };
+  const save = async () => { await saveClient(cur); setModal(false); };
   const remove = async (id) => {
     if(window.confirm("¿Eliminar cliente?")) await deleteClient(id);
   };
 
+  const srch = search.toLowerCase();
   const filt = clients.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.email.toLowerCase().includes(search.toLowerCase()));
+    (c.name||"").toLowerCase().includes(srch) ||
+    (c.contact||"").toLowerCase().includes(srch) ||
+    (c.email||"").toLowerCase().includes(srch) ||
+    (c.building||"").toLowerCase().includes(srch)
+  );
 
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
@@ -1317,59 +1337,65 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
         <Btn onClick={openNew}>+ Nuevo Cliente</Btn>
       </div>
       <Card style={{ marginBottom:16 }}>
-        <input placeholder="Buscar por nombre o email…" value={search} onChange={e=>setSearch(e.target.value)} />
+        <input placeholder="Buscar por empresa, contacto, email o edificio…"
+          value={search} onChange={e=>setSearch(e.target.value)} />
       </Card>
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible" }}>
-        <table style={{ minWidth:700 }}>
-          <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RUT / CC</th><th></th></tr></thead>
+        <table style={{ minWidth:900 }}>
+          <thead><tr>
+            <th>Empresa</th><th>Contacto</th><th>Edificio / Conjunto</th>
+            <th>Email</th><th>Teléfono</th><th>RUT / CC</th><th></th>
+          </tr></thead>
           <tbody>
             {filt.map(c=>(
               <tr key={c.id}>
                 <td><strong>{c.name}</strong></td>
                 <td>{c.contact}</td>
+                <td style={{ color:G.muted,fontSize:12 }}>{c.building}</td>
                 <td style={{ color:G.muted }}>{c.email}</td>
                 <td style={{ fontFamily:G.mono,fontSize:12 }}>{c.phone}</td>
                 <td style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>{c.rfc}</td>
                 <td>
                   <div style={{ display:"flex",gap:6 }}>
-                    <Btn size="sm" variant="outline" onClick={()=>openEdit(c)}>Editar</Btn>
+                    {onNewQuoteForClient && (
+                      <Btn size="sm" variant="success" onClick={()=>onNewQuoteForClient(c)}
+                        style={{ whiteSpace:"nowrap" }}>📋 Cotizar</Btn>
+                    )}
+                    <Btn size="sm" variant="outline" onClick={()=>openEdit(c)}>✏️</Btn>
                     <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>✕</Btn>
                   </div>
                 </td>
               </tr>
             ))}
-            {!filt.length && <tr><td colSpan={6} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin clientes registrados.</td></tr>}
+            {!filt.length && <tr><td colSpan={7} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin clientes registrados.</td></tr>}
           </tbody>
         </table>
       </Card></div>
-      <div style={{display:"none"}}>
-        {filt.map(c=>(
-          <div key={c.id} className="qa-mobile-card">
-            <div style={{ fontWeight:700,fontSize:16,marginBottom:4 }}>{c.name}</div>
-            <div style={{ color:G.muted,fontSize:13,marginBottom:2 }}>{c.contact}</div>
-            <div style={{ color:G.muted,fontSize:12,marginBottom:2 }}>{c.email}</div>
-            <div style={{ fontFamily:G.mono,fontSize:12,marginBottom:2 }}>{c.phone}</div>
-            {c.rfc && <div style={{ fontFamily:G.mono,fontSize:11,color:G.accent }}>{c.rfc}</div>}
-            <div className="qa-mobile-actions">
-              <Btn size="sm" variant="outline" onClick={()=>openEdit(c)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
-              <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>✕</Btn>
-            </div>
-          </div>
-        ))}
-        {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin clientes registrados.</div>}
-      </div>
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Cliente":"Nuevo Cliente"} onClose={()=>setModal(false)}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-            <Field label="Empresa"><input value={cur.name} onChange={e=>setCur({...cur,name:e.target.value})} placeholder="Nombre de la empresa" /></Field>
-            <Field label="Contacto"><input value={cur.contact} onChange={e=>setCur({...cur,contact:e.target.value})} placeholder="Nombre del contacto" /></Field>
-            <Field label="Email"><input type="email" value={cur.email} onChange={e=>setCur({...cur,email:e.target.value})} placeholder="correo@empresa.com" /></Field>
-            <Field label="Teléfono"><input value={cur.phone} onChange={e=>setCur({...cur,phone:e.target.value})} placeholder="+52 55 0000 0000" /></Field>
-            <Field label="RUT / CC" style={{ gridColumn:"1/-1" }}><input value={cur.rfc} onChange={e=>setCur({...cur,rfc:e.target.value})} placeholder="NIT o Cédula" /></Field>
+            <Field label="Empresa / Nombre"><input value={cur.name||""} onChange={e=>setCur({...cur,name:e.target.value})} placeholder="Nombre de la empresa o persona" /></Field>
+            <Field label="Contacto"><input value={cur.contact||""} onChange={e=>setCur({...cur,contact:e.target.value})} placeholder="Nombre del contacto" /></Field>
+            <Field label="Email"><input type="email" value={cur.email||""} onChange={e=>setCur({...cur,email:e.target.value})} placeholder="correo@empresa.com" /></Field>
+            <Field label="Teléfono"><input value={cur.phone||""} onChange={e=>setCur({...cur,phone:e.target.value})} placeholder="300 000 0000" /></Field>
+            <Field label="RUT / CC"><input value={cur.rfc||""} onChange={e=>setCur({...cur,rfc:e.target.value})} placeholder="NIT o Cédula" /></Field>
+            <Field label="Teléfono Alternativo / Ext."><input value={cur.phone2||""} onChange={e=>setCur({...cur,phone2:e.target.value})} placeholder="Opcional" /></Field>
+            <Field label="Edificio / Conjunto Residencial" style={{ gridColumn:"1/-1" }}>
+              <input value={cur.building||""} onChange={e=>setCur({...cur,building:e.target.value})} placeholder="Ej: Torre Norte, Conjunto Los Pinos" />
+            </Field>
+            <Field label="Dirección" style={{ gridColumn:"1/-1" }}>
+              <input value={cur.address||""} onChange={e=>setCur({...cur,address:e.target.value})} placeholder="Calle, Carrera, Avenida…" />
+            </Field>
           </div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
             <Btn variant="ghost" onClick={()=>setModal(false)}>Cancelar</Btn>
+            {onNewQuoteForClient && isExisting && (
+              <Btn variant="outline" onClick={()=>{ setModal(false); onNewQuoteForClient(cur); }}
+                style={{ color:G.success,borderColor:G.success }}>
+                📋 Nueva Cotización
+              </Btn>
+            )}
             <Btn variant="success" onClick={save}>💾 Guardar</Btn>
           </div>
         </Modal>
@@ -2401,7 +2427,7 @@ export default function App() {
 
   // ── CRUD: Clients ────────────────────────────────────────────
   const saveClient = async (c) => {
-    const row = { name:c.name, contact:c.contact, email:c.email, phone:c.phone, rfc:c.rfc, created_by:user.id };
+    const row = { name:c.name, contact:c.contact, email:c.email, phone:c.phone, rfc:c.rfc, building:c.building||"", address:c.address||"", created_by:user.id };
     if (c.id && typeof c.id === "number" && c.id > 1000000000) {
       const { data } = await sb.from("clients").insert(row).select().single();
       if (data) setClients(cs => [...cs.filter(x=>x.id!==c.id), data].sort((a,b)=>a.name.localeCompare(b.name)));
@@ -2513,7 +2539,11 @@ export default function App() {
                                    paymentRequests={paymentRequests} savePaymentRequest={savePaymentRequest}
                                    clients={clients} products={products} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
-                                   saveClient={saveClient} deleteClient={deleteClient} />}
+                                   saveClient={saveClient} deleteClient={deleteClient}
+                                   onNewQuoteForClient={(c)=>{
+                                     setView("quotes");
+                                     setTimeout(()=>document.dispatchEvent(new CustomEvent("newQuoteForClient",{detail:c})),100);
+                                   }} />}
           {view==="products"  && <ProductsView products={products} setProducts={setProducts}
                                    saveProduct={saveProduct} deleteProduct={deleteProduct}
                                    categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
