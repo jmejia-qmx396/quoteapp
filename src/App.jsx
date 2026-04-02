@@ -690,7 +690,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
             <th style={{width:80}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
             <th style={{width:70}}>Qty</th><th style={{width:130}}>P. Unitario</th>
             <th style={{width:80}}>Dto%</th>
-            <th style={{width:80}}>IVA%</th>
+            <th style={{width:90}}>IVA%</th>
             <th style={{width:130}}>Subtotal</th>
             <th style={{width:120,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
             <th></th>
