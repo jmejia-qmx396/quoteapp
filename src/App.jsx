@@ -1043,13 +1043,15 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
             ${config.logoUrl
-              ? `<img src="${config.logoUrl}" alt="logo" style="height:40px;object-fit:contain">`
-              : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
-            <div>
-              <div class="company-name">${config.companyName||"Mi Empresa"}</div>
-              <div style="color:#64748b;font-size:12px">${config.slogan||""}</div>
-              ${config.website?`<div style="color:${pc};font-size:11px">${config.website}</div>`:""}
-            </div>
+              ? `<img src="${config.logoUrl}" alt="logo" style="height:50px;object-fit:contain">`
+              : `<div style="display:flex;align-items:center;gap:10px">
+                  <div class="logo-circle">${(config.companyName||"C")[0]}</div>
+                  <div>
+                    <div class="company-name">${config.companyName||"Mi Empresa"}</div>
+                    <div style="color:#64748b;font-size:10px">${config.slogan||""}</div>
+                    ${config.website?`<div style="color:${pc};font-size:9px">${config.website}</div>`:""}
+                  </div>
+                 </div>`}
           </div>
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:700;color:${pc};letter-spacing:-.02em">COTIZACIÓN</div>
@@ -1795,16 +1797,18 @@ const ConfigView = ({ config, setConfig }) => {
               {config.logoUrl ? (
                 <img src={config.logoUrl} alt="logo" style={{ height:60,objectFit:"contain" }} />
               ) : (
-                <div style={{ width:60,height:60,borderRadius:"50%",background:config.primaryColor,
-                              display:"flex",alignItems:"center",justifyContent:"center",
-                              color:"#fff",fontSize:24,fontWeight:700 }}>
-                  {config.companyName?.[0]||"C"}
-                </div>
+                <>
+                  <div style={{ width:60,height:60,borderRadius:"50%",background:config.primaryColor,
+                                display:"flex",alignItems:"center",justifyContent:"center",
+                                color:"#fff",fontSize:24,fontWeight:700 }}>
+                    {config.companyName?.[0]||"C"}
+                  </div>
+                  <div>
+                    <p style={{ fontWeight:700,fontSize:18,color:config.primaryColor }}>{config.companyName||"Mi Empresa"}</p>
+                    <p style={{ color:"#64748b",fontSize:12 }}>{config.slogan}</p>
+                  </div>
+                </>
               )}
-              <div>
-                <p style={{ fontWeight:700,fontSize:18,color:config.primaryColor }}>{config.companyName||"Mi Empresa"}</p>
-                <p style={{ color:"#64748b",fontSize:12 }}>{config.slogan}</p>
-              </div>
             </div>
             <div style={{ textAlign:"right" }}>
               <p style={{ fontWeight:700,fontSize:20,color:config.primaryColor }}>COTIZACIÓN</p>
