@@ -423,11 +423,12 @@ const recalc = (q) => {
   // Split taxable vs non-taxable (after discount)
   const subtotalConIva   = prods.filter(i=>i.itemTax>0).reduce((s,i)=>s+Number(i.qty)*i.netCOP, 0);
   const subtotalSinIva   = prods.filter(i=>i.itemTax===0).reduce((s,i)=>s+Number(i.qty)*i.netCOP, 0);
-  const totalSale = subtotalConIva + totalTax + subtotalSinIva;
-  const profit    = totalSale - totalCost;
-  const profitPct = totalSale > 0 ? Math.round((profit / totalSale) * 100) : 0;
+  const totalSale    = subtotalConIva + totalTax + subtotalSinIva;
+  const ventaNeta    = subtotalConIva + subtotalSinIva; // sin IVA — base para GM%
+  const profit       = ventaNeta - totalCost;
+  const profitPct    = ventaNeta > 0 ? Math.round((profit / ventaNeta) * 100) : 0;
   return { ...q, items, subtotal, totalDisc, discountAmt: totalDisc, taxAmt: totalTax,
-           subtotalConIva, subtotalSinIva, total: totalSale, totalCost, profit, profitPct };
+           subtotalConIva, subtotalSinIva, total: totalSale, totalCost, profit, profitPct, ventaNeta };
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
@@ -937,7 +938,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
             🔒 Utilidad (solo tú ves esto)
           </p>
           {[["Costo total",fmt(quote.totalCost||0)],
-            ["Venta neta",fmt((quote.subtotal||0)-(quote.totalDisc||0))],
+            ["Venta neta (sin IVA)",fmt(quote.ventaNeta||(quote.subtotalConIva||0)+(quote.subtotalSinIva||0))],
             ["Utilidad bruta",fmt(quote.profit||0)]].map(([l,v])=>(
             <div key={l} style={{ display:"flex",justifyContent:"space-between",
                                    padding:"4px 0",borderBottom:`1px solid rgba(16,185,129,.15)`,fontSize:12 }}>
