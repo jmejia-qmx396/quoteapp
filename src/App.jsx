@@ -86,6 +86,20 @@ tr:hover td{background:rgba(59,130,246,.04)}
 .badge-green{background:rgba(16,185,129,.15);color:${G.success}}
 .badge-warn{background:rgba(245,158,11,.15);color:${G.warn}}
 .badge-red{background:rgba(239,68,68,.15);color:${G.danger}}
+
+/* ── RESPONSIVE MOBILE ── */
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-card { background:${G.card};border:1px solid ${G.border};border-radius:10px;padding:14px;margin-bottom:10px; }
+  .mobile-card-row { display:flex;justify-content:space-between;align-items:center;margin-bottom:6px; }
+  .mobile-label { font-size:11px;color:${G.muted};text-transform:uppercase;letter-spacing:.06em; }
+  .mobile-value { font-weight:600;text-align:right; }
+  .mobile-actions { display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid ${G.border}; }
+}
+@media (min-width: 769px) {
+  .mobile-only { display: none !important; }
+  .mobile-nav { display: none !important; }
+}
 `;
 
 // ── Componentes base ──────────────────────────────────────────────
@@ -119,16 +133,23 @@ const Card = ({ children, style = {} }) => (
 
 const Modal = ({ title, onClose, children, width = 680 }) => (
   <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.7)",
-                display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20 }}>
-    <div style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:12,
-                  width:"100%",maxWidth:width,maxHeight:"90vh",overflow:"auto" }}>
+                display:"flex",alignItems:"flex-end",justifyContent:"center",
+                zIndex:1000,padding:0 }}
+       onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{ background:G.card,border:`1px solid ${G.border}`,
+                  borderRadius:"12px 12px 0 0",
+                  width:"100%",maxWidth:width,
+                  maxHeight:"95vh",overflow:"auto",
+                  animation:"slideUp .2s ease" }}>
+      <style>{`@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                    padding:"18px 22px",borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,background:G.card,zIndex:1 }}>
-        <span style={{ fontWeight:700,fontSize:16 }}>{title}</span>
+                    padding:"16px 20px",borderBottom:`1px solid ${G.border}`,
+                    position:"sticky",top:0,background:G.card,zIndex:1 }}>
+        <span style={{ fontWeight:700,fontSize:15 }}>{title}</span>
         <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
-                                           fontSize:20,cursor:"pointer",lineHeight:1 }}>✕</button>
+                                           fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
       </div>
-      <div style={{ padding:22 }}>{children}</div>
+      <div style={{ padding:"16px 20px" }}>{children}</div>
     </div>
   </div>
 );
@@ -162,32 +183,63 @@ const NAV = [
   { id:"config",    label:"Mi Empresa",   icon:"⚙️" },
 ];
 
-const Sidebar = ({ view, setView }) => (
-  <div style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
+const Sidebar = ({ view, setView, user, logout }) => (
+  <>
+    {/* Desktop sidebar */}
+    <div className="desktop-only" style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
                 display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
-    <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
-      <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
-        ◈ QuoteApp
+      <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
+        <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
+          ◈ QuoteApp
+        </div>
+        <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
       </div>
-      <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
+      <nav style={{ flex:1,padding:"14px 10px" }}>
+        {NAV.map(n => (
+          <div key={n.id} onClick={() => setView(n.id)}
+            style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
+                     borderRadius:7,marginBottom:2,cursor:"pointer",
+                     background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
+                     color: view === n.id ? G.accentH : G.muted,
+                     fontWeight: view === n.id ? 600 : 400,
+                     transition:".15s" }}>
+            <span>{n.icon}</span>{n.label}
+          </div>
+        ))}
+      </nav>
+      <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
+        <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
+        <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+          Cerrar sesión
+        </button>
+      </div>
     </div>
-    <nav style={{ flex:1,padding:"14px 10px" }}>
+
+    {/* Mobile top header */}
+    <div className="mobile-only" style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,
+                background:G.surface,borderBottom:`1px solid ${G.border}`,
+                padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+      <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:16,color:G.accent }}>◈ QuoteApp</span>
+      <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer" }}>
+        Salir
+      </button>
+    </div>
+
+    {/* Mobile bottom navigation */}
+    <div className="mobile-only" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:100,
+                background:G.surface,borderTop:`1px solid ${G.border}`,
+                display:"flex",justifyContent:"space-around",padding:"8px 0" }}>
       {NAV.map(n => (
         <div key={n.id} onClick={() => setView(n.id)}
-          style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-                   borderRadius:7,marginBottom:2,cursor:"pointer",
-                   background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
-                   color: view === n.id ? G.accentH : G.muted,
-                   fontWeight: view === n.id ? 600 : 400,
-                   transition:".15s" }}>
-          <span>{n.icon}</span>{n.label}
+          style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                   padding:"4px 8px",borderRadius:8,cursor:"pointer",minWidth:56,
+                   color: view === n.id ? G.accent : G.muted }}>
+          <span style={{ fontSize:20 }}>{n.icon}</span>
+          <span style={{ fontSize:9,fontWeight: view===n.id?700:400 }}>{n.label.split(" ")[0]}</span>
         </div>
       ))}
-    </nav>
-    <div style={{ padding:"14px 20px",borderTop:`1px solid ${G.border}`,color:G.muted,fontSize:11 }}>
-      v1.0.0 · QuoteApp Pro
     </div>
-  </div>
+  </>
 );
 
 // ── STATUS BADGE ─────────────────────────────────────────────────
@@ -201,7 +253,7 @@ const Dashboard = ({ quotes, clients, products }) => {
   const total = quotes.reduce((s, q) => s + (q.total||0), 0);
   const approved = quotes.filter(q => q.status === "Aprobada");
   return (
-    <div style={{ padding:30 }}>
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <h1 style={{ fontSize:22,fontWeight:700,marginBottom:6 }}>Dashboard</h1>
       <p style={{ color:G.muted,marginBottom:24 }}>Resumen general de tu negocio</p>
 
@@ -212,7 +264,7 @@ const Dashboard = ({ quotes, clients, products }) => {
         <StatCard label="Clientes" value={clients.length} icon="👥" color={G.warn} />
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20 }}>
         <Card>
           <p style={{ fontWeight:700,marginBottom:14 }}>Últimas Cotizaciones</p>
           {quotes.slice(-5).reverse().map(q => (
@@ -340,7 +392,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
   });
 
   return (
-    <div style={{ padding:30 }}>
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700 }}>Cotizaciones</h1>
@@ -364,7 +416,8 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
         </div>
       </Card>
 
-      <Card style={{ padding:0,overflow:"hidden" }}>
+      {/* Desktop table */}
+      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr>
             <th>#</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
@@ -399,6 +452,39 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
           </tbody>
         </table>
       </Card>
+
+      {/* Mobile cards */}
+      <div className="mobile-only">
+        {filtered.map(q => (
+          <div key={q.id} className="mobile-card">
+            <div className="mobile-card-row">
+              <span style={{ fontFamily:G.mono,color:G.accent,fontWeight:700,fontSize:15 }}>#{q.number}</span>
+              <StatusBadge s={q.status} />
+            </div>
+            <div className="mobile-card-row">
+              <span style={{ fontWeight:600,fontSize:15 }}>{q.clientName||q.client_name}</span>
+            </div>
+            <div className="mobile-card-row">
+              <span className="mobile-label">Total</span>
+              <span style={{ fontFamily:G.mono,fontWeight:700,color:G.accent }}>{fmt(q.total||0)}</span>
+            </div>
+            <div className="mobile-card-row">
+              <span className="mobile-label">Fecha</span>
+              <span style={{ color:G.muted,fontSize:12 }}>{q.date}</span>
+            </div>
+            <div className="mobile-actions">
+              <Btn size="sm" variant="ghost" onClick={()=>openView(q)} style={{flex:1,textAlign:"center"}}>👁 Ver</Btn>
+              <Btn size="sm" variant="outline" onClick={()=>openEdit(q)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
+              <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
+            </div>
+          </div>
+        ))}
+        {!filtered.length && (
+          <div style={{ textAlign:"center",color:G.muted,padding:30 }}>
+            Sin cotizaciones. Toca "+ Nueva Cotización".
+          </div>
+        )}
+      </div>
 
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
@@ -1048,7 +1134,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
     c.email.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div style={{ padding:30 }}>
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700 }}>Clientes</h1>
@@ -1059,7 +1145,8 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
       <Card style={{ marginBottom:16 }}>
         <input placeholder="Buscar por nombre o email…" value={search} onChange={e=>setSearch(e.target.value)} />
       </Card>
-      <Card style={{ padding:0,overflow:"hidden" }}>
+      {/* Desktop table */}
+      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RFC</th><th></th></tr></thead>
           <tbody>
@@ -1082,6 +1169,24 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
           </tbody>
         </table>
       </Card>
+
+      {/* Mobile cards */}
+      <div className="mobile-only">
+        {filt.map(c=>(
+          <div key={c.id} className="mobile-card">
+            <div style={{ fontWeight:700,fontSize:16,marginBottom:4 }}>{c.name}</div>
+            <div style={{ color:G.muted,fontSize:13,marginBottom:2 }}>{c.contact}</div>
+            <div style={{ color:G.muted,fontSize:12,marginBottom:2 }}>{c.email}</div>
+            <div style={{ fontFamily:G.mono,fontSize:12,marginBottom:2 }}>{c.phone}</div>
+            {c.rfc && <div style={{ fontFamily:G.mono,fontSize:11,color:G.accent }}>{c.rfc}</div>}
+            <div className="mobile-actions">
+              <Btn size="sm" variant="outline" onClick={()=>openEdit(c)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
+              <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>✕</Btn>
+            </div>
+          </div>
+        ))}
+        {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin clientes registrados.</div>}
+      </div>
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Cliente":"Nuevo Cliente"} onClose={()=>setModal(false)}>
@@ -1147,7 +1252,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
   });
 
   return (
-    <div style={{ padding:30 }}>
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700 }}>Catálogo de Productos</h1>
@@ -1169,7 +1274,8 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
           ))}
         </div>
       </Card>
-      <Card style={{ padding:0,overflow:"hidden" }}>
+      {/* Desktop table */}
+      <Card className="desktop-only" style={{ padding:0,overflow:"hidden" }}>
         <table>
           <thead><tr><th style={{width:50}}>Img</th><th>SKU</th><th>Producto / Servicio</th><th>Categoría</th><th>Moneda</th><th>Costo</th><th>Margen</th><th>P. Venta</th><th>Unidad</th><th></th></tr></thead>
           <tbody>
@@ -1207,6 +1313,51 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
           </tbody>
         </table>
       </Card>
+
+      {/* Mobile cards */}
+      <div className="mobile-only">
+        {filt.map(p=>(
+          <div key={p.id} className="mobile-card">
+            <div style={{ display:"flex",gap:12,alignItems:"flex-start" }}>
+              {/* Imagen */}
+              <div style={{ flexShrink:0 }}>
+                {p.imageUrl
+                  ? <img src={p.imageUrl} alt={p.name} style={{ width:56,height:56,objectFit:"cover",borderRadius:8,border:`1px solid ${G.border}` }} />
+                  : <div style={{ width:56,height:56,borderRadius:8,background:G.surface,border:`1px dashed ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24 }}>📦</div>
+                }
+              </div>
+              {/* Info */}
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontWeight:700,fontSize:15,marginBottom:2 }}>{p.name}</div>
+                <div style={{ fontFamily:G.mono,fontSize:11,color:G.accent,marginBottom:4 }}>{p.sku}</div>
+                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                  <span className="badge badge-blue">{p.category}</span>
+                  <span style={{ fontSize:11,padding:"2px 8px",borderRadius:10,fontWeight:700,
+                                 background: p.currency==="USD"?"rgba(245,158,11,.15)":"rgba(16,185,129,.15)",
+                                 color: p.currency==="USD"?G.warn:G.success }}>
+                    {p.currency||"COP"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mobile-card-row" style={{ marginTop:10 }}>
+              <span className="mobile-label">Precio</span>
+              <span style={{ fontFamily:G.mono,fontWeight:700,color:G.success,fontSize:15 }}>
+                {fmtCur(p.price,p.currency||"COP")}
+              </span>
+            </div>
+            <div className="mobile-card-row">
+              <span className="mobile-label">Margen</span>
+              <span className="badge badge-warn">{p.margin||0}%</span>
+            </div>
+            <div className="mobile-actions">
+              <Btn size="sm" variant="outline" onClick={()=>openEdit(p)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
+              <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>✕</Btn>
+            </div>
+          </div>
+        ))}
+        {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin productos.</div>}
+      </div>
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Producto":"Nuevo Producto"} onClose={()=>setModal(false)}>
@@ -1643,17 +1794,11 @@ export default function App() {
     <>
       <style>{css}</style>
       <div style={{ display:"flex",minHeight:"100vh" }}>
-        <div style={{ display:"flex",flexDirection:"column" }}>
-          <Sidebar view={view} setView={setView} />
-          <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
-            <div style={{ fontSize:11,color:G.muted,marginBottom:4 }}>{user.email}</div>
-            <button onClick={logout}
-              style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-        <main style={{ flex:1,overflowY:"auto" }}>
+        <Sidebar view={view} setView={setView} user={user} logout={logout} />
+        <main style={{ flex:1,overflowY:"auto",
+                       paddingTop:"env(safe-area-inset-top)" }}>
+          {/* Mobile spacer for fixed top header */}
+          <div className="mobile-only" style={{ height:52 }} />
           {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
@@ -1663,6 +1808,8 @@ export default function App() {
           {view==="products"  && <ProductsView products={products} setProducts={setProducts}
                                    saveProduct={saveProduct} deleteProduct={deleteProduct} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
+          {/* Mobile spacer for fixed bottom nav */}
+          <div className="mobile-only" style={{ height:70 }} />
         </main>
       </div>
     </>
