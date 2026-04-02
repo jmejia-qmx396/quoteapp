@@ -42,6 +42,24 @@ const INIT_CONFIG = {
 // ── Quote counter (en memoria, se sincroniza con Supabase) ──────
 let quoteCounter = 1001;
 
+// Normalize quote fields from Supabase snake_case to camelCase
+const normalizeQuote = (q) => ({
+  ...q,
+  items:         q.items||[],
+  clientName:    q.client_name    || q.clientName    || "",
+  clientEmail:   q.client_email   || q.clientEmail   || "",
+  clientContact: q.client_contact || q.clientContact || "",
+  clientId:      q.client_id      || q.clientId      || null,
+  validUntil:    q.valid_until    || q.validUntil    || "",
+  totalDisc:     q.total_disc     || q.totalDisc     || 0,
+  taxAmt:        q.tax_amt        || q.taxAmt        || 0,
+  totalCost:     q.total_cost     || q.totalCost     || 0,
+  profitPct:     q.profit_pct     || q.profitPct     || 0,
+  version:       q.version        || 1,
+  parentId:      q.parent_id      || null,
+  isLatest:      q.is_latest      !== false,
+});
+
 // ── Helpers ──────────────────────────────────────────────────────
 const fmt    = (n) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits:0 }).format(n);
 const fmtUSD = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -312,7 +330,7 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, products, config }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config }) => {
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
   const [search, setSearch] = useState("");
@@ -336,6 +354,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
   const openEdit = (q) => { setCurrent({ ...q }); setModal("edit"); };
   const openView = (q) => { setCurrent({ ...q }); setModal("view"); };
 
+  const openRevision = async (q) => {
+    const newQ = await createRevision(q);
+    setCurrent(newQ);
+    setModal("new");
+  };
+
   const save = async () => {
     await saveQuote(current);
     setModal(null);
@@ -346,12 +370,15 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
   };
 
   const filtered = quotes.filter(q => {
-    const ok = filterStatus === "Todos" || (q.status||"").toLowerCase() === filterStatus.toLowerCase() || filterStatus === "Todos";
     const srch = search.toLowerCase();
     const name = (q.clientName || q.client_name || "").toLowerCase();
     const status = (q.status || "").toLowerCase();
-    return (filterStatus === "Todos" || (q.status||"") === filterStatus) &&
-           (name.includes(srch) || String(q.number||"").includes(srch) || status.includes(srch));
+    const matchesSearch = name.includes(srch) || String(q.number||"").includes(srch) || status.includes(srch);
+    const matchesStatus = filterStatus === "Todos" || (q.status||"") === filterStatus;
+    // Si se busca por número, mostrar todas las versiones; si no, solo la última
+    const isSearchingByNumber = srch && /^\d+$/.test(srch.trim());
+    const showVersion = isSearchingByNumber ? true : (q.isLatest !== false);
+    return matchesSearch && matchesStatus && showVersion;
   });
 
   return (
@@ -383,13 +410,24 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
         <Card style={{ padding:0,overflow:"visible",minWidth:750 }}>
           <table style={{ minWidth:750 }}>
             <thead><tr>
-              <th>#</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
+              <th># / Ver.</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
               <th>Total</th><th>Estado</th><th>Acciones</th>
             </tr></thead>
             <tbody>
               {filtered.map(q => (
-                <tr key={q.id}>
-                  <td><span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span></td>
+                <tr key={q.id} style={{ opacity: q.isLatest===false ? 0.5 : 1 }}>
+                  <td>
+                    <span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span>
+                    {(q.version||1) > 1 && (
+                      <span style={{ marginLeft:6,fontSize:10,background:"rgba(245,158,11,.15)",
+                                     color:G.warn,padding:"1px 6px",borderRadius:10,fontWeight:700 }}>
+                        v{q.version}
+                      </span>
+                    )}
+                    {q.isLatest===false && (
+                      <span style={{ marginLeft:4,fontSize:10,color:G.muted }}>(anterior)</span>
+                    )}
+                  </td>
                   <td>
                     <div style={{ fontWeight:500 }}>{q.clientName||q.client_name}</div>
                     <div style={{ color:G.muted,fontSize:12 }}>{q.clientEmail||q.client_email}</div>
@@ -399,9 +437,15 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
                   <td style={{ fontWeight:700,fontFamily:G.mono }}>{fmt(q.total||0)}</td>
                   <td><StatusBadge s={q.status} /></td>
                   <td>
-                    <div style={{ display:"flex",gap:6 }}>
+                    <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
                       <Btn size="sm" variant="ghost" onClick={()=>openView(q)}>Ver</Btn>
-                      <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}>Editar</Btn>
+                      {q.isLatest!==false && <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}>Editar</Btn>}
+                      {q.isLatest!==false && (
+                        <Btn size="sm" variant="outline" onClick={()=>openRevision(q)}
+                          style={{ color:G.warn,borderColor:G.warn }}>
+                          {q.status==="Aprobada" ? "＋ Adicionales" : "Nueva v."}
+                        </Btn>
+                      )}
                       <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
                     </div>
                   </td>
@@ -486,7 +530,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     p.sku.toLowerCase().includes(prodSearch.toLowerCase()));
 
   return (
-    <Modal title={isNew ? "Nueva Cotización" : `Editar Cotización #${quote.number}`}
+    <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`}
            onClose={onClose} width={940}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
@@ -1677,22 +1721,7 @@ export default function App() {
 
       // Quotes
       const { data: qs } = await sb.from("quotes").select("*").order("number", { ascending: false });
-      if (qs) {
-        setQuotes(qs.map(q => ({
-          ...q,
-          items: q.items||[],
-          // normalize field names from snake_case to camelCase
-          clientName:    q.client_name    || q.clientName    || "",
-          clientEmail:   q.client_email   || q.clientEmail   || "",
-          clientContact: q.client_contact || q.clientContact || "",
-          clientId:      q.client_id      || q.clientId      || null,
-          validUntil:    q.valid_until    || q.validUntil    || "",
-          totalDisc:     q.total_disc     || q.totalDisc     || 0,
-          taxAmt:        q.tax_amt        || q.taxAmt        || 0,
-          totalCost:     q.total_cost     || q.totalCost     || 0,
-          profitPct:     q.profit_pct     || q.profitPct     || 0,
-        })));
-      }
+      if (qs) { setQuotes(qs.map(normalizeQuote)); }
 
       // Clients
       const { data: cls } = await sb.from("clients").select("*").order("name");
@@ -1731,15 +1760,50 @@ export default function App() {
       client_email:q.clientEmail, status:q.status, notes:q.notes, discount:q.discount||0,
       trm:q.trm||4200, subtotal:q.subtotal||0, total_disc:q.totalDisc||0,
       tax_amt:q.taxAmt||0, total:q.total||0, total_cost:q.totalCost||0,
-      profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id };
+      profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id,
+      version: q.version||1, parent_id: q.parent_id||null, is_latest: q.is_latest!==false };
     if (q.id && typeof q.id === "number" && q.id > 1000000000) {
-      // new (temp id from Date.now)
       const { data } = await sb.from("quotes").insert(row).select().single();
-      if (data) setQuotes(qs => [data, ...qs.filter(x=>x.id!==q.id)]);
+      if (data) setQuotes(qs => [normalizeQuote(data), ...qs.filter(x=>x.id!==q.id)]);
     } else {
       await sb.from("quotes").update(row).eq("id", q.id);
       setQuotes(qs => qs.map(x => x.id===q.id ? {...q,...row} : x));
     }
+  };
+
+  // Create a new revision of an existing quote
+  const createRevision = async (q) => {
+    // Mark current as not latest
+    await sb.from("quotes").update({ is_latest: false }).eq("id", q.id);
+    setQuotes(qs => qs.map(x => x.id===q.id ? {...x, is_latest: false} : x));
+
+    // Determine parent: if q already has a parent, use that; otherwise use q itself
+    const rootId = q.parent_id || q.id;
+    const newVersion = (q.version||1) + 1;
+
+    // If approved, add "Adicionales" section automatically
+    let newItems = [...(q.items||[])];
+    if (q.status === "Aprobada") {
+      const alreadyHasAdicionales = newItems.some(i => i.type==="header" && i.name==="Adicionales");
+      if (!alreadyHasAdicionales) {
+        newItems.push({ id: Date.now(), type:"header", name:"Adicionales" });
+      }
+    }
+
+    const newQ = recalc({
+      id: Date.now(), number: q.number,
+      date: today(), validUntil: q.validUntil,
+      clientId: q.clientId||q.client_id,
+      clientName: q.clientName||q.client_name||"",
+      clientContact: q.clientContact||q.client_contact||"",
+      clientEmail: q.clientEmail||q.client_email||"",
+      status: q.status === "Aprobada" ? "Aprobada" : "Pendiente",
+      notes: q.notes||"", discount: q.discount||0,
+      trm: q.trm||4200, currency: q.currency||"COP",
+      items: newItems,
+      version: newVersion, parent_id: rootId, is_latest: true,
+    });
+    return newQ;
   };
 
   const deleteQuote = async (id) => {
@@ -1834,6 +1898,7 @@ export default function App() {
           {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
+                                   createRevision={createRevision}
                                    clients={clients} products={products} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient} />}
