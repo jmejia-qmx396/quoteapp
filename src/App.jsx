@@ -563,11 +563,13 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const set = (k, v) => setQuote(q => recalc({ ...q, [k]: v }));
 
   const addItem = (prod) => {
+    const gmPct = prod.price > 0 ? Math.round((1-(prod.cost||0)/prod.price)*100) : (prod.margin||0);
     const item = { id: Date.now(), productId: prod.id, sku: prod.sku,
                    name: prod.name, qty: 1, price: prod.price, cost: prod.cost||0,
                    currency: prod.currency||"COP", unit: prod.unit,
                    discount: 0, tax: prod.tax !== undefined ? prod.tax : 19,
-                   imageUrl: prod.imageUrl || prod.image_url || "" };
+                   imageUrl: prod.imageUrl || prod.image_url || "",
+                   gmPct };
     setQuote(q => recalc({ ...q, items: [...q.items, item] }));
   };
 
@@ -575,7 +577,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const addFreeItem = () => {
     const item = { id: Date.now(), productId: null, sku: "", name: "", qty: 1,
                    price: 0, cost: 0, currency: "COP", unit: "pza",
-                   discount: 0, tax: 19, imageUrl: "", isFree: true };
+                   discount: 0, tax: 19, imageUrl: "", isFree: true, gmPct: 0 };
     setQuote(q => recalc({ ...q, items: [...q.items, item] }));
   };
 
@@ -684,15 +686,17 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
       </div>
 
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible",marginBottom:18 }}>
-        <table style={{ minWidth:1100 }}>
+        <table style={{ minWidth:1300 }}>
           <thead><tr>
             <th style={{width:44}}>Img</th>
-            <th style={{width:100}}>SKU</th><th>Descripción</th><th style={{width:60}}>Mon.</th>
-            <th style={{width:70}}>Qty</th><th style={{width:180}}>P. Unitario</th>
-            <th style={{width:90}}>Dto%</th>
-            <th style={{width:110}}>IVA%</th>
-            <th style={{width:170}}>Subtotal</th>
-            <th style={{width:140,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
+            <th style={{width:90}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
+            <th style={{width:65}}>Qty</th><th style={{width:155}}>P. Unitario</th>
+            <th style={{width:80}}>Dto%</th>
+            <th style={{width:100}}>IVA%</th>
+            <th style={{width:150}}>Costo</th>
+            <th style={{width:80}}>GM%</th>
+            <th style={{width:150}}>Subtotal</th>
+            <th style={{width:120,background:"rgba(16,185,129,.08)",color:G.success}}>Utilidad</th>
             <th style={{width:36}}></th>
           </tr></thead>
           <tbody>
@@ -707,7 +711,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   // ── Fila de ENCABEZADO ──
                   rows.push(
                     <tr key={item.id}>
-                      <td colSpan={11} style={{ padding:"6px 8px",background:"rgba(59,130,246,.08)",
+                      <td colSpan={13} style={{ padding:"6px 8px",background:"rgba(59,130,246,.08)",
                                                 borderTop:`2px solid ${G.accent}` }}>
                         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                           <span style={{ color:G.accent,fontWeight:700,fontSize:13 }}>▸</span>
@@ -808,7 +812,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   if (sectionId !== "__root__" && isLastInSection && secTotals[sectionId] > 0) {
                     rows.push(
                       <tr key={`subtotal-${sectionId}`}>
-                        <td colSpan={8} style={{ textAlign:"right",padding:"6px 12px",
+                        <td colSpan={10} style={{ textAlign:"right",padding:"6px 12px",
                                                  background:"rgba(59,130,246,.05)",
                                                  color:G.muted,fontSize:12,fontStyle:"italic" }}>
                           Subtotal sección
@@ -826,7 +830,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               });
               if (!quote.items.length) {
                 rows.push(
-                  <tr key="empty"><td colSpan={11} style={{ textAlign:"center",color:G.muted,padding:24,fontStyle:"italic" }}>
+                  <tr key="empty"><td colSpan={13} style={{ textAlign:"center",color:G.muted,padding:24,fontStyle:"italic" }}>
                     Agrega productos del catálogo de arriba.
                   </td></tr>
                 );
