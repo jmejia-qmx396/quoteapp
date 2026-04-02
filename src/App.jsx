@@ -660,7 +660,8 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const selectClient = (id) => {
     const c = clients.find(c => String(c.id) === String(id));
     if (c) setQuote(q => ({ ...q, clientId: c.id, clientName: c.name,
-                             clientContact: c.contact, clientEmail: c.email }));
+                             clientContact: c.contact, clientEmail: c.email,
+                             clientRut: c.rut||"" }));
   };
 
   const filtProd = products.filter(p =>
@@ -1320,7 +1321,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
       </Card>
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible" }}>
         <table style={{ minWidth:700 }}>
-          <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RFC</th><th></th></tr></thead>
+          <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RUT / CC</th><th></th></tr></thead>
           <tbody>
             {filt.map(c=>(
               <tr key={c.id}>
@@ -1365,7 +1366,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
             <Field label="Contacto"><input value={cur.contact} onChange={e=>setCur({...cur,contact:e.target.value})} placeholder="Nombre del contacto" /></Field>
             <Field label="Email"><input type="email" value={cur.email} onChange={e=>setCur({...cur,email:e.target.value})} placeholder="correo@empresa.com" /></Field>
             <Field label="Teléfono"><input value={cur.phone} onChange={e=>setCur({...cur,phone:e.target.value})} placeholder="+52 55 0000 0000" /></Field>
-            <Field label="RFC" style={{ gridColumn:"1/-1" }}><input value={cur.rfc} onChange={e=>setCur({...cur,rfc:e.target.value})} placeholder="RFC000000AAA" /></Field>
+            <Field label="RUT / CC" style={{ gridColumn:"1/-1" }}><input value={cur.rfc} onChange={e=>setCur({...cur,rfc:e.target.value})} placeholder="NIT o Cédula" /></Field>
           </div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
             <Btn variant="ghost" onClick={()=>setModal(false)}>Cancelar</Btn>
@@ -1817,7 +1818,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose }
     number: prNumber,
     date: new Date().toISOString().split("T")[0],
     clientName: quote.clientName || quote.client_name || "",
-    clientIdNumber: "",
+    clientIdNumber: quote.clientRut || quote.client_rut || "",
     concept: "",
     usePercentage: true,
     percentage: 80,
@@ -2342,7 +2343,7 @@ export default function App() {
   const saveQuote = async (q) => {
     const row = { number:q.number, date:q.date, valid_until:q.validUntil,
       client_id:q.clientId||null, client_name:q.clientName, client_contact:q.clientContact,
-      client_email:q.clientEmail, status:q.status, notes:q.notes, discount:q.discount||0,
+      client_email:q.clientEmail, client_rut:q.clientRut||"", status:q.status, notes:q.notes, discount:q.discount||0,
       trm:q.trm||4200, subtotal:q.subtotal||0, total_disc:q.totalDisc||0,
       tax_amt:q.taxAmt||0, total:q.total||0, total_cost:q.totalCost||0,
       profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id,
