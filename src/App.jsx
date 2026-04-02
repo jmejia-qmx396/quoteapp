@@ -114,6 +114,41 @@ tr:hover td{background:rgba(59,130,246,.04)}
 
 `;
 
+// ── NumInput: input numérico con separadores de miles ───────────
+const NumInput = ({ value, onChange, placeholder="", style={} }) => {
+  const fmt = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:2}).format(n) : "";
+  const [display, setDisplay] = useState(fmt(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setDisplay(fmt(value));
+  }, [value, focused]);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={focused ? display : fmt(value)}
+      onFocus={() => { setFocused(true); setDisplay(value ? String(value) : ""); }}
+      onBlur={() => {
+        setFocused(false);
+        const raw = String(display).replace(/[.]/g,"").replace(/[,]/g,".").replace(/[^0-9.]/g,"");
+        const num = parseFloat(raw)||0;
+        setDisplay(fmt(num));
+        onChange(num);
+      }}
+      onChange={e => {
+        // Allow typing: digits, dots, commas
+        const raw = e.target.value.replace(/[^0-9.,]/g,"");
+        setDisplay(raw);
+      }}
+      placeholder={placeholder}
+      style={{ padding:"4px 8px",width:"100%",fontFamily:"'JetBrains Mono',monospace",
+               textAlign:"right",...style }}
+    />
+  );
+};
+
 // ── Componentes base ──────────────────────────────────────────────
 const Btn = ({ children, onClick, variant = "primary", size = "md", style = {} }) => {
   const colors = {
@@ -769,16 +804,20 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                       </td>
                       {/* Costo — siempre en moneda original del producto */}
                       <td>
-                        <input type="number" min={0}
-                          value={item.cost||""}
-                          onChange={e=>{
-                            const cost = e.target.value===""?0:Number(e.target.value);
-                            const price = Number(item.price||0); // en moneda original
+                        <NumInput value={item.cost||0}
+                          onChange={cost=>{
+                            const price = Number(item.price||0);
                             const gm = price>0?Math.round((1-cost/price)*100):0;
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,cost,gmPct:gm}:i)}));
-                          }}
-                          style={{ padding:"4px 8px",width:"100%",fontFamily:G.mono,textAlign:"right" }} placeholder="" />
+                          }} placeholder="0" />
                       </td>
+                      {/* Precio en COP para USD — solo informativo */}
+                      {item.currency==="USD" && item.priceCOP > 0 && (
+                        <div style={{ fontSize:9,color:G.muted,textAlign:"right",
+                                      marginTop:2,fontFamily:G.mono,paddingRight:8 }}>
+                          ={fmt(item.priceCOP)} COP
+                        </div>
+                      )}
                       {/* GM% — calcula precio en moneda original */}
                       <td>
                         <input type="number" min={0} max={99}
@@ -804,16 +843,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                                    fontWeight:700,fontSize:14,color:G.text }} />
                       </td>
                       <td>
-                        <input type="number" min={0}
-                          value={item.price||""}
-                          onChange={e=>{
-                            const price = e.target.value===""?0:Number(e.target.value);
+                        <NumInput value={item.price||0}
+                          onChange={price=>{
                             const cost = Number(item.cost||0);
                             const gm = price>0?Math.round((1-cost/price)*100):0;
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
-                          }}
-                          style={{ padding:"4px 8px",width:"100%",
-                                   fontFamily:G.mono,textAlign:"right",letterSpacing:".02em" }} />
+                          }} />
                       </td>
                       <td>
                         <input type="number" min={0} max={100} value={item.discount||0}
