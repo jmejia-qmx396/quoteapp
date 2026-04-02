@@ -2,16 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase client ───────────────────────────────────────────────
-// ── Hook: detectar mobile ────────────────────────────────────────
-function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth <= 768);
-  useEffect(() => {
-    const fn = () => setMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", fn);
-    return () => window.removeEventListener("resize", fn);
-  }, []);
-  return mobile;
-}
+
 const SUPA_URL = "https://sivewzjtgyylnpsdpwwd.supabase.co";
 const SUPA_KEY = "sb_publishable__0KaY2d7V8AHFtaSy7JHAw_UGKb3Zsa";
 const sb = createClient(SUPA_URL, SUPA_KEY);
@@ -87,6 +78,7 @@ input,select,textarea{background:${G.surface};border:1px solid ${G.border};color
 input:focus,select:focus,textarea:focus{border-color:${G.accent}}
 button{font-family:${G.font};cursor:pointer;border:none;border-radius:6px;transition:.15s;font-size:13px}
 table{border-collapse:collapse;width:100%}
+.qa-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 th{background:${G.surface};color:${G.muted};font-weight:600;font-size:11px;letter-spacing:.08em;
    text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid ${G.border}}
 td{padding:10px 14px;border-bottom:1px solid ${G.border};vertical-align:middle}
@@ -174,79 +166,44 @@ const StatCard = ({ label, value, color = G.accent, icon }) => (
 
 // ── SIDEBAR ───────────────────────────────────────────────────────
 const NAV = [
-  { id:"dashboard", label:"Dashboard",    icon:"⬛" },
-  { id:"quotes",    label:"Cotizaciones", icon:"📋" },
-  { id:"clients",   label:"Clientes",     icon:"👥" },
-  { id:"products",  label:"Catálogo",     icon:"📦" },
-  { id:"config",    label:"Mi Empresa",   icon:"⚙️" },
+  { id:"dashboard",   label:"Dashboard",    icon:"⬛" },
+  { id:"quotes",      label:"Cotizaciones", icon:"📋" },
+  { id:"clients",     label:"Clientes",     icon:"👥" },
+  { id:"products",    label:"Catálogo",     icon:"📦" },
+  { id:"categories",  label:"Categorías",   icon:"🏷️" },
+  { id:"config",      label:"Mi Empresa",   icon:"⚙️" },
 ];
 
-const Sidebar = ({ view, setView, user, logout, isMobile }) => {
-  return (
-    <>
-      {/* Desktop sidebar */}
-      {!isMobile && (
-        <div style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
-                      display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
-          <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
-            <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
-              ◈ QuoteApp
-            </div>
-            <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
-          </div>
-          <nav style={{ flex:1,padding:"14px 10px" }}>
-            {NAV.map(n => (
-              <div key={n.id} onClick={() => setView(n.id)}
-                style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-                         borderRadius:7,marginBottom:2,cursor:"pointer",
-                         background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
-                         color: view === n.id ? G.accentH : G.muted,
-                         fontWeight: view === n.id ? 600 : 400,
-                         transition:".15s" }}>
-                <span>{n.icon}</span>{n.label}
-              </div>
-            ))}
-          </nav>
-          <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
-            <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
-            <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
-              Cerrar sesión
-            </button>
-          </div>
+const Sidebar = ({ view, setView, user, logout }) => (
+  <div style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
+                display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
+    <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
+      <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
+        ◈ QuoteApp
+      </div>
+      <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
+    </div>
+    <nav style={{ flex:1,padding:"14px 10px" }}>
+      {NAV.map(n => (
+        <div key={n.id} onClick={() => setView(n.id)}
+          style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
+                   borderRadius:7,marginBottom:2,cursor:"pointer",
+                   background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
+                   color: view === n.id ? G.accentH : G.muted,
+                   fontWeight: view === n.id ? 600 : 400,
+                   transition:".15s" }}>
+          <span>{n.icon}</span>{n.label}
         </div>
-      )}
-
-      {/* Mobile top header */}
-      {isMobile && (
-        <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:100,
-                      background:G.surface,borderBottom:`1px solid ${G.border}`,
-                      padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:16,color:G.accent }}>◈ QuoteApp</span>
-          <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer" }}>
-            Salir
-          </button>
-        </div>
-      )}
-
-      {/* Mobile bottom navigation */}
-      {isMobile && (
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:100,
-                      background:G.surface,borderTop:`1px solid ${G.border}`,
-                      display:"flex",justifyContent:"space-around",padding:"8px 0" }}>
-          {NAV.map(n => (
-            <div key={n.id} onClick={() => setView(n.id)}
-              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                       padding:"4px 8px",borderRadius:8,cursor:"pointer",minWidth:56,
-                       color: view === n.id ? G.accent : G.muted }}>
-              <span style={{ fontSize:20 }}>{n.icon}</span>
-              <span style={{ fontSize:9,fontWeight: view===n.id?700:400 }}>{n.label.split(" ")[0]}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-};
+      ))}
+    </nav>
+    <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
+      <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
+      <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+        Cerrar sesión
+      </button>
+    </div>
+  </div>
+);
 
 // ── STATUS BADGE ─────────────────────────────────────────────────
 const StatusBadge = ({ s }) => {
@@ -356,7 +313,6 @@ const recalc = (q) => {
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
 const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, products, config }) => {
-  const isMobile = useIsMobile();
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
   const [search, setSearch] = useState("");
@@ -423,75 +379,43 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, clients, produc
         </div>
       </Card>
 
-      {/* Desktop table */}
-      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
-        <table>
-          <thead><tr>
-            <th>#</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
-            <th>Total</th><th>Estado</th><th>Acciones</th>
-          </tr></thead>
-          <tbody>
-            {filtered.map(q => (
-              <tr key={q.id}>
-                <td><span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span></td>
-                <td>
-                  <div style={{ fontWeight:500 }}>{q.clientName||q.client_name}</div>
-                  <div style={{ color:G.muted,fontSize:12 }}>{q.clientEmail||q.client_email}</div>
-                </td>
-                <td style={{ color:G.muted }}>{q.date}</td>
-                <td style={{ color:G.muted }}>{q.validUntil||q.valid_until}</td>
-                <td style={{ fontWeight:700,fontFamily:G.mono }}>{fmt(q.total||0)}</td>
-                <td><StatusBadge s={q.status} /></td>
-                <td>
-                  <div style={{ display:"flex",gap:6 }}>
-                    <Btn size="sm" variant="ghost" onClick={()=>openView(q)}>Ver</Btn>
-                    <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}>Editar</Btn>
-                    <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!filtered.length && (
-              <tr><td colSpan={7} style={{ textAlign:"center",color:G.muted,padding:30 }}>
-                Sin cotizaciones. Crea la primera con "+ Nueva Cotización".
-              </td></tr>
-            )}
-          </tbody>
-        </table>
-      </Card>}
-
-      {/* Mobile cards */}
-      {isMobile && <div>
-        {filtered.map(q => (
-          <div key={q.id} className="mobile-card">
-            <div className="mobile-card-row">
-              <span style={{ fontFamily:G.mono,color:G.accent,fontWeight:700,fontSize:15 }}>#{q.number}</span>
-              <StatusBadge s={q.status} />
-            </div>
-            <div className="mobile-card-row">
-              <span style={{ fontWeight:600,fontSize:15 }}>{q.clientName||q.client_name}</span>
-            </div>
-            <div className="mobile-card-row">
-              <span className="mobile-label">Total</span>
-              <span style={{ fontFamily:G.mono,fontWeight:700,color:G.accent }}>{fmt(q.total||0)}</span>
-            </div>
-            <div className="mobile-card-row">
-              <span className="mobile-label">Fecha</span>
-              <span style={{ color:G.muted,fontSize:12 }}>{q.date}</span>
-            </div>
-            <div className="mobile-actions">
-              <Btn size="sm" variant="ghost" onClick={()=>openView(q)} style={{flex:1,textAlign:"center"}}>👁 Ver</Btn>
-              <Btn size="sm" variant="outline" onClick={()=>openEdit(q)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
-              <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
-            </div>
-          </div>
-        ))}
-        {!filtered.length && (
-          <div style={{ textAlign:"center",color:G.muted,padding:30 }}>
-            Sin cotizaciones. Toca "+ Nueva Cotización".
-          </div>
-        )}
-      </div>}
+      <div style={{ overflowX:"auto" }}>
+        <Card style={{ padding:0,overflow:"visible",minWidth:750 }}>
+          <table style={{ minWidth:750 }}>
+            <thead><tr>
+              <th>#</th><th>Cliente</th><th>Fecha</th><th>Válida hasta</th>
+              <th>Total</th><th>Estado</th><th>Acciones</th>
+            </tr></thead>
+            <tbody>
+              {filtered.map(q => (
+                <tr key={q.id}>
+                  <td><span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span></td>
+                  <td>
+                    <div style={{ fontWeight:500 }}>{q.clientName||q.client_name}</div>
+                    <div style={{ color:G.muted,fontSize:12 }}>{q.clientEmail||q.client_email}</div>
+                  </td>
+                  <td style={{ color:G.muted }}>{q.date}</td>
+                  <td style={{ color:G.muted }}>{q.validUntil||q.valid_until}</td>
+                  <td style={{ fontWeight:700,fontFamily:G.mono }}>{fmt(q.total||0)}</td>
+                  <td><StatusBadge s={q.status} /></td>
+                  <td>
+                    <div style={{ display:"flex",gap:6 }}>
+                      <Btn size="sm" variant="ghost" onClick={()=>openView(q)}>Ver</Btn>
+                      <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}>Editar</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length && (
+                <tr><td colSpan={7} style={{ textAlign:"center",color:G.muted,padding:30 }}>
+                  Sin cotizaciones. Crea la primera con "+ Nueva Cotización".
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      </div>
 
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
@@ -1120,7 +1044,6 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
 
 // ── CLIENTES ─────────────────────────────────────────────────────
 const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
-  const isMobile = useIsMobile();
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -1153,9 +1076,8 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
       <Card style={{ marginBottom:16 }}>
         <input placeholder="Buscar por nombre o email…" value={search} onChange={e=>setSearch(e.target.value)} />
       </Card>
-      {/* Desktop table */}
-      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
-        <table>
+      <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible" }}>
+        <table style={{ minWidth:700 }}>
           <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>RFC</th><th></th></tr></thead>
           <tbody>
             {filt.map(c=>(
@@ -1176,25 +1098,23 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
             {!filt.length && <tr><td colSpan={6} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin clientes registrados.</td></tr>}
           </tbody>
         </table>
-      </Card>}
-
-      {/* Mobile cards */}
-      {isMobile && <div>
+      </Card></div>
+      <div style={{display:"none"}}>
         {filt.map(c=>(
-          <div key={c.id} className="mobile-card">
+          <div key={c.id} className="qa-mobile-card">
             <div style={{ fontWeight:700,fontSize:16,marginBottom:4 }}>{c.name}</div>
             <div style={{ color:G.muted,fontSize:13,marginBottom:2 }}>{c.contact}</div>
             <div style={{ color:G.muted,fontSize:12,marginBottom:2 }}>{c.email}</div>
             <div style={{ fontFamily:G.mono,fontSize:12,marginBottom:2 }}>{c.phone}</div>
             {c.rfc && <div style={{ fontFamily:G.mono,fontSize:11,color:G.accent }}>{c.rfc}</div>}
-            <div className="mobile-actions">
+            <div className="qa-mobile-actions">
               <Btn size="sm" variant="outline" onClick={()=>openEdit(c)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
               <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>✕</Btn>
             </div>
           </div>
         ))}
         {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin clientes registrados.</div>}
-      </div>}
+      </div>
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Cliente":"Nuevo Cliente"} onClose={()=>setModal(false)}>
@@ -1216,15 +1136,14 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient }) => {
 };
 
 // ── CATÁLOGO ─────────────────────────────────────────────────────
-const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => {
-  const isMobile = useIsMobile();
+const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categories = [], saveCategory, deleteCategory }) => {
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("Todos");
   const [uploadingImg, setUploadingImg] = useState(false);
 
-  const cats = ["Todos", ...new Set(products.map(p=>p.category))];
+  const cats = ["Todos", ...categories.map(c=>c.name)];
   const blank = () => ({ id:Date.now(),sku:"",name:"",category:"Servicios",cost:0,margin:40,price:0,unit:"pza",imageUrl:"" });
 
   const uploadProductImage = async (file) => {
@@ -1283,9 +1202,8 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
           ))}
         </div>
       </Card>
-      {/* Desktop table */}
-      {!isMobile && <Card style={{ padding:0,overflow:"hidden" }}>
-        <table>
+      <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible" }}>
+        <table style={{ minWidth:900 }}>
           <thead><tr><th style={{width:50}}>Img</th><th>SKU</th><th>Producto / Servicio</th><th>Categoría</th><th>Moneda</th><th>Costo</th><th>Margen</th><th>P. Venta</th><th>Unidad</th><th></th></tr></thead>
           <tbody>
             {filt.map(p=>(
@@ -1321,12 +1239,10 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
             {!filt.length && <tr><td colSpan={10} style={{ textAlign:"center",color:G.muted,padding:24 }}>Sin productos.</td></tr>}
           </tbody>
         </table>
-      </Card>}
-
-      {/* Mobile cards */}
-      {isMobile && <div>
+      </Card></div>
+      <div style={{display:"none"}}>
         {filt.map(p=>(
-          <div key={p.id} className="mobile-card">
+          <div key={p.id} className="qa-mobile-card">
             <div style={{ display:"flex",gap:12,alignItems:"flex-start" }}>
               {/* Imagen */}
               <div style={{ flexShrink:0 }}>
@@ -1349,24 +1265,24 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
                 </div>
               </div>
             </div>
-            <div className="mobile-card-row" style={{ marginTop:10 }}>
-              <span className="mobile-label">Precio</span>
+            <div className="qa-mobile-card-row" style={{ marginTop:10 }}>
+              <span className="qa-mobile-label">Precio</span>
               <span style={{ fontFamily:G.mono,fontWeight:700,color:G.success,fontSize:15 }}>
                 {fmtCur(p.price,p.currency||"COP")}
               </span>
             </div>
-            <div className="mobile-card-row">
-              <span className="mobile-label">Margen</span>
+            <div className="qa-mobile-card-row">
+              <span className="qa-mobile-label">Margen</span>
               <span className="badge badge-warn">{p.margin||0}%</span>
             </div>
-            <div className="mobile-actions">
+            <div className="qa-mobile-actions">
               <Btn size="sm" variant="outline" onClick={()=>openEdit(p)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
               <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>✕</Btn>
             </div>
           </div>
         ))}
         {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin productos.</div>}
-      </div>}
+      </div>
 
       {modal && cur && (
         <Modal title={isExisting?"Editar Producto":"Nuevo Producto"} onClose={()=>setModal(false)}>
@@ -1374,7 +1290,8 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct }) => 
             <Field label="SKU"><input value={cur.sku} onChange={e=>setCur({...cur,sku:e.target.value})} placeholder="HW-001" /></Field>
             <Field label="Categoría">
               <select value={cur.category} onChange={e=>setCur({...cur,category:e.target.value})}>
-                {["Hardware","Software","Servicios","Consumibles","Otros"].map(c=><option key={c}>{c}</option>)}
+                {(categories.length ? categories : [{name:"Hardware"},{name:"Software"},{name:"Servicios"}])
+                  .map(c=><option key={c.name} value={c.name}>{c.name}</option>)}
               </select>
             </Field>
             <Field label="Nombre del Producto" style={{ gridColumn:"1/-1" }}>
@@ -1637,10 +1554,91 @@ const LoginView = ({ onLogin }) => {
   );
 };
 
+// ── CATEGORÍAS ───────────────────────────────────────────────────
+const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
+  const [newName, setNewName] = useState("");
+  const [editId, setEditId]   = useState(null);
+  const [editName, setEditName] = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    await saveCategory({ isNew: true, name: newName.trim() });
+    setNewName("");
+    setSaving(false);
+  };
+
+  const startEdit = (cat) => { setEditId(cat.id); setEditName(cat.name); };
+
+  const saveEdit = async () => {
+    if (!editName.trim()) return;
+    await saveCategory({ id: editId, name: editName.trim() });
+    setEditId(null);
+  };
+
+  const remove = async (id) => {
+    if (window.confirm("¿Eliminar categoría? Los productos con esta categoría no se verán afectados."))
+      await deleteCategory(id);
+  };
+
+  return (
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))",maxWidth:600 }}>
+      <div style={{ marginBottom:24 }}>
+        <h1 style={{ fontSize:22,fontWeight:700 }}>Categorías</h1>
+        <p style={{ color:G.muted }}>Administra las categorías de tus productos</p>
+      </div>
+
+      {/* Agregar nueva */}
+      <Card style={{ marginBottom:20 }}>
+        <p style={{ fontWeight:700,marginBottom:12,fontSize:13 }}>Nueva Categoría</p>
+        <div style={{ display:"flex",gap:10 }}>
+          <input value={newName} onChange={e=>setNewName(e.target.value)}
+            placeholder="Ej: Domótica, Redes, Cámaras…"
+            onKeyDown={e=>e.key==="Enter"&&add()}
+            style={{ flex:1 }} />
+          <Btn onClick={add} variant="primary" style={{ whiteSpace:"nowrap" }}>
+            {saving ? "..." : "+ Agregar"}
+          </Btn>
+        </div>
+      </Card>
+
+      {/* Lista de categorías */}
+      <Card style={{ padding:0,overflow:"hidden" }}>
+        {categories.map((cat,idx) => (
+          <div key={cat.id} style={{ display:"flex",alignItems:"center",gap:10,
+                                      padding:"12px 16px",borderBottom: idx<categories.length-1?`1px solid ${G.border}`:"none" }}>
+            {editId === cat.id ? (
+              <>
+                <input value={editName} onChange={e=>setEditName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&saveEdit()}
+                  style={{ flex:1,padding:"5px 10px" }} autoFocus />
+                <Btn size="sm" variant="success" onClick={saveEdit}>✓</Btn>
+                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>✕</Btn>
+              </>
+            ) : (
+              <>
+                <span style={{ flex:1,fontSize:14,fontWeight:500 }}>
+                  <span style={{ marginRight:8 }}>🏷️</span>{cat.name}
+                </span>
+                <Btn size="sm" variant="outline" onClick={()=>startEdit(cat)}>✏️</Btn>
+                <Btn size="sm" variant="danger" onClick={()=>remove(cat.id)}>✕</Btn>
+              </>
+            )}
+          </div>
+        ))}
+        {!categories.length && (
+          <div style={{ padding:24,textAlign:"center",color:G.muted }}>
+            Sin categorías. Agrega la primera arriba.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
 // ── APP ROOT ──────────────────────────────────────────────────────
 export default function App() {
-  // ⚠️ ALL hooks must be at the top — before any conditional returns
-  const isMobile = useIsMobile();
   const [view, setView]         = useState("dashboard");
   const [user, setUser]         = useState(null);
   const [profile, setProfile]   = useState(null);
@@ -1650,6 +1648,7 @@ export default function App() {
   const [clients, setClients]   = useState([]);
   const [products, setProducts] = useState([]);
   const [config, setConfig]     = useState(INIT_CONFIG);
+  const [categories, setCategories] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   useEffect(() => {
@@ -1706,6 +1705,11 @@ export default function App() {
       else { await sb.from("products").insert(INIT_PRODUCTS.map(({id,...p})=>p)); 
              const { data: p2 } = await sb.from("products").select("*").order("name");
              if (p2) setProducts(p2); }
+
+      // Categories
+      const { data: cats } = await sb.from("categories").select("*").order("name");
+      if (cats && cats.length) setCategories(cats);
+      else setCategories([{id:1,name:"Hardware"},{id:2,name:"Software"},{id:3,name:"Servicios"},{id:4,name:"Consumibles"},{id:5,name:"Otros"}]);
 
       // Config
       const { data: cfg } = await sb.from("config").select("*").limit(1).single();
@@ -1779,6 +1783,24 @@ export default function App() {
     setProducts(ps => ps.filter(p=>p.id!==id));
   };
 
+  // ── CRUD: Categories ────────────────────────────────────────
+  const saveCategory = async (cat) => {
+    // If isNew flag is set, insert; otherwise update
+    if (cat.isNew) {
+      const { data, error } = await sb.from("categories").insert({ name: cat.name }).select().single();
+      if (error) { alert("Error: " + error.message); return; }
+      if (data) setCategories(cs => [...cs, data].sort((a,b)=>a.name.localeCompare(b.name)));
+    } else {
+      const { error } = await sb.from("categories").update({ name: cat.name }).eq("id", cat.id);
+      if (error) { alert("Error: " + error.message); return; }
+      setCategories(cs => cs.map(c => c.id===cat.id ? {...c, name: cat.name} : c));
+    }
+  };
+  const deleteCategory = async (id) => {
+    await sb.from("categories").delete().eq("id", id);
+    setCategories(cs => cs.filter(c => c.id !== id));
+  };
+
   // ── Save Config ──────────────────────────────────────────────
   const saveConfigDB = async (cfg) => {
     const { data } = await sb.from("config").select("id").limit(1).single();
@@ -1805,11 +1827,10 @@ export default function App() {
     <>
       <style>{css}</style>
       <div style={{ display:"flex",minHeight:"100vh" }}>
-        <Sidebar view={view} setView={setView} user={user} logout={logout} isMobile={isMobile} />
-        <main style={{ flex:1,overflowY:"auto",overflowX:"auto",
+        <Sidebar view={view} setView={setView} user={user} logout={logout} />
+        <main style={{ flex:1,overflowY:"auto",
                        paddingTop:"env(safe-area-inset-top)" }}>
           {/* Mobile spacer for fixed top header */}
-          {isMobile && <div style={{ height:52 }} />}
           {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
@@ -1817,10 +1838,11 @@ export default function App() {
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient} />}
           {view==="products"  && <ProductsView products={products} setProducts={setProducts}
-                                   saveProduct={saveProduct} deleteProduct={deleteProduct} />}
+                                   saveProduct={saveProduct} deleteProduct={deleteProduct}
+                                   categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
+          {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {/* Mobile spacer for fixed bottom nav */}
-          {isMobile && <div style={{ height:70 }} />}
         </main>
       </div>
     </>
