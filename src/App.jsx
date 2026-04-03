@@ -2789,12 +2789,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         </table>
         <div style="margin-top:16px">
           <div class="bank-box" style="margin-bottom:8px">
-            <strong>Valor con IVA — Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
+            <strong>Cuenta Empresa — Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
             NIT: ${config.nit||""} &nbsp;|&nbsp; Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
           </div>
           ${config.personal?.accountHolder ? `
           <div class="bank-box">
-            <strong>Valor sin IVA — Consignar a nombre de:</strong> ${config.personal.accountHolder||""}<br>
+            <strong>Cuenta Personal — Consignar a nombre de:</strong> ${config.personal.accountHolder||""}<br>
             CC/NIT: ${config.personal.nit||""} &nbsp;|&nbsp; Cuenta ${config.personal.bankType||"Ahorros"} ${config.personal.bankName||""}: <strong>${config.personal.bankAccount||""}</strong>
           </div>` : ""}
         </div>
