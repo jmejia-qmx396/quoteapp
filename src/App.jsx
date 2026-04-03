@@ -3001,8 +3001,13 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             ${qs.map(q=>{
               const pq = projectQuotes.find(x=>x.project_id===proj.id&&x.quote_id===q.id);
               const det = pq?.detalle || "";
-              const conIva = (q.subtotalConIva||0) + (q.taxAmt||0);
+              // Robust calculation: recalc from items if needed
               const sinIva = q.subtotalSinIva||0;
+              const taxAmt = q.taxAmt||0;
+              const subtotal = q.subtotal||0;
+              const totalDisc = q.totalDisc||0;
+              // conIva = total - sinIva (works regardless of whether subtotalConIva is stored)
+              const conIva = (q.total||0) - sinIva;
               return `<tr>
                 <td><strong>#${q.number}${(q.version||1)>1?' v'+q.version:''}</strong></td>
                 <td>${det}</td>
@@ -3013,7 +3018,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             }).join("")}
             <tr class="total-row">
               <td colspan="2" style="text-align:right">Total Proyecto</td>
-              <td style="text-align:right">${fmtCOP(qs.reduce((s,q)=>s+((q.subtotalConIva||0)+(q.taxAmt||0)),0))}</td>
+              <td style="text-align:right">${fmtCOP(qs.reduce((s,q)=>s+((q.total||0)-(q.subtotalSinIva||0)),0))}</td>
               <td style="text-align:right">${fmtCOP(qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0))}</td>
               <td style="text-align:right">${fmtCOP(totalProject)}</td>
             </tr>
@@ -3043,8 +3048,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           </tbody>
         </table>
         ${(()=>{
-          const totalConIva = qs.reduce((s,q)=>s+((q.subtotalConIva||0)+(q.taxAmt||0)),0);
           const totalSinIva = qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
+          const totalConIva = qs.reduce((s,q)=>s+(q.total||0),0) - totalSinIva;
           const hasPersonal = config.personal?.accountHolder && totalSinIva > 0;
           return `
           <div style="margin-top:16px">
