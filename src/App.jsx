@@ -371,6 +371,11 @@ const Dashboard = ({ quotes, clients, products }) => {
   const pendingInRange   = inRange.filter(q => q.status === "Pendiente" || q.status === "Enviada");
   const pendingTotal     = pendingInRange.reduce((s,q) => s+(q.total||0), 0);
 
+  // Utilidad presupuestada: de cotizaciones aprobadas en el período
+  const utilidad     = approvedInRange.reduce((s,q) => s+(q.profit||0), 0);
+  const ventaNeta    = approvedInRange.reduce((s,q) => s+(q.ventaNeta||(q.total||0)-(q.taxAmt||0)), 0);
+  const gmPct        = ventaNeta > 0 ? Math.round(utilidad/ventaNeta*100) : 0;
+
   const monthName = now.toLocaleString("es-CO", { month:"long", year:"numeric" });
 
   return (
@@ -403,6 +408,16 @@ const Dashboard = ({ quotes, clients, products }) => {
         <StatCard label="Aprobadas — Cant." value={approvedInRange.length} icon="🏆" color={G.success} />
         <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)} icon="⏳" color={G.warn} />
         <StatCard label="Clientes Totales" value={clients.length} icon="👥" color={G.accent} />
+        <Card style={{ flex:1 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+            <div>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>📈 Utilidad Presupuestada</p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(utilidad)}</p>
+              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>GM {gmPct}% sobre aprobadas</p>
+            </div>
+            <span style={{ fontSize:22,opacity:.5 }}>💰</span>
+          </div>
+        </Card>
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20 }}>
