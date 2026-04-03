@@ -810,7 +810,9 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
 // ── QUOTE FORM ───────────────────────────────────────────────────
 const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct }) => {
   const [prodSearch, setProdSearch] = useState("");
-  const [uploading, setUploading]   = useState(null); // item id being uploaded
+  const [uploading, setUploading]   = useState(null);
+  const [dragOver, setDragOver]     = useState(null); // id of item being dragged over
+  const dragItem = useRef(null); // id of item being dragged
   const [newProdModal, setNewProdModal] = useState(false);
   const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
   const [savingProd, setSavingProd] = useState(false);
@@ -965,6 +967,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible",marginBottom:18 }}>
         <table style={{ minWidth:1300 }}>
           <thead><tr>
+            <th style={{width:24}}></th>
             <th style={{width:44}}>Img</th>
             <th style={{width:90}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
             <th style={{width:140}}>Costo</th>
@@ -985,9 +988,26 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                 const isLastInSection = !nextItem || nextItem.type === "header";
 
                 if (item.type === "header") {
-                  // ── Fila de ENCABEZADO ──
                   rows.push(
-                    <tr key={item.id}>
+                    <tr key={item.id}
+                      draggable
+                      onDragStart={()=>{ dragItem.current=item.id; }}
+                      onDragOver={e=>{ e.preventDefault(); setDragOver(item.id); }}
+                      onDragEnd={()=>{ dragItem.current=null; setDragOver(null); }}
+                      onDrop={()=>{
+                        if (!dragItem.current || dragItem.current===item.id) return;
+                        setQuote(q=>{
+                          const items=[...q.items];
+                          const from=items.findIndex(i=>i.id===dragItem.current);
+                          const to=items.findIndex(i=>i.id===item.id);
+                          const [moved]=items.splice(from,1);
+                          items.splice(to,0,moved);
+                          return recalc({...q,items});
+                        });
+                        setDragOver(null);
+                      }}
+                      style={{ opacity: dragOver===item.id?0.5:1, cursor:"grab" }}>
+                      <td style={{ padding:"4px 6px",color:G.muted,fontSize:16,cursor:"grab",userSelect:"none" }}>⠿</td>
                       <td colSpan={13} style={{ padding:"6px 8px",background:"rgba(59,130,246,.08)",
                                                 borderTop:`2px solid ${G.accent}` }}>
                         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -1009,7 +1029,27 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   const lineProfit  = lineNet - lineCostCOP;
                   const linePct     = lineNet > 0 ? Math.round((lineProfit/lineNet)*100) : 0;
                   rows.push(
-                    <tr key={item.id}>
+                    <tr key={item.id}
+                      draggable
+                      onDragStart={()=>{ dragItem.current=item.id; }}
+                      onDragOver={e=>{ e.preventDefault(); setDragOver(item.id); }}
+                      onDragEnd={()=>{ dragItem.current=null; setDragOver(null); }}
+                      onDrop={()=>{
+                        if (!dragItem.current || dragItem.current===item.id) return;
+                        setQuote(q=>{
+                          const items=[...q.items];
+                          const from=items.findIndex(i=>i.id===dragItem.current);
+                          const to=items.findIndex(i=>i.id===item.id);
+                          const [moved]=items.splice(from,1);
+                          items.splice(to,0,moved);
+                          return recalc({...q,items});
+                        });
+                        setDragOver(null);
+                      }}
+                      style={{ opacity:dragOver===item.id?0.4:1,
+                               borderTop:dragOver===item.id?`2px solid ${G.accent}`:"" }}>
+                      <td style={{ padding:"4px 6px",color:G.muted,fontSize:16,cursor:"grab",
+                                   userSelect:"none",textAlign:"center" }}>⠿</td>
                       <td style={{ padding:"4px",textAlign:"center",width:44 }}>
                         <label style={{ cursor:"pointer",display:"block" }}>
                           {item.imageUrl ? (
