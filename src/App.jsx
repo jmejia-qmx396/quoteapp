@@ -3037,17 +3037,37 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </tr>
           </tbody>
         </table>
-        <div style="margin-top:16px">
-          <div class="bank-box" style="margin-bottom:8px">
-            <strong>Cuenta Empresa — Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
-            NIT: ${config.nit||""} &nbsp;|&nbsp; Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
-          </div>
-          ${config.personal?.accountHolder ? `
-          <div class="bank-box">
-            <strong>Cuenta Personal — Consignar a nombre de:</strong> ${config.personal.accountHolder||""}<br>
-            CC/NIT: ${config.personal.nit||""} &nbsp;|&nbsp; Cuenta ${config.personal.bankType||"Ahorros"} ${config.personal.bankName||""}: <strong>${config.personal.bankAccount||""}</strong>
-          </div>` : ""}
-        </div>
+        ${(()=>{
+          const totalConIva = qs.reduce((s,q)=>s+((q.subtotalConIva||0)+(q.taxAmt||0)),0);
+          const totalSinIva = qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
+          const hasPersonal = config.personal?.accountHolder && totalSinIva > 0;
+          return `
+          <div style="margin-top:16px">
+            <div class="bank-box" style="margin-bottom:8px;background:#f0fdf4;border:1px solid #bbf7d0">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <strong>Cuenta Empresa</strong> — Consignar a nombre de: ${config.accountHolder||config.companyName||""}<br>
+                  NIT: ${config.nit||""} &nbsp;|&nbsp; Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
+                </div>
+                ${totalConIva>0 ? `<div style="text-align:right;margin-left:20px;font-size:14px;font-weight:700;color:#0d6e6e;white-space:nowrap">
+                  ${fmtCOP(totalConIva)}
+                </div>` : ""}
+              </div>
+            </div>
+            ${hasPersonal ? `
+            <div class="bank-box" style="background:#eff6ff;border:1px solid #bfdbfe">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <strong>Cuenta Personal</strong> — Consignar a nombre de: ${config.personal.accountHolder||""}<br>
+                  CC/NIT: ${config.personal.nit||""} &nbsp;|&nbsp; Cuenta ${config.personal.bankType||"Ahorros"} ${config.personal.bankName||""}: <strong>${config.personal.bankAccount||""}</strong>
+                </div>
+                <div style="text-align:right;margin-left:20px;font-size:14px;font-weight:700;color:#1d4ed8;white-space:nowrap">
+                  ${fmtCOP(totalSinIva)}
+                </div>
+              </div>
+            </div>` : ""}
+          </div>`;
+        })()}
       </body></html>
     `);
     w.document.close();
