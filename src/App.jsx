@@ -463,15 +463,20 @@ const recalc = (q) => {
   const trm = Number(q.trm) || 1;
   const items = q.items.map(i => {
     if (i.type === "header") return i;
-    const priceCOP = i.currency === "USD" ? Number(i.price) * trm : Number(i.price);
     const costCOP  = i.currency === "USD" ? Number(i.cost||0) * trm : Number(i.cost||0);
+    // If manualPrice is set, use it directly as COP price; otherwise calculate from price field
+    const priceCOP = i.manualPrice
+      ? Number(i.manualPrice)
+      : (i.currency === "USD" ? Number(i.price) * trm : Number(i.price));
     const discAmt  = priceCOP * ((Number(i.discount)||0) / 100);
     const netCOP   = priceCOP - discAmt;
     const itemTax  = i.tax !== undefined ? Number(i.tax) : 19;
     const taxAmt   = netCOP * (itemTax / 100);
     const lineNet  = Number(i.qty) * netCOP;
     const lineTax  = Number(i.qty) * taxAmt;
-    return { ...i, priceCOP, costCOP, discAmt, netCOP, itemTax, taxAmt, lineNet, lineTax };
+    // Recalculate GM% based on actual COP prices
+    const gmPct = priceCOP > 0 ? Math.round((1 - costCOP/priceCOP)*100) : (i.gmPct||0);
+    return { ...i, priceCOP, costCOP, discAmt, netCOP, itemTax, taxAmt, lineNet, lineTax, gmPct };
   });
   const prods     = items.filter(i=>i.type!=="header");
   const subtotal  = prods.reduce((s,i) => s + Number(i.qty)*i.priceCOP, 0);
@@ -1117,16 +1122,51 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                                    fontWeight:700,fontSize:14,color:G.text }} />
                       </td>
                       <td>
-                        <NumInput value={item.price||0}
-                          onChange={price=>{
-                            const cost = Number(item.cost||0);
-                            const gm = price>0?Math.round((1-cost/price)*100):0;
-                            setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
-                          }} />
-                        {item.currency==="USD" && item.priceCOP>0 && (
+                        <div style={{ display:"flex",gap:4,alignItems:"center" }}>
+                          {item.currency==="USD" && (
+                            <button
+                              title={item.manualPrice ? "Precio manual (clic para volver a automático)" : "Precio automático (clic para fijar manualmente)"}
+                              onClick={()=>{
+                                if (item.manualPrice) {
+                                  // Remove manual price — back to auto
+                                  setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,manualPrice:null}:i)}));
+                                } else {
+                                  // Lock current priceCOP as manual
+                                  setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,manualPrice:i.priceCOP||Math.round(Number(i.price)*(q.trm||4200))}:i)}));
+                                }
+                              }}
+                              style={{ background:"none",border:"none",cursor:"pointer",
+                                       fontSize:14,padding:"2px 4px",flexShrink:0,
+                                       color: item.manualPrice ? G.warn : G.muted,
+                                       title:"test" }}>
+                              {item.manualPrice ? "🔓" : "🔒"}
+                            </button>
+                          )}
+                          {item.manualPrice ? (
+                            <NumInput value={item.manualPrice}
+                              onChange={v=>{
+                                setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,manualPrice:v}:i)}));
+                              }}
+                              style={{ background:"rgba(245,158,11,.08)",borderColor:G.warn }} />
+                          ) : (
+                            <NumInput value={item.price||0}
+                              onChange={price=>{
+                                const cost = Number(item.cost||0);
+                                const gm = price>0?Math.round((1-cost/price)*100):0;
+                                setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,price,gmPct:gm}:i)}));
+                              }} />
+                          )}
+                        </div>
+                        {item.currency==="USD" && !item.manualPrice && item.priceCOP>0 && (
                           <div style={{ fontSize:9,color:G.muted,textAlign:"right",
                                         fontFamily:G.mono,paddingRight:4,marginTop:2 }}>
                             ={fmt(item.priceCOP)} COP
+                          </div>
+                        )}
+                        {item.manualPrice && (
+                          <div style={{ fontSize:9,color:G.warn,textAlign:"right",
+                                        fontFamily:G.mono,paddingRight:4,marginTop:2 }}>
+                            Precio manual COP
                           </div>
                         )}
                       </td>
