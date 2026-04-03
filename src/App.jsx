@@ -495,7 +495,7 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject, createProject }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [addToProjectQuote, setAddToProjectQuote] = useState(null);
@@ -3690,6 +3690,7 @@ export default function App() {
                                    paymentRequests={paymentRequests} savePaymentRequest={savePaymentRequest}
                                    projectQuotes={projectQuotes} projects={projects}
                                    addQuoteToProject={addQuoteToProject}
+                                   createProject={createProject}
                                    clients={clients} products={products} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient}
