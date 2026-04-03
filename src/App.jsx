@@ -2974,6 +2974,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
   const printStatement = () => {
     if (!proj) return;
+    console.log("config.personal:", config.personal);
     const qs = getProjQuotes(proj.id);
     const pps = getProjPayments(proj.id);
     const { totalProject, totalPaid, balance } = calcTotals(proj.id);
