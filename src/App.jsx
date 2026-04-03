@@ -3111,7 +3111,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
       {(() => {
         const activos = projects.filter(p=>p.status==="Activo");
         let totalProyecto=0, totalPagadoEmpresa=0, totalPagadoPersonal=0,
-            totalConIvaTotal=0, totalSinIvaTotal=0;
+            totalConIvaTotal=0, totalSinIvaTotal=0,
+            totalUtilidad=0, totalVentaNeta=0;
         activos.forEach(p => {
           const qs = getProjQuotes(p.id);
           const pps = getProjPayments(p.id);
@@ -3134,6 +3135,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             totalConIvaTotal  += conIva;
             totalSinIvaTotal  += sinIva;
             totalProyecto     += total;
+            // Utilidad from quote
+            totalUtilidad  += q.profit || 0;
+            totalVentaNeta += q.ventaNeta || ((q.subtotalConIva||0)+(q.subtotalSinIva||0)) || (total - (q.taxAmt||0));
           });
           totalPagadoEmpresa  += pps.filter(pp=>(pp.payment_type||"empresa")==="empresa").reduce((s,pp)=>s+(pp.amount||0),0);
           totalPagadoPersonal += pps.filter(pp=>pp.payment_type==="personal").reduce((s,pp)=>s+(pp.amount||0),0);
@@ -3175,6 +3179,15 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               <p style={{ fontSize:22,fontWeight:700,color:G.accentH }}>{fmt(saldoPersonal)}</p>
               <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
                 Total s/IVA: {fmt(totalSinIvaTotal)}
+              </p>
+            </Card>
+            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.success}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
+                📈 Utilidad Presupuestada
+              </p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(totalUtilidad)}</p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
+                GM: {totalVentaNeta>0?Math.round(totalUtilidad/totalVentaNeta*100):0}%
               </p>
             </Card>
           </div>
