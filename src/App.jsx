@@ -112,6 +112,8 @@ body{background:${G.bg};color:${G.text};font-family:${G.font};font-size:14px}
 input,select,textarea{background:${G.surface};border:1px solid ${G.border};color:${G.text};
   font-family:${G.font};font-size:13px;border-radius:6px;padding:7px 10px;outline:none;width:100%;transition:.15s}
 input:focus,select:focus,textarea:focus{border-color:${G.accent}}
+input[type=date]{color-scheme:dark}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);cursor:pointer}
 button{font-family:${G.font};cursor:pointer;border:none;border-radius:6px;transition:.15s;font-size:13px}
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -911,15 +913,19 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
           {filtProd.map(p=>(
             <button key={p.id} onClick={()=>addItem(p)}
               style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:6,
-                       padding:"6px 12px",color:G.text,cursor:"pointer",fontSize:12,fontFamily:G.font }}>
-              <span style={{ color:G.accent,fontFamily:G.mono,marginRight:6 }}>{p.sku}</span>
-              {p.name}
-              <span style={{ marginLeft:6,fontSize:10,padding:"1px 6px",borderRadius:10,
+                       padding:"6px 12px",color:G.text,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                       textAlign:"left",display:"flex",alignItems:"center",gap:8 }}>
+              <span style={{ color:G.accent,fontFamily:G.mono,fontSize:11,
+                             background:"rgba(59,130,246,.1)",padding:"1px 6px",borderRadius:4,flexShrink:0 }}>
+                {p.sku||"—"}
+              </span>
+              <span style={{ flex:1 }}>{p.name}</span>
+              <span style={{ fontSize:10,padding:"1px 6px",borderRadius:10,flexShrink:0,
                              background: p.currency==="USD"?"rgba(245,158,11,.15)":"rgba(16,185,129,.15)",
                              color: p.currency==="USD"?G.warn:G.success,fontWeight:700 }}>
                 {p.currency||"COP"}
               </span>
-              <span style={{ marginLeft:6,color:G.muted }}>{fmtCur(p.price, p.currency||"COP")}/{p.unit}</span>
+              <span style={{ color:G.muted,flexShrink:0 }}>{fmtCur(p.price, p.currency||"COP")}</span>
             </button>
           ))}
           {!filtProd.length && (
@@ -1237,11 +1243,11 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                 <input value={newProd.unit} onChange={e=>setNewProd({...newProd,unit:e.target.value})} placeholder="pza, m, hr…" />
               </Field>
               <Field label="Costo">
-                <NumInput value={newProd.cost||0} onChange={v=>{
+                <NumInput value={newProd.cost||""} onChange={v=>{
                   const gm = newProd.margin||30;
                   const price = gm<100 ? calcPrice(v,gm) : 0;
                   setNewProd({...newProd,cost:v,price});
-                }} />
+                }} placeholder="0" />
               </Field>
               <Field label="GM%">
                 <input type="number" value={newProd.margin||30}
