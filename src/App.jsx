@@ -59,7 +59,8 @@ const INIT_CONFIG = {
 let quoteCounter = 1001;
 
 // Normalize quote fields from Supabase snake_case to camelCase
-const normalizeQuote = (q) => ({
+const normalizeQuote = (q) => {
+  const base = {
   ...q,
   items:         q.items||[],
   clientName:    q.client_name    || q.clientName    || "",
@@ -75,7 +76,11 @@ const normalizeQuote = (q) => ({
   parentId:      q.parent_id      || null,
   isLatest:      q.is_latest      !== false,
   profile:       q.profile        || 'empresa',
-});
+  };
+  // If taxAmt or subtotalConIva missing, recalculate
+  if (!base.taxAmt && base.items.length) return recalc(base);
+  return base;
+};
 
 // ── Helpers ──────────────────────────────────────────────────────
 const fmtInput = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:0}).format(n) : "";
