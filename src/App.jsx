@@ -1269,14 +1269,17 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
             <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
               <Btn variant="ghost" onClick={()=>setNewProdModal(false)}>Cancelar</Btn>
               <Btn variant="success" onClick={async()=>{
+                if (savingProd) return; // prevent double click
                 if (!newProd.name) { alert("Ingresa el nombre del producto"); return; }
                 setSavingProd(true);
-                const saved = await onSaveProduct(newProd);
-                setSavingProd(false);
-                setNewProdModal(false);
-                setProdSearch("");
-                // Auto-add the new product to the quote
-                if (saved) addItem(saved);
+                try {
+                  const saved = await onSaveProduct(newProd);
+                  setNewProdModal(false);
+                  setProdSearch("");
+                  if (saved) addItem(saved);
+                } finally {
+                  setSavingProd(false);
+                }
               }}>
                 {savingProd ? "Guardando…" : "💾 Guardar y Agregar"}
               </Btn>
