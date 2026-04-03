@@ -2943,7 +2943,7 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
-                        updateProjectStatus, config }) => {
+                        updateProjectStatus, projectPurchases=[], togglePurchase, config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [selected, setSelected] = useState(null);
   const [payModal, setPayModal] = useState(false);
@@ -2952,7 +2952,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [newPay, setNewPay] = useState(null);
   const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"" });
   const [search, setSearch] = useState("");
-  // detalle comes from projectQuotes DB records
+  const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
+  const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
 
   const filt = projects.filter(p =>
     (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
@@ -3275,6 +3276,130 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               </div>
             </Card>
 
+            {/* Tabs */}
+            <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}` }}>
+              {[["resumen","📋 Resumen"],["compras","🛒 Compras"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setActiveTab(id)}
+                  style={{ padding:"8px 20px",background:"none",border:"none",cursor:"pointer",
+                           fontFamily:G.font,fontSize:13,fontWeight:activeTab===id?700:400,
+                           color:activeTab===id?G.accent:G.muted,
+                           borderBottom:activeTab===id?`2px solid ${G.accent}`:"2px solid transparent" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab==="compras" && (() => {
+              // Get all product items from all quotes in project
+              const allItems = [];
+              getProjQuotes(proj.id).forEach(q => {
+                (q.items||[]).filter(i=>i.type!=="header"&&i.name).forEach(item => {
+                  const purch = projectPurchases.find(p=>p.project_id===proj.id&&p.quote_id===q.id&&p.item_id===String(item.id));
+                  allItems.push({ ...item, quoteId:q.id, quoteNum:q.number, purchased:purch?.purchased||false,
+                                  purchaseDate:purch?.purchase_date||"", purchaseSupplier:purch?.supplier||"", purchaseDbId:purch?.id });
+                });
+              });
+              const totalCosto = allItems.reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.qty||1)),0);
+              const comprado   = allItems.filter(i=>i.purchased).reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.qty||1)),0);
+              const pendiente  = totalCosto - comprado;
+              const anticipos  = getProjPayments(proj.id).reduce((s,p)=>s+(p.amount||0),0);
+              const disponible = anticipos - comprado;
+
+              return (
+                <div>
+                  {/* Resumen financiero compras */}
+                  <div style={{ display:"flex",gap:12,marginBottom:16,flexWrap:"wrap" }}>
+                    {[
+                      ["Total a Comprar", totalCosto, G.muted],
+                      ["Ya Comprado", comprado, G.success],
+                      ["Por Comprar", pendiente, G.warn],
+                      ["Anticipos Recibidos", anticipos, G.accent],
+                      ["Disponible para Compras", disponible, disponible>=0?G.success:G.danger],
+                    ].map(([label,val,color])=>(
+                      <div key={label} style={{ flex:1,minWidth:140,background:G.card,border:`1px solid ${G.border}`,
+                                                borderRadius:8,padding:"10px 14px" }}>
+                        <p style={{ color:G.muted,fontSize:10,fontWeight:600,textTransform:"uppercase",marginBottom:4 }}>{label}</p>
+                        <p style={{ fontFamily:G.mono,fontWeight:700,fontSize:14,color }}>{fmt(val)}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Lista de ítems */}
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
+                      <thead>
+                        <tr style={{ background:G.surface }}>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>✓</th>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Ref.</th>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Producto</th>
+                          <th style={{ padding:"8px 12px",textAlign:"center",color:G.muted,fontWeight:600,fontSize:11 }}>Qty</th>
+                          <th style={{ padding:"8px 12px",textAlign:"right",color:G.muted,fontWeight:600,fontSize:11 }}>Costo Unit.</th>
+                          <th style={{ padding:"8px 12px",textAlign:"right",color:G.muted,fontWeight:600,fontSize:11 }}>Total Costo</th>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Proveedor</th>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Fecha Compra</th>
+                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Cotiz.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allItems.map((item,idx)=>{
+                          const costUnit = Number(item.costCOP||item.cost||0);
+                          const costTotal = costUnit * Number(item.qty||1);
+                          const editKey = `${item.quoteId}-${item.id}`;
+                          const edit = purchaseEdit[editKey] || {};
+                          return (
+                            <tr key={editKey} style={{
+                              background: item.purchased?"rgba(16,185,129,.05)":"transparent",
+                              borderBottom:`1px solid ${G.border}`,
+                              opacity: item.purchased ? 0.75 : 1
+                            }}>
+                              <td style={{ padding:"8px 12px" }}>
+                                <input type="checkbox" checked={item.purchased}
+                                  onChange={async()=>{
+                                    const d = edit.date || item.purchaseDate || new Date().toISOString().split("T")[0];
+                                    const s = edit.supplier || item.purchaseSupplier || "";
+                                    await togglePurchase(proj.id, item.quoteId, item.id, item.purchased, d, s);
+                                  }}
+                                  style={{ width:16,height:16,cursor:"pointer",accentColor:G.success }} />
+                              </td>
+                              <td style={{ padding:"8px 12px",fontFamily:G.mono,color:G.accent,fontSize:11 }}>{item.sku||"—"}</td>
+                              <td style={{ padding:"8px 12px",fontWeight:item.purchased?400:500,
+                                           textDecoration:item.purchased?"line-through":"none",
+                                           color:item.purchased?G.muted:G.text }}>
+                                {item.name}
+                              </td>
+                              <td style={{ padding:"8px 12px",textAlign:"center",fontFamily:G.mono }}>{item.qty} {item.unit}</td>
+                              <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,color:G.muted }}>{fmt(costUnit)}</td>
+                              <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,fontWeight:600 }}>{fmt(costTotal)}</td>
+                              <td style={{ padding:"6px 8px" }}>
+                                <input value={edit.supplier!==undefined?edit.supplier:(item.purchaseSupplier||"")}
+                                  onChange={e=>setPurchaseEdit(pe=>({...pe,[editKey]:{...pe[editKey],supplier:e.target.value}}))}
+                                  onBlur={async e=>{ if(item.purchased) await togglePurchase(proj.id,item.quoteId,item.id,item.purchased,edit.date||item.purchaseDate,e.target.value); }}
+                                  placeholder="Proveedor…"
+                                  style={{ fontSize:11,padding:"3px 6px",width:"100%",minWidth:100 }} />
+                              </td>
+                              <td style={{ padding:"6px 8px" }}>
+                                <input type="date" value={edit.date!==undefined?edit.date:(item.purchaseDate||"")}
+                                  onChange={e=>setPurchaseEdit(pe=>({...pe,[editKey]:{...pe[editKey],date:e.target.value}}))}
+                                  onBlur={async e=>{ if(item.purchased) await togglePurchase(proj.id,item.quoteId,item.id,item.purchased,e.target.value,edit.supplier||item.purchaseSupplier); }}
+                                  style={{ fontSize:11,padding:"3px 6px" }} />
+                              </td>
+                              <td style={{ padding:"8px 12px",color:G.muted,fontSize:11 }}>#{item.quoteNum}</td>
+                            </tr>
+                          );
+                        })}
+                        {!allItems.length && (
+                          <tr><td colSpan={9} style={{ textAlign:"center",color:G.muted,padding:24 }}>
+                            Sin productos en las cotizaciones de este proyecto.
+                          </td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {activeTab==="resumen" && <>
             {/* Cotizaciones del proyecto */}
             <Card style={{ marginBottom:16,padding:0,overflow:"hidden" }}>
               <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
@@ -3369,6 +3494,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </Card>
               );
             })()}
+            </>}
           </div>
         ) : (
           <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted }}>
@@ -3540,6 +3666,7 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [projectQuotes, setProjectQuotes] = useState([]);
   const [projectPayments, setProjectPayments] = useState([]);
+  const [projectPurchases, setProjectPurchases] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -3602,6 +3729,8 @@ export default function App() {
       }
       const { data: pps } = await sb.from("project_payments").select("*").order("date", { ascending: false });
       if (pps) setProjectPayments(pps);
+      const { data: ppurch } = await sb.from("project_purchases").select("*");
+      if (ppurch) setProjectPurchases(ppurch);
 
       // Payment requests
       const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
@@ -3786,6 +3915,21 @@ export default function App() {
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
   };
 
+  const togglePurchase = async (projectId, quoteId, itemId, current, date, supplier) => {
+    const existing = projectPurchases.find(p=>p.project_id===projectId&&p.quote_id===quoteId&&p.item_id===String(itemId));
+    if (existing) {
+      await sb.from("project_purchases").update({
+        purchased:!current, purchase_date:date||null, supplier:supplier||null
+      }).eq("id", existing.id);
+      setProjectPurchases(ps=>ps.map(p=>p.id===existing.id?{...p,purchased:!current,purchase_date:date,supplier}:p));
+    } else {
+      const row = { project_id:projectId, quote_id:quoteId, item_id:String(itemId),
+                    purchased:true, purchase_date:date||null, supplier:supplier||null, created_by:user.id };
+      const { data } = await sb.from("project_purchases").insert(row).select().single();
+      if (data) setProjectPurchases(ps=>[...ps,data]);
+    }
+  };
+
   const deleteProject = async (id) => {
     await sb.from("project_payments").delete().eq("project_id", id);
     await sb.from("project_quotes").delete().eq("project_id", id);
@@ -3897,6 +4041,8 @@ export default function App() {
                                    deleteProjectPayment={deleteProjectPayment}
                                    deleteProject={deleteProject}
                                    updateProjectStatus={updateProjectStatus}
+                                   projectPurchases={projectPurchases}
+                                   togglePurchase={togglePurchase}
                                    config={config} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
