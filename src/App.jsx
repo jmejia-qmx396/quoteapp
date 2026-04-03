@@ -693,7 +693,20 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
       )}
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
-          onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config} />
+          onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config}
+          onSaveProduct={async (p) => {
+            const tempId = Date.now();
+            const row = { sku:p.sku, name:p.name, category:p.category, currency:p.currency||"COP",
+                          cost:p.cost||0, margin:p.margin||30, price:p.price||0, unit:p.unit||"pza",
+                          tax:p.tax||19, image_url:"" };
+            const { data } = await sb.from("products").insert(row).select().single();
+            if (data) {
+              const prod = {...data, imageUrl:""};
+              setProducts(ps => [...ps, prod].sort((a,b)=>a.name.localeCompare(b.name)));
+              return prod;
+            }
+            return null;
+          }} />
       )}
       {modal === "view" && current && (
         <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config}
@@ -793,9 +806,13 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
 };
 
 // ── QUOTE FORM ───────────────────────────────────────────────────
-const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config }) => {
+const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct }) => {
   const [prodSearch, setProdSearch] = useState("");
   const [uploading, setUploading]   = useState(null); // item id being uploaded
+  const [newProdModal, setNewProdModal] = useState(false);
+  const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
+  const [savingProd, setSavingProd] = useState(false);
+  const calcPrice = (cost, margin) => margin >= 100 ? 0 : Math.round(cost / (1 - margin/100));
 
   const set = (k, v) => setQuote(q => recalc({ ...q, [k]: v }));
 
@@ -905,7 +922,23 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               <span style={{ marginLeft:6,color:G.muted }}>{fmtCur(p.price, p.currency||"COP")}/{p.unit}</span>
             </button>
           ))}
-          {!filtProd.length && <span style={{ color:G.muted,fontSize:12 }}>Sin coincidencias.</span>}
+          {!filtProd.length && (
+            <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+              <span style={{ color:G.muted,fontSize:12 }}>Sin coincidencias.</span>
+              {onSaveProduct && (
+                <button onClick={()=>{
+                  setNewProd({ sku:"",name:prodSearch,category:"Servicios",currency:"COP",
+                               cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
+                  setNewProdModal(true);
+                }}
+                  style={{ background:"rgba(59,130,246,.1)",border:`1px solid ${G.accent}`,
+                           color:G.accent,borderRadius:6,padding:"4px 12px",cursor:"pointer",
+                           fontSize:12,fontFamily:G.font,fontWeight:600 }}>
+                  + Crear "{prodSearch}"
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1171,6 +1204,80 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
         <Btn variant="success" onClick={onSave}>💾 {isNew?"Crear Cotización":"Guardar Cambios"}</Btn>
       </div>
+
+      {/* Mini modal: crear producto desde cotización */}
+      {newProdModal && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.8)",
+                      display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20 }}>
+          <div style={{ background:G.card,border:`1px solid ${G.accent}`,borderRadius:12,
+                        width:"100%",maxWidth:560,padding:24 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18 }}>
+              <span style={{ fontWeight:700,fontSize:15 }}>➕ Nuevo Producto</span>
+              <button onClick={()=>setNewProdModal(false)}
+                style={{ background:"none",border:"none",color:G.muted,fontSize:20,cursor:"pointer" }}>✕</button>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <Field label="SKU">
+                <input value={newProd.sku} onChange={e=>setNewProd({...newProd,sku:e.target.value})} placeholder="HW-001" />
+              </Field>
+              <Field label="Categoría">
+                <select value={newProd.category} onChange={e=>setNewProd({...newProd,category:e.target.value})}>
+                  {["Hardware","Software","Servicios","Consumibles","Otros"].map(c=><option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Nombre" style={{ gridColumn:"1/-1" }}>
+                <input value={newProd.name} onChange={e=>setNewProd({...newProd,name:e.target.value})} />
+              </Field>
+              <Field label="Moneda">
+                <select value={newProd.currency} onChange={e=>setNewProd({...newProd,currency:e.target.value})}>
+                  <option>COP</option><option>USD</option>
+                </select>
+              </Field>
+              <Field label="Unidad">
+                <input value={newProd.unit} onChange={e=>setNewProd({...newProd,unit:e.target.value})} placeholder="pza, m, hr…" />
+              </Field>
+              <Field label="Costo">
+                <NumInput value={newProd.cost||0} onChange={v=>{
+                  const gm = newProd.margin||30;
+                  const price = gm<100 ? calcPrice(v,gm) : 0;
+                  setNewProd({...newProd,cost:v,price});
+                }} />
+              </Field>
+              <Field label="GM%">
+                <input type="number" value={newProd.margin||30}
+                  onChange={e=>{
+                    const gm = Number(e.target.value);
+                    const price = gm<100 ? calcPrice(newProd.cost||0,gm) : 0;
+                    setNewProd({...newProd,margin:gm,price});
+                  }} />
+              </Field>
+              <Field label="Precio">
+                <NumInput value={newProd.price||0} onChange={v=>setNewProd({...newProd,price:v})} />
+              </Field>
+              <Field label="IVA%">
+                <select value={newProd.tax} onChange={e=>setNewProd({...newProd,tax:Number(e.target.value)})}>
+                  {[0,5,8,19].map(t=><option key={t} value={t}>{t}%</option>)}
+                </select>
+              </Field>
+            </div>
+            <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
+              <Btn variant="ghost" onClick={()=>setNewProdModal(false)}>Cancelar</Btn>
+              <Btn variant="success" onClick={async()=>{
+                if (!newProd.name) { alert("Ingresa el nombre del producto"); return; }
+                setSavingProd(true);
+                const saved = await onSaveProduct(newProd);
+                setSavingProd(false);
+                setNewProdModal(false);
+                setProdSearch("");
+                // Auto-add the new product to the quote
+                if (saved) addItem(saved);
+              }}>
+                {savingProd ? "Guardando…" : "💾 Guardar y Agregar"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 };
