@@ -1580,6 +1580,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
 
 // ── CATÁLOGO ─────────────────────────────────────────────────────
 const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categories = [], saveCategory, deleteCategory, suppliers = [] }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -2727,6 +2728,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, updateProjectStatus,
                         config }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [selected, setSelected] = useState(null);
   const [payModal, setPayModal] = useState(false);
   const [addQuoteModal, setAddQuoteModal] = useState(false);
