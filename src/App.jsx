@@ -2726,8 +2726,8 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 // ── PROYECTOS ────────────────────────────────────────────────────
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
-                        saveProjectPayment, deleteProjectPayment, updateProjectStatus,
-                        config }) => {
+                        saveProjectPayment, deleteProjectPayment, deleteProject,
+                        updateProjectStatus, config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [selected, setSelected] = useState(null);
   const [payModal, setPayModal] = useState(false);
@@ -2931,12 +2931,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   }
                   <Btn size="sm" variant="danger" onClick={async()=>{
                     const ok = await confirm("¿Eliminar proyecto?", "Se eliminarán también todas las asociaciones de cotizaciones y pagos.");
-                    if (ok) {
-                      await sb.from("project_payments").delete().eq("project_id", proj.id);
-                      await sb.from("project_quotes").delete().eq("project_id", proj.id);
-                      await sb.from("projects").delete().eq("id", proj.id);
-                      setSelected(null);
-                    }
+                    if (ok) { await deleteProject(proj.id); setSelected(null); }
                   }}>🗑️</Btn>
                 </div>
               </div>
@@ -3412,6 +3407,15 @@ export default function App() {
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
   };
 
+  const deleteProject = async (id) => {
+    await sb.from("project_payments").delete().eq("project_id", id);
+    await sb.from("project_quotes").delete().eq("project_id", id);
+    await sb.from("projects").delete().eq("id", id);
+    setProjectPayments(pps => pps.filter(p => p.project_id !== id));
+    setProjectQuotes(pqs => pqs.filter(pq => pq.project_id !== id));
+    setProjects(ps => ps.filter(p => p.id !== id));
+  };
+
   // ── CRUD: Categories ────────────────────────────────────────
   const saveCategory = async (cat) => {
     // If isNew flag is set, insert; otherwise update
@@ -3511,6 +3515,7 @@ export default function App() {
                                    saveQuoteDetalle={saveQuoteDetalle}
                                    saveProjectPayment={saveProjectPayment}
                                    deleteProjectPayment={deleteProjectPayment}
+                                   deleteProject={deleteProject}
                                    updateProjectStatus={updateProjectStatus}
                                    config={config} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
