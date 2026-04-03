@@ -2330,7 +2330,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
 // ── PRINT EXISTING PAYMENT REQUEST ───────────────────────────────
 const PrintPaymentRequest = ({ pr, config, onClose }) => {
   useEffect(() => {
-    const pc = local.primaryColor||"#0d6e6e" || "#0d6e6e";
+    const pc = config.primaryColor || "#0d6e6e";
     const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
