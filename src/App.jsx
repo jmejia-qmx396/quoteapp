@@ -3115,12 +3115,26 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         activos.forEach(p => {
           const qs = getProjQuotes(p.id);
           const pps = getProjPayments(p.id);
-          const sinIva = qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
-          const total  = qs.reduce((s,q)=>s+(q.total||0),0);
-          const conIva = total - sinIva;
-          totalConIvaTotal  += conIva;
-          totalSinIvaTotal  += sinIva;
-          totalProyecto     += total;
+          qs.forEach(q => {
+            const total = q.total || 0;
+            // Calculate sinIva from items directly (most reliable)
+            const items = (q.items||[]).filter(i=>i.type!=="header");
+            const trm = q.trm || 4200;
+            let sinIva = 0;
+            items.forEach(i => {
+              const tax = i.itemTax !== undefined ? Number(i.itemTax) : (i.tax !== undefined ? Number(i.tax) : 19);
+              if (tax === 0) {
+                const priceCOP = i.manualPrice ? Number(i.manualPrice)
+                  : (i.currency==="USD" ? Number(i.price)*trm : Number(i.price));
+                const disc = priceCOP * ((Number(i.discount)||0)/100);
+                sinIva += Number(i.qty) * (priceCOP - disc);
+              }
+            });
+            const conIva = total - sinIva;
+            totalConIvaTotal  += conIva;
+            totalSinIvaTotal  += sinIva;
+            totalProyecto     += total;
+          });
           totalPagadoEmpresa  += pps.filter(pp=>(pp.payment_type||"empresa")==="empresa").reduce((s,pp)=>s+(pp.amount||0),0);
           totalPagadoPersonal += pps.filter(pp=>pp.payment_type==="personal").reduce((s,pp)=>s+(pp.amount||0),0);
         });
