@@ -2672,7 +2672,7 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 
 // ── PROYECTOS ────────────────────────────────────────────────────
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
-                        paymentRequests, createProject, addQuoteToProject,
+                        paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, updateProjectStatus,
                         config }) => {
   const [selected, setSelected] = useState(null);
@@ -2682,7 +2682,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [newPay, setNewPay] = useState(null);
   const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"" });
   const [search, setSearch] = useState("");
-  const [quoteDetails, setQuoteDetails] = useState({}); // { quoteId: "detalle" }
+  // detalle comes from projectQuotes DB records
 
   const filt = projects.filter(p =>
     (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
@@ -2741,15 +2741,25 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
       </style></head><body>
         <div class="title">${proj.client_name}</div>
         <table>
-          <thead><tr><th>Cotización</th><th>Detalle</th><th style="text-align:right">Valor</th></tr></thead>
+          <thead><tr><th>Cotización</th><th>Detalle</th><th style="text-align:right">Con IVA</th><th style="text-align:right">Sin IVA</th><th style="text-align:right">Total</th></tr></thead>
           <tbody>
-            ${qs.map(q=>`<tr>
-              <td><strong>#${q.number}${(q.version||1)>1?' v'+q.version:''}</strong></td>
-              <td>${quoteDetails[q.id]||q.clientName||q.client_name||""}</td>
-              <td style="text-align:right">${fmtCOP(q.total||0)}</td>
-            </tr>`).join("")}
+            ${qs.map(q=>{
+              const pq = projectQuotes.find(x=>x.project_id===proj.id&&x.quote_id===q.id);
+              const det = pq?.detalle || "";
+              const conIva = (q.subtotalConIva||0) + (q.taxAmt||0);
+              const sinIva = q.subtotalSinIva||0;
+              return `<tr>
+                <td><strong>#${q.number}${(q.version||1)>1?' v'+q.version:''}</strong></td>
+                <td>${det}</td>
+                <td style="text-align:right">${conIva>0?fmtCOP(conIva):"-"}</td>
+                <td style="text-align:right">${sinIva>0?fmtCOP(sinIva):"-"}</td>
+                <td style="text-align:right">${fmtCOP(q.total||0)}</td>
+              </tr>`;
+            }).join("")}
             <tr class="total-row">
               <td colspan="2" style="text-align:right">Total Proyecto</td>
+              <td style="text-align:right">${fmtCOP(qs.reduce((s,q)=>s+((q.subtotalConIva||0)+(q.taxAmt||0)),0))}</td>
+              <td style="text-align:right">${fmtCOP(qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0))}</td>
               <td style="text-align:right">${fmtCOP(totalProject)}</td>
             </tr>
           </tbody>
@@ -2777,10 +2787,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </tr>
           </tbody>
         </table>
-        <div class="bank-box">
-          <strong>Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
-          Nit: ${config.nit||""} &nbsp;|&nbsp;
-          Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
+        <div style="margin-top:16px">
+          <div class="bank-box" style="margin-bottom:8px">
+            <strong>Valor con IVA — Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
+            NIT: ${config.nit||""} &nbsp;|&nbsp; Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
+          </div>
+          ${config.personal?.accountHolder ? `
+          <div class="bank-box">
+            <strong>Valor sin IVA — Consignar a nombre de:</strong> ${config.personal.accountHolder||""}<br>
+            CC/NIT: ${config.personal.nit||""} &nbsp;|&nbsp; Cuenta ${config.personal.bankType||"Ahorros"} ${config.personal.bankName||""}: <strong>${config.personal.bankAccount||""}</strong>
+          </div>` : ""}
         </div>
       </body></html>
     `);
@@ -2876,8 +2892,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         #{q.number}{(q.version||1)>1?` v${q.version}`:""}
                       </td>
                       <td>
-                        <input value={quoteDetails[q.id]||""}
-                          onChange={e=>setQuoteDetails(d=>({...d,[q.id]:e.target.value}))}
+                        <input
+                          defaultValue={projectQuotes.find(pq=>pq.project_id===proj.id&&pq.quote_id===q.id)?.detalle||""}
+                          onBlur={e=>saveQuoteDetalle(proj.id, q.id, e.target.value)}
                           placeholder="Describe el alcance…"
                           style={{ fontSize:12,padding:"3px 8px" }} />
                       </td>
@@ -3140,6 +3157,11 @@ export default function App() {
       if (projs) setProjects(projs);
       const { data: pqs } = await sb.from("project_quotes").select("*");
       if (pqs) setProjectQuotes(pqs);
+      // Init quoteDetails from DB
+      if (pqs) {
+        const details = {};
+        pqs.forEach(pq => { if (pq.detalle) details[pq.quote_id] = pq.detalle; });
+      }
       const { data: pps } = await sb.from("project_payments").select("*").order("date", { ascending: false });
       if (pps) setProjectPayments(pps);
 
@@ -3292,8 +3314,15 @@ export default function App() {
   const addQuoteToProject = async (projectId, quoteId) => {
     const exists = projectQuotes.find(pq => pq.project_id===projectId && pq.quote_id===quoteId);
     if (exists) return;
-    await sb.from("project_quotes").insert({ project_id: projectId, quote_id: quoteId });
-    setProjectQuotes(pqs => [...pqs, { project_id: projectId, quote_id: quoteId }]);
+    const { data } = await sb.from("project_quotes").insert({ project_id: projectId, quote_id: quoteId, detalle:"" }).select().single();
+    if (data) setProjectQuotes(pqs => [...pqs, data]);
+  };
+
+  const saveQuoteDetalle = async (projectId, quoteId, detalle) => {
+    await sb.from("project_quotes").update({ detalle }).eq("project_id", projectId).eq("quote_id", quoteId);
+    setProjectQuotes(pqs => pqs.map(pq =>
+      pq.project_id===projectId && pq.quote_id===quoteId ? {...pq, detalle} : pq
+    ));
   };
 
   const saveProjectPayment = async (pp) => {
@@ -3414,6 +3443,7 @@ export default function App() {
                                    paymentRequests={paymentRequests}
                                    createProject={createProject}
                                    addQuoteToProject={addQuoteToProject}
+                                   saveQuoteDetalle={saveQuoteDetalle}
                                    saveProjectPayment={saveProjectPayment}
                                    deleteProjectPayment={deleteProjectPayment}
                                    updateProjectStatus={updateProjectStatus}
