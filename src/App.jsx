@@ -2974,7 +2974,6 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
   const printStatement = () => {
     if (!proj) return;
-    console.log("config.personal:", config.personal);
     const qs = getProjQuotes(proj.id);
     const pps = getProjPayments(proj.id);
     const { totalProject, totalPaid, balance } = calcTotals(proj.id);
@@ -3051,10 +3050,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         ${(()=>{
           const totalSinIva = qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
           const totalConIva = qs.reduce((s,q)=>s+(q.total||0),0) - totalSinIva;
-          const hasPersonal = !!(config.personal?.accountHolder);
+          const personal = config.personal || {};
+          const hasPersonal = !!(personal.accountHolder || personal.bankAccount);
           return `
           <div style="margin-top:16px">
-            <div class="bank-box" style="margin-bottom:8px;background:#f0fdf4;border:1px solid #bbf7d0">
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:6px;margin-bottom:8px">
               <div style="display:flex;justify-content:space-between;align-items:flex-start">
                 <div>
                   <strong>Cuenta Empresa</strong> — Consignar a nombre de: ${config.accountHolder||config.companyName||""}<br>
@@ -3064,15 +3064,15 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               </div>
             </div>
             ${hasPersonal ? `
-            <div class="bank-box" style="background:#eff6ff;border:1px solid #bfdbfe">
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;padding:12px;border-radius:6px">
               <div style="display:flex;justify-content:space-between;align-items:flex-start">
                 <div>
-                  <strong>Cuenta Personal</strong> — Consignar a nombre de: ${config.personal.accountHolder||""}<br>
-                  CC/NIT: ${config.personal.nit||""} &nbsp;|&nbsp; Cuenta ${config.personal.bankType||"Ahorros"} ${config.personal.bankName||""}: <strong>${config.personal.bankAccount||""}</strong>
+                  <strong>Cuenta Personal</strong> — Consignar a nombre de: ${personal.accountHolder||personal.companyName||""}<br>
+                  CC/NIT: ${personal.nit||""} &nbsp;|&nbsp; Cuenta ${personal.bankType||"Ahorros"} ${personal.bankName||""}: <strong>${personal.bankAccount||""}</strong>
                 </div>
                 ${totalSinIva>0 ? `<div style="text-align:right;margin-left:20px;font-size:14px;font-weight:700;color:#1d4ed8;white-space:nowrap">${fmtCOP(totalSinIva)}</div>` : ""}
               </div>
-            </div>` : ""}
+            </div>` : "<!-- no personal account configured -->"}
           </div>`;
         })()}
       </body></html>
