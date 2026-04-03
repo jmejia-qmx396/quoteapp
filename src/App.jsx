@@ -3097,7 +3097,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700 }}>Proyectos</h1>
           <p style={{ color:G.muted }}>{projects.length} proyecto(s)</p>
@@ -3106,6 +3106,66 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           + Nuevo Proyecto
         </Btn>
       </div>
+
+      {/* ── Dashboard de saldos ── */}
+      {(() => {
+        const activos = projects.filter(p=>p.status==="Activo");
+        let totalProyecto=0, totalPagadoEmpresa=0, totalPagadoPersonal=0,
+            totalConIvaTotal=0, totalSinIvaTotal=0;
+        activos.forEach(p => {
+          const qs = getProjQuotes(p.id);
+          const pps = getProjPayments(p.id);
+          const sinIva = qs.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
+          const total  = qs.reduce((s,q)=>s+(q.total||0),0);
+          const conIva = total - sinIva;
+          totalConIvaTotal  += conIva;
+          totalSinIvaTotal  += sinIva;
+          totalProyecto     += total;
+          totalPagadoEmpresa  += pps.filter(pp=>(pp.payment_type||"empresa")==="empresa").reduce((s,pp)=>s+(pp.amount||0),0);
+          totalPagadoPersonal += pps.filter(pp=>pp.payment_type==="personal").reduce((s,pp)=>s+(pp.amount||0),0);
+        });
+        const saldoEmpresa  = Math.max(0, totalConIvaTotal  - totalPagadoEmpresa);
+        const saldoPersonal = Math.max(0, totalSinIvaTotal  - totalPagadoPersonal);
+        const saldoTotal    = saldoEmpresa + saldoPersonal;
+        return (
+          <div style={{ display:"flex",gap:12,marginBottom:20,flexWrap:"wrap" }}>
+            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accent}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
+                Proyectos Activos
+              </p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.accent }}>{activos.length}</p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>Total: {fmt(totalProyecto)}</p>
+            </Card>
+            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.warn}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
+                Saldo Total Pendiente
+              </p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.warn }}>{fmt(saldoTotal)}</p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
+                Pagado: {fmt(totalPagadoEmpresa+totalPagadoPersonal)}
+              </p>
+            </Card>
+            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.success}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
+                🏢 Saldo Empresa (con IVA)
+              </p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(saldoEmpresa)}</p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
+                Total c/IVA: {fmt(totalConIvaTotal)}
+              </p>
+            </Card>
+            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accentH}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
+                👤 Saldo Personal (sin IVA)
+              </p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.accentH }}>{fmt(saldoPersonal)}</p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
+                Total s/IVA: {fmt(totalSinIvaTotal)}
+              </p>
+            </Card>
+          </div>
+        );
+      })()}
 
       <div style={{ display:"flex",gap:20,minHeight:600 }}>
         {/* ── Lista de proyectos ── */}
