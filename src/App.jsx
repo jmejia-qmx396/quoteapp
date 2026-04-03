@@ -243,7 +243,7 @@ const Modal = ({ title, onClose, children, width = 680 }) => {
                       background:G.surface,flexShrink:0 }}>
           <span style={{ fontWeight:700,fontSize:16 }}>{title}</span>
           <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
-                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
+                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>🗑️</button>
         </div>
         <div style={{ flex:1,overflowY:"auto",padding:"20px 24px" }}>{children}</div>
       </div>
@@ -263,7 +263,7 @@ const Modal = ({ title, onClose, children, width = 680 }) => {
                       position:"sticky",top:0,background:G.card,zIndex:1 }}>
           <span style={{ fontWeight:700,fontSize:15 }}>{title}</span>
           <button onClick={onClose} style={{ background:"none",border:"none",color:G.muted,
-                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>✕</button>
+                                             fontSize:22,cursor:"pointer",lineHeight:1 }}>🗑️</button>
         </div>
         <div style={{ padding:"16px 20px" }}>{children}</div>
       </div>
@@ -669,7 +669,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
                           </Btn>
                         );
                       })()}
-                      <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>🗑️</Btn>
                     </div>
                   </td>
                 </tr>
@@ -958,7 +958,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                             style={{ fontWeight:700,fontSize:13,color:G.accent,background:"transparent",
                                      border:"none",outline:"none",flex:1,padding:"2px 4px" }} />
                           <button onClick={()=>setQuote(q=>({...q,items:q.items.filter(i=>i.id!==item.id)}))}
-                            style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>✕</button>
+                            style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>🗑️</button>
                         </div>
                       </td>
                     </tr>
@@ -1074,7 +1074,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                       </td>
                       <td>
                         <button onClick={()=>removeItem(item.id)}
-                          style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:18,lineHeight:1 }}>✕</button>
+                          style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:18,lineHeight:1 }}>🗑️</button>
                       </td>
                     </tr>
                   );
@@ -1535,7 +1535,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
                         style={{ whiteSpace:"nowrap" }}>📋 Cotizar</Btn>
                     )}
                     <Btn size="sm" variant="outline" onClick={()=>openEdit(c)}>✏️</Btn>
-                    <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>✕</Btn>
+                    <Btn size="sm" variant="danger" onClick={()=>remove(c.id)}>🗑️</Btn>
                   </div>
                 </td>
               </tr>
@@ -1685,7 +1685,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
                 <td>
                   <div style={{ display:"flex",gap:6 }}>
                     <Btn size="sm" variant="outline" onClick={()=>openEdit(p)}>Editar</Btn>
-                    <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>✕</Btn>
+                    <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>🗑️</Btn>
                   </div>
                 </td>
               </tr>
@@ -1731,7 +1731,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
             </div>
             <div className="qa-mobile-actions">
               <Btn size="sm" variant="outline" onClick={()=>openEdit(p)} style={{flex:1,textAlign:"center"}}>✏️ Editar</Btn>
-              <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>✕</Btn>
+              <Btn size="sm" variant="danger" onClick={()=>remove(p.id)}>🗑️</Btn>
             </div>
           </div>
         ))}
@@ -2462,7 +2462,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
                     <td>
                       <div style={{ display:"flex",gap:6 }}>
                         <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
-                        <Btn size="sm" variant="danger" onClick={async()=>{ const ok=await confirm("¿Eliminar cuenta de cobro?","Esta acción no se puede deshacer."); if(ok) deletePaymentRequest(p.id); }}>✕</Btn>
+                        <Btn size="sm" variant="danger" onClick={async()=>{ const ok=await confirm("¿Eliminar cuenta de cobro?","Esta acción no se puede deshacer."); if(ok) deletePaymentRequest(p.id); }}>🗑️</Btn>
                       </div>
                     </td>
                   </tr>
@@ -2617,13 +2617,13 @@ const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
                   onKeyDown={e=>e.key==="Enter"&&saveEdit()}
                   style={{ flex:1,padding:"5px 10px" }} autoFocus />
                 <Btn size="sm" variant="success" onClick={saveEdit}>✓</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>✕</Btn>
+                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>🗑️</Btn>
               </>
             ) : (
               <>
                 <span style={{ flex:1,fontSize:14,fontWeight:500 }}>🏭 {s.name}</span>
                 <Btn size="sm" variant="outline" onClick={()=>startEdit(s)}>✏️</Btn>
-                <Btn size="sm" variant="danger" onClick={()=>remove(s.id)}>✕</Btn>
+                <Btn size="sm" variant="danger" onClick={()=>remove(s.id)}>🗑️</Btn>
               </>
             )}
           </div>
@@ -2700,7 +2700,7 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
                   onKeyDown={e=>e.key==="Enter"&&saveEdit()}
                   style={{ flex:1,padding:"5px 10px" }} autoFocus />
                 <Btn size="sm" variant="success" onClick={saveEdit}>✓</Btn>
-                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>✕</Btn>
+                <Btn size="sm" variant="ghost" onClick={()=>setEditId(null)}>🗑️</Btn>
               </>
             ) : (
               <>
@@ -2708,7 +2708,7 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
                   <span style={{ marginRight:8 }}>🏷️</span>{cat.name}
                 </span>
                 <Btn size="sm" variant="outline" onClick={()=>startEdit(cat)}>✏️</Btn>
-                <Btn size="sm" variant="danger" onClick={()=>remove(cat.id)}>✕</Btn>
+                <Btn size="sm" variant="danger" onClick={()=>remove(cat.id)}>🗑️</Btn>
               </>
             )}
           </div>
@@ -2987,7 +2987,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:600,color:G.success }}>{fmt(pp.amount||0)}</td>
                       <td>
                         <button onClick={async()=>{ const ok=await confirm("¿Eliminar pago?","Esta acción no se puede deshacer."); if(ok) deleteProjectPayment(pp.id); }}
-                          style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>✕</button>
+                          style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>🗑️</button>
                       </td>
                     </tr>
                   ))}
