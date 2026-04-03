@@ -1693,17 +1693,28 @@ const ConfigSection = ({ title, children }) => (
 
 const ConfigView = ({ config, setConfig }) => {
   const [saved, setSaved] = useState(false);
+  const [savedPersonal, setSavedPersonal] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  // Local state for personal profile to avoid re-render jumps
+  // Local state — only saves to DB when user clicks Save
+  const [local, setLocal] = useState(() => ({ ...config }));
   const [personal, setPersonal] = useState(() => config.personal || {
-    companyName:"", vendorEmail:"", vendorPhone:"", nit:"",
+    companyName:"", vendorName:"", vendorEmail:"", vendorPhone:"", nit:"",
     primaryColor:"#0d6e6e", logoUrl:"", bankName:"", bankType:"Ahorros", bankAccount:"", accountHolder:""
   });
 
-  const set = (k, v) => setConfig(c => ({ ...c, [k]: v }));
+  const set = (k, v) => setLocal(c => ({ ...c, [k]: v }));
   const setP = (k, v) => setPersonal(p => ({ ...p, [k]: v }));
-  const savePersonal = () => setConfig(c => ({ ...c, personal: personal }));
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+
+  const handleSave = () => {
+    setConfig({ ...local, personal });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+  const savePersonal = () => {
+    setConfig({ ...local, personal });
+    setSavedPersonal(true);
+    setTimeout(() => setSavedPersonal(false), 2500);
+  };
   const Section = ConfigSection;
 
   return (
@@ -1718,35 +1729,35 @@ const ConfigView = ({ config, setConfig }) => {
 
       <Section title="🏢 Datos de la Empresa">
         <Field label="Nombre de la Empresa" style={{ gridColumn:"1/-1" }}>
-          <input value={config.companyName} onChange={e=>set("companyName",e.target.value)} placeholder="Casa Inteligente" />
+          <input value={local.companyName||""} onChange={e=>set("companyName",e.target.value)} placeholder="Casa Inteligente" />
         </Field>
         <Field label="Slogan / Descripción">
-          <input value={config.slogan} onChange={e=>set("slogan",e.target.value)} placeholder="Todo bajo control" />
+          <input value={local.slogan||""} onChange={e=>set("slogan",e.target.value)} placeholder="Todo bajo control" />
         </Field>
         <Field label="NIT / RUT">
-          <input value={config.nit} onChange={e=>set("nit",e.target.value)} placeholder="900.000.000-1" />
+          <input value={local.nit||""} onChange={e=>set("nit",e.target.value)} placeholder="900.000.000-1" />
         </Field>
         <Field label="Sitio Web" style={{ gridColumn:"1/-1" }}>
-          <input value={config.website} onChange={e=>set("website",e.target.value)} placeholder="www.miempresa.com" />
+          <input value={local.website||""} onChange={e=>set("website",e.target.value)} placeholder="www.miempresa.com" />
         </Field>
         <Field label="Color Principal">
           <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-            <input type="color" value={config.primaryColor} onChange={e=>set("primaryColor",e.target.value)}
+            <input type="color" value={local.primaryColor||"#0d6e6e"} onChange={e=>set("primaryColor",e.target.value)}
               style={{ width:48,height:36,padding:2,cursor:"pointer" }} />
-            <input value={config.primaryColor} onChange={e=>set("primaryColor",e.target.value)}
+            <input value={local.primaryColor||"#0d6e6e"} onChange={e=>set("primaryColor",e.target.value)}
               style={{ flex:1 }} placeholder="#0d6e6e" />
           </div>
         </Field>
         <Field label="Logo de la Empresa">
           <div style={{ display:"flex",gap:12,alignItems:"center",flexWrap:"wrap" }}>
-            {config.logoUrl && (
-              <img src={config.logoUrl} alt="logo" style={{ height:48,objectFit:"contain",
+            {local.logoUrl && (
+              <img src={local.logoUrl} alt="logo" style={{ height:48,objectFit:"contain",
                 border:`1px solid ${G.border}`,borderRadius:6,padding:4,background:"#fff" }} />
             )}
             <div style={{ flex:1 }}>
               <label style={{ display:"inline-block",padding:"7px 16px",background:G.accent,
                               color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:500 }}>
-                {uploadingLogo ? "Subiendo..." : config.logoUrl ? "🔄 Cambiar logo" : "📁 Subir logo"}
+                {uploadingLogo ? "Subiendo..." : local.logoUrl ? "🔄 Cambiar logo" : "📁 Subir logo"}
                 <input type="file" accept="image/*" style={{ display:"none" }}
                   onChange={async e => {
                     const file = e.target.files[0];
@@ -1759,12 +1770,13 @@ const ConfigView = ({ config, setConfig }) => {
                       const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
                       if (error) throw error;
                       const { data } = sb.storage.from("product-images").getPublicUrl(path);
-                      set("logoUrl", data.publicUrl + "?t=" + Date.now());
+                      const newUrl = data.publicUrl + "?t=" + Date.now();
+                      set("logoUrl", newUrl);
                     } catch(e) { alert("Error: " + e.message); }
                     setUploadingLogo(false);
                   }} />
               </label>
-              {config.logoUrl && (
+              {local.logoUrl && (
                 <button onClick={()=>set("logoUrl","")}
                   style={{ marginLeft:8,background:"none",border:"none",color:G.danger,
                            cursor:"pointer",fontSize:12,fontFamily:G.font }}>
@@ -1779,30 +1791,30 @@ const ConfigView = ({ config, setConfig }) => {
 
       <Section title="👤 Datos del Vendedor">
         <Field label="Nombre del Vendedor" style={{ gridColumn:"1/-1" }}>
-          <input value={config.vendorName} onChange={e=>set("vendorName",e.target.value)} placeholder="Jorge Mejia Jaramillo" />
+          <input value={local.vendorName||""} onChange={e=>set("vendorName",e.target.value)} placeholder="Jorge Mejia Jaramillo" />
         </Field>
         <Field label="Teléfono">
-          <input value={config.vendorPhone} onChange={e=>set("vendorPhone",e.target.value)} placeholder="3182854896" />
+          <input value={local.vendorPhone||""} onChange={e=>set("vendorPhone",e.target.value)} placeholder="3182854896" />
         </Field>
         <Field label="Email">
-          <input value={config.vendorEmail} onChange={e=>set("vendorEmail",e.target.value)} placeholder="correo@empresa.com" />
+          <input value={local.vendorEmail||""} onChange={e=>set("vendorEmail",e.target.value)} placeholder="correo@empresa.com" />
         </Field>
       </Section>
 
       <Section title="🏦 Datos Bancarios">
         <Field label="Nombre del Titular" style={{ gridColumn:"1/-1" }}>
-          <input value={config.accountHolder} onChange={e=>set("accountHolder",e.target.value)} placeholder="Nombre o Razón Social" />
+          <input value={local.accountHolder||""} onChange={e=>set("accountHolder",e.target.value)} placeholder="Nombre o Razón Social" />
         </Field>
         <Field label="Banco">
-          <input value={config.bankName} onChange={e=>set("bankName",e.target.value)} placeholder="Bancolombia" />
+          <input value={local.bankName||""} onChange={e=>set("bankName",e.target.value)} placeholder="Bancolombia" />
         </Field>
         <Field label="Tipo de Cuenta">
-          <select value={config.bankType} onChange={e=>set("bankType",e.target.value)}>
+          <select value={local.bankType||"Ahorros"} onChange={e=>set("bankType",e.target.value)}>
             {["Ahorros","Corriente"].map(t=><option key={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="Número de Cuenta" style={{ gridColumn:"1/-1" }}>
-          <input value={config.bankAccount} onChange={e=>set("bankAccount",e.target.value)} placeholder="000.000.000.00" />
+          <input value={local.bankAccount||""} onChange={e=>set("bankAccount",e.target.value)} placeholder="000.000.000.00" />
         </Field>
       </Section>
 
@@ -1848,12 +1860,15 @@ const ConfigView = ({ config, setConfig }) => {
                     const { error } = await sb.storage.from("product-images").upload(path, file, { upsert:true });
                     if (error) throw error;
                     const { data } = sb.storage.from("product-images").getPublicUrl(path);
-                    setP("logoUrl", data.publicUrl + "?t=" + Date.now());
+                    const newUrl = data.publicUrl + "?t=" + Date.now();
+                    setP("logoUrl", newUrl);
+                    // Auto-save immediately so logo persists
+                    setConfig(c => ({ ...c, personal: { ...c.personal, logoUrl: newUrl } }));
                   } catch(e) { alert("Error: " + e.message); }
                 }} />
             </label>
             {personal.logoUrl && (
-              <button onClick={()=>setP("logoUrl","")}
+              <button onClick={()=>{ setP("logoUrl",""); setConfig(c=>({...c,personal:{...c.personal,logoUrl:""}})); }}
                 style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:12,fontFamily:G.font }}>✕ Quitar</button>
             )}
           </div>
@@ -1873,7 +1888,7 @@ const ConfigView = ({ config, setConfig }) => {
           <input value={personal.bankAccount||""} onChange={e=>setP("bankAccount",e.target.value)} />
         </Field>
         <div style={{ gridColumn:"1/-1" }}>
-          <Btn variant="outline" onClick={savePersonal}>💾 Guardar Perfil Personal</Btn>
+          <Btn variant="success" onClick={savePersonal}>{savedPersonal ? "✅ Perfil personal guardado!" : "💾 Guardar Perfil Personal"}</Btn>
         </div>
       </Section>
 
@@ -1883,7 +1898,7 @@ const ConfigView = ({ config, setConfig }) => {
         <p style={{ color:G.muted,fontSize:12,marginBottom:10 }}>
           Estas notas aparecerán automáticamente al crear una nueva cotización. Puedes editarlas por cotización.
         </p>
-        <textarea rows={6} value={config.defaultNotes} onChange={e=>set("defaultNotes",e.target.value)}
+        <textarea rows={6} value={local.defaultNotes||""} onChange={e=>set("defaultNotes",e.target.value)}
           placeholder="Condiciones de pago, validez, términos…"
           style={{ width:"100%",resize:"vertical" }} />
       </Card>
@@ -1896,26 +1911,26 @@ const ConfigView = ({ config, setConfig }) => {
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
             <div style={{ display:"flex",alignItems:"center",gap:14 }}>
               {config.logoUrl ? (
-                <img src={config.logoUrl} alt="logo" style={{ height:60,objectFit:"contain" }} />
+                <img src={local.logoUrl} alt="logo" style={{ height:60,objectFit:"contain" }} />
               ) : (
                 <>
-                  <div style={{ width:60,height:60,borderRadius:"50%",background:config.primaryColor,
+                  <div style={{ width:60,height:60,borderRadius:"50%",background:local.primaryColor||"#0d6e6e",
                                 display:"flex",alignItems:"center",justifyContent:"center",
                                 color:"#fff",fontSize:24,fontWeight:700 }}>
-                    {config.companyName?.[0]||"C"}
+                    {(local.companyName||"C")[0]||"C"}
                   </div>
                   <div>
-                    <p style={{ fontWeight:700,fontSize:18,color:config.primaryColor }}>{config.companyName||"Mi Empresa"}</p>
-                    <p style={{ color:"#64748b",fontSize:12 }}>{config.slogan}</p>
+                    <p style={{ fontWeight:700,fontSize:18,color:local.primaryColor||"#0d6e6e" }}>{local.companyName||"Mi Empresa"}</p>
+                    <p style={{ color:"#64748b",fontSize:12 }}>{local.slogan||""}</p>
                   </div>
                 </>
               )}
             </div>
             <div style={{ textAlign:"right" }}>
-              <p style={{ fontWeight:700,fontSize:20,color:config.primaryColor }}>COTIZACIÓN</p>
-              <p style={{ color:"#64748b",fontSize:12 }}>{config.vendorName}</p>
-              <p style={{ color:"#64748b",fontSize:12 }}>{config.vendorPhone}</p>
-              <p style={{ color:"#64748b",fontSize:12 }}>{config.vendorEmail}</p>
+              <p style={{ fontWeight:700,fontSize:20,color:local.primaryColor||"#0d6e6e" }}>COTIZACIÓN</p>
+              <p style={{ color:"#64748b",fontSize:12 }}>{local.vendorName||""}</p>
+              <p style={{ color:"#64748b",fontSize:12 }}>{local.vendorPhone||""}</p>
+              <p style={{ color:"#64748b",fontSize:12 }}>{local.vendorEmail||""}</p>
             </div>
           </div>
         </div>
@@ -2080,7 +2095,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
             ${prof.logoUrl ? `<img src="${prof.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(prof.companyName||"C")[0]}</div>`}
             <div>
               <div class="company">${config.companyName||""}</div>
-              <div style="color:#64748b;font-size:12px">${config.slogan||""}</div>
+              <div style="color:#64748b;font-size:12px">${local.slogan||""||""}</div>
             </div>
           </div>
           <div>
@@ -2315,7 +2330,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
 // ── PRINT EXISTING PAYMENT REQUEST ───────────────────────────────
 const PrintPaymentRequest = ({ pr, config, onClose }) => {
   useEffect(() => {
-    const pc = config.primaryColor || "#0d6e6e";
+    const pc = local.primaryColor||"#0d6e6e" || "#0d6e6e";
     const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
@@ -2345,7 +2360,7 @@ const PrintPaymentRequest = ({ pr, config, onClose }) => {
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
             ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
-            <div><div class="company">${config.companyName||""}</div><div style="color:#64748b;font-size:12px">${config.slogan||""}</div></div>
+            <div><div class="company">${config.companyName||""}</div><div style="color:#64748b;font-size:12px">${local.slogan||""||""}</div></div>
           </div>
           <div>
             <div class="title">Cuenta de Cobro</div>
@@ -2361,9 +2376,9 @@ const PrintPaymentRequest = ({ pr, config, onClose }) => {
           </div>
           <div style="text-align:right">
             <div class="vendor-box">Vendedor</div>
-            <div style="font-weight:600">${config.vendorName||""}</div>
-            <div style="color:#64748b">${config.vendorPhone||""}</div>
-            <div style="color:#64748b">${config.vendorEmail||""}</div>
+            <div style="font-weight:600">${local.vendorName||""||""}</div>
+            <div style="color:#64748b">${local.vendorPhone||""||""}</div>
+            <div style="color:#64748b">${local.vendorEmail||""||""}</div>
           </div>
         </div>
         <div class="body">
