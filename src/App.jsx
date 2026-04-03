@@ -2935,7 +2935,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [addQuoteModal, setAddQuoteModal] = useState(false);
   const [newProjectModal, setNewProjectModal] = useState(false);
   const [newPay, setNewPay] = useState(null);
-  const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"" });
+  const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"" });
   const [search, setSearch] = useState("");
   // detalle comes from projectQuotes DB records
 
@@ -3102,7 +3102,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           <h1 style={{ fontSize:22,fontWeight:700 }}>Proyectos</h1>
           <p style={{ color:G.muted }}>{projects.length} proyecto(s)</p>
         </div>
-        <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:""}); setNewProjectModal(true); }}>
+        <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:""}); setNewProjectModal(true); }}>
           + Nuevo Proyecto
         </Btn>
       </div>
@@ -3286,7 +3286,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               <select value={newProject.clientId}
                 onChange={e=>{
                   const c = clients.find(x=>String(x.id)===e.target.value);
-                  setNewProject({...newProject, clientId:e.target.value, clientName:c?.name||""});
+                  setNewProject({...newProject, clientId:e.target.value, clientName:c?.name||"", quoteId:""});
                 }}>
                 <option value="">— Seleccionar cliente —</option>
                 {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
@@ -3297,12 +3297,32 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 onChange={e=>setNewProject({...newProject,name:e.target.value})}
                 placeholder="Ej: Casa 10 Saint Regis — Automatización" />
             </Field>
+            {newProject.clientId && (
+              <Field label="Cotización inicial (opcional)">
+                <select value={newProject.quoteId||""}
+                  onChange={e=>setNewProject({...newProject,quoteId:e.target.value})}>
+                  <option value="">— Sin cotización inicial —</option>
+                  {quotes
+                    .filter(q=>String(q.clientId||q.client_id)===String(newProject.clientId) && q.isLatest!==false)
+                    .map(q=>(
+                      <option key={q.id} value={q.id}>
+                        #{q.number} — {fmt(q.total||0)} ({q.status})
+                      </option>
+                    ))
+                  }
+                </select>
+              </Field>
+            )}
           </div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
             <Btn variant="ghost" onClick={()=>setNewProjectModal(false)}>Cancelar</Btn>
             <Btn variant="success" onClick={async()=>{
               if (!newProject.clientId || !newProject.name) { alert("Selecciona cliente y nombre"); return; }
-              await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name });
+              const proj = await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name });
+              if (proj && newProject.quoteId) {
+                await addQuoteToProject(proj.id, Number(newProject.quoteId));
+                setSelected(proj.id);
+              }
               setNewProjectModal(false);
             }}>💾 Crear Proyecto</Btn>
           </div>
