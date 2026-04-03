@@ -258,6 +258,7 @@ const StatCard = ({ label, value, color = G.accent, icon }) => (
 const NAV = [
   { id:"dashboard",   label:"Dashboard",    icon:"⬛" },
   { id:"quotes",      label:"Cotizaciones", icon:"📋" },
+  { id:"projects",    label:"Proyectos",    icon:"🏗️" },
   { id:"clients",     label:"Clientes",     icon:"👥" },
   { id:"products",    label:"Catálogo",     icon:"📦" },
   { id:"categories",  label:"Categorías",   icon:"🏷️" },
@@ -450,8 +451,9 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject }) => {
   const [paymentQuote, setPaymentQuote] = useState(null);
+  const [addToProjectQuote, setAddToProjectQuote] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
 
@@ -605,6 +607,18 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
                           {q.status==="Aprobada" ? "＋ Adicionales" : "Nueva v."}
                         </Btn>
                       )}
+                      {q.isLatest!==false && addQuoteToProject && (() => {
+                        const inProject = projectQuotes.find(pq=>pq.quote_id===q.id);
+                        const activeProjects = projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(q.clientId||q.client_id));
+                        if (inProject) return <span style={{fontSize:10,color:G.success,padding:"2px 6px",background:"rgba(16,185,129,.1)",borderRadius:10}}>🏗️ En proyecto</span>;
+                        if (!activeProjects.length) return null;
+                        return (
+                          <Btn size="sm" variant="ghost" onClick={()=>setAddToProjectQuote(q)}
+                            style={{color:G.success,borderColor:G.success,border:"1px solid"}}>
+                            🏗️
+                          </Btn>
+                        );
+                      })()}
                       <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>✕</Btn>
                     </div>
                   </td>
@@ -635,6 +649,38 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
         <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config}
           onCreatePayment={()=>{ setModal(null); setPaymentQuote(current); }} />
       )}
+      {addToProjectQuote && (
+        <Modal title={`Agregar #${addToProjectQuote.number} a Proyecto`} onClose={()=>setAddToProjectQuote(null)}>
+          <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
+            Selecciona el proyecto activo al que quieres agregar esta cotización:
+          </p>
+          {projects
+            .filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id))
+            .map(p=>(
+              <div key={p.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                                        padding:"12px 0",borderBottom:`1px solid ${G.border}` }}>
+                <div>
+                  <div style={{ fontWeight:600 }}>{p.name}</div>
+                  <div style={{ color:G.muted,fontSize:12 }}>{p.client_name}</div>
+                </div>
+                <Btn size="sm" variant="success" onClick={async()=>{
+                  await addQuoteToProject(p.id, addToProjectQuote.id);
+                  setAddToProjectQuote(null);
+                }}>+ Agregar</Btn>
+              </div>
+            ))
+          }
+          {!projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id)).length && (
+            <p style={{ color:G.muted,padding:16,textAlign:"center" }}>
+              No hay proyectos activos para este cliente. Créalo desde la pestaña Proyectos.
+            </p>
+          )}
+          <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
+            <Btn variant="ghost" onClick={()=>setAddToProjectQuote(null)}>Cerrar</Btn>
+          </div>
+        </Modal>
+      )}
+
       {paymentQuote && (
         <PaymentRequestModal quote={paymentQuote} config={config} clients={clients}
           paymentRequests={paymentRequests}
@@ -2563,6 +2609,393 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   );
 };
 
+// ── PROYECTOS ────────────────────────────────────────────────────
+const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
+                        paymentRequests, createProject, addQuoteToProject,
+                        saveProjectPayment, deleteProjectPayment, updateProjectStatus,
+                        config }) => {
+  const [selected, setSelected] = useState(null);
+  const [payModal, setPayModal] = useState(false);
+  const [addQuoteModal, setAddQuoteModal] = useState(false);
+  const [newProjectModal, setNewProjectModal] = useState(false);
+  const [newPay, setNewPay] = useState(null);
+  const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"" });
+  const [search, setSearch] = useState("");
+
+  const filt = projects.filter(p =>
+    (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
+    (p.client_name||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const proj = projects.find(p => p.id === selected);
+
+  // Get quotes for selected project
+  const getProjQuotes = (pid) => {
+    const qids = projectQuotes.filter(pq=>pq.project_id===pid).map(pq=>pq.quote_id);
+    return quotes.filter(q => qids.includes(q.id));
+  };
+
+  // Get payments for selected project
+  const getProjPayments = (pid) => projectPayments.filter(p=>p.project_id===pid);
+
+  // Totals
+  const calcTotals = (pid) => {
+    const qs = getProjQuotes(pid);
+    const pps = getProjPayments(pid);
+    const totalProject = qs.reduce((s,q)=>s+(q.total||0),0);
+    const totalPaid    = pps.reduce((s,p)=>s+(p.amount||0),0);
+    return { totalProject, totalPaid, balance: totalProject - totalPaid };
+  };
+
+  const openAddPayment = () => {
+    setNewPay({ isNew:true, projectId:selected, concept:"", amount:0,
+                date: new Date().toISOString().split("T")[0], paymentRequestId:null });
+    setPayModal(true);
+  };
+
+  const handlePrintStatement = () => setPrintModal(true);
+
+  const printStatement = () => {
+    if (!proj) return;
+    const qs = getProjQuotes(proj.id);
+    const pps = getProjPayments(proj.id);
+    const { totalProject, totalPaid, balance } = calcTotals(proj.id);
+    const pc = config.primaryColor || "#0d6e6e";
+    const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
+    const w = window.open("","_blank","width=700,height=600");
+    w.document.write(`
+      <html><head><title>Estado de Cuenta — ${proj.client_name}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;font-size:12px}
+        table{width:100%;border-collapse:collapse;margin-bottom:16px}
+        th{background:${pc};color:#fff;padding:8px 12px;text-align:left;font-size:11px}
+        td{padding:7px 12px;border-bottom:1px solid #e2e8f0}
+        .title{text-align:center;font-size:20px;font-weight:700;color:${pc};margin-bottom:20px;
+               padding-bottom:10px;border-bottom:3px solid ${pc}}
+        .total-row{background:${pc}22;font-weight:700}
+        .saldo-row{background:${pc};color:#fff;font-weight:700;font-size:14px}
+        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:6px;margin-top:16px}
+      </style></head><body>
+        <div class="title">${proj.client_name}</div>
+        <table>
+          <thead><tr><th>Cotización</th><th>Detalle</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody>
+            ${qs.map(q=>`<tr>
+              <td><strong>#${q.number}${(q.version||1)>1?' v'+q.version:''}</strong></td>
+              <td>${q.clientName||q.client_name||""} ${q.notes?'<span style="color:#64748b;font-size:10px">'+q.notes.substring(0,40)+'</span>':''}</td>
+              <td style="text-align:right">${fmtCOP(q.total||0)}</td>
+            </tr>`).join("")}
+            <tr class="total-row">
+              <td colspan="2" style="text-align:right">Total Proyecto</td>
+              <td style="text-align:right">${fmtCOP(totalProject)}</td>
+            </tr>
+          </tbody>
+        </table>
+        ${pps.length ? `
+        <table>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody>
+            ${pps.map(p=>`<tr>
+              <td>${p.date||""}</td>
+              <td>${p.concept||""}</td>
+              <td style="text-align:right">${fmtCOP(p.amount||0)}</td>
+            </tr>`).join("")}
+            <tr class="total-row">
+              <td colspan="2" style="text-align:right">Total Pagos Recibidos</td>
+              <td style="text-align:right">${fmtCOP(totalPaid)}</td>
+            </tr>
+          </tbody>
+        </table>` : ""}
+        <table>
+          <tbody>
+            <tr class="saldo-row">
+              <td colspan="2" style="text-align:right;padding:10px 12px">Saldo Pendiente</td>
+              <td style="text-align:right;padding:10px 12px">${fmtCOP(balance)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="bank-box">
+          <strong>Consignar a nombre de:</strong> ${config.accountHolder||config.companyName||""}<br>
+          Nit: ${config.nit||""} &nbsp;|&nbsp;
+          Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
+        </div>
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>w.print(), 400);
+  };
+
+  return (
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+        <div>
+          <h1 style={{ fontSize:22,fontWeight:700 }}>Proyectos</h1>
+          <p style={{ color:G.muted }}>{projects.length} proyecto(s)</p>
+        </div>
+        <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:""}); setNewProjectModal(true); }}>
+          + Nuevo Proyecto
+        </Btn>
+      </div>
+
+      <div style={{ display:"flex",gap:20,minHeight:600 }}>
+        {/* ── Lista de proyectos ── */}
+        <div style={{ width:320,flexShrink:0 }}>
+          <input placeholder="Buscar proyecto o cliente…" value={search}
+            onChange={e=>setSearch(e.target.value)} style={{ marginBottom:12 }} />
+          {filt.map(p => {
+            const { totalProject, totalPaid, balance } = calcTotals(p.id);
+            const isSelected = p.id === selected;
+            return (
+              <div key={p.id} onClick={()=>setSelected(p.id)}
+                style={{ background: isSelected?`rgba(59,130,246,.12)`:G.card,
+                         border:`1px solid ${isSelected?G.accent:G.border}`,
+                         borderRadius:10,padding:14,marginBottom:8,cursor:"pointer",transition:".15s" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                  <span style={{ fontWeight:700,fontSize:14 }}>{p.client_name}</span>
+                  <span style={{ fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,
+                                 background: p.status==="Activo"?"rgba(16,185,129,.15)":"rgba(100,116,139,.15)",
+                                 color: p.status==="Activo"?G.success:G.muted }}>
+                    {p.status}
+                  </span>
+                </div>
+                <div style={{ color:G.muted,fontSize:12,marginBottom:8 }}>{p.name}</div>
+                <div style={{ display:"flex",justifyContent:"space-between",fontSize:12 }}>
+                  <span style={{ color:G.muted }}>Total: <strong style={{color:G.text}}>{fmt(totalProject)}</strong></span>
+                  <span style={{ color: balance>0?G.warn:G.success }}>
+                    Saldo: <strong>{fmt(balance)}</strong>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {!filt.length && <p style={{ color:G.muted,textAlign:"center",padding:20 }}>Sin proyectos aún.</p>}
+        </div>
+
+        {/* ── Detalle del proyecto ── */}
+        {proj ? (
+          <div style={{ flex:1 }}>
+            <Card style={{ marginBottom:16 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10 }}>
+                <div>
+                  <h2 style={{ fontSize:18,fontWeight:700 }}>{proj.client_name}</h2>
+                  <p style={{ color:G.muted,fontSize:13 }}>{proj.name}</p>
+                </div>
+                <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                  {proj.status==="Activo" && <>
+                    <Btn size="sm" variant="outline" onClick={()=>setAddQuoteModal(true)}>+ Cotización</Btn>
+                    <Btn size="sm" variant="success" onClick={openAddPayment}>+ Pago</Btn>
+                  </>}
+                  <Btn size="sm" variant="primary" onClick={printStatement}>🖨️ Estado de Cuenta</Btn>
+                  {proj.status==="Activo"
+                    ? <Btn size="sm" variant="ghost" onClick={()=>updateProjectStatus(proj.id,"Cerrado")}>🔒 Cerrar</Btn>
+                    : <Btn size="sm" variant="outline" onClick={()=>updateProjectStatus(proj.id,"Activo")}>🔓 Reabrir</Btn>
+                  }
+                </div>
+              </div>
+            </Card>
+
+            {/* Cotizaciones del proyecto */}
+            <Card style={{ marginBottom:16,padding:0,overflow:"hidden" }}>
+              <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
+                📋 Cotizaciones
+              </div>
+              <table>
+                <thead><tr><th>#</th><th>Fecha</th><th>Estado</th><th style={{textAlign:"right"}}>Total</th></tr></thead>
+                <tbody>
+                  {getProjQuotes(proj.id).map(q=>(
+                    <tr key={q.id}>
+                      <td style={{ fontFamily:G.mono,color:G.accent }}>
+                        #{q.number}{(q.version||1)>1?` v${q.version}`:""}
+                      </td>
+                      <td style={{ color:G.muted }}>{q.date}</td>
+                      <td><StatusBadge s={q.status} /></td>
+                      <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:700 }}>{fmt(q.total||0)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ background:`rgba(59,130,246,.06)` }}>
+                    <td colSpan={3} style={{ textAlign:"right",fontWeight:700,color:G.accent }}>Total Proyecto</td>
+                    <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:700,color:G.accent,fontSize:15 }}>
+                      {fmt(calcTotals(proj.id).totalProject)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Pagos */}
+            <Card style={{ padding:0,overflow:"hidden",marginBottom:16 }}>
+              <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
+                💰 Pagos Recibidos
+              </div>
+              <table>
+                <thead><tr><th>Fecha</th><th>Concepto</th><th style={{textAlign:"right"}}>Valor</th><th></th></tr></thead>
+                <tbody>
+                  {getProjPayments(proj.id).map(pp=>(
+                    <tr key={pp.id}>
+                      <td style={{ color:G.muted }}>{pp.date}</td>
+                      <td>{pp.concept}</td>
+                      <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:600,color:G.success }}>{fmt(pp.amount||0)}</td>
+                      <td>
+                        <button onClick={()=>{ if(window.confirm("¿Eliminar pago?")) deleteProjectPayment(pp.id); }}
+                          style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!getProjPayments(proj.id).length && (
+                    <tr><td colSpan={4} style={{ textAlign:"center",color:G.muted,padding:16 }}>Sin pagos registrados.</td></tr>
+                  )}
+                  {getProjPayments(proj.id).length > 0 && (
+                    <tr style={{ background:"rgba(16,185,129,.06)" }}>
+                      <td colSpan={2} style={{ textAlign:"right",fontWeight:700,color:G.success }}>Total Pagos</td>
+                      <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:700,color:G.success,fontSize:15 }}>
+                        {fmt(calcTotals(proj.id).totalPaid)}
+                      </td>
+                      <td/>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Saldo */}
+            {(() => {
+              const { totalProject, totalPaid, balance } = calcTotals(proj.id);
+              return (
+                <Card style={{ background: balance>0?"rgba(245,158,11,.08)":"rgba(16,185,129,.08)",
+                               border:`1px solid ${balance>0?"rgba(245,158,11,.3)":"rgba(16,185,129,.3)"}` }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                    <span style={{ fontWeight:700,fontSize:16 }}>Saldo Pendiente</span>
+                    <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:22,
+                                   color: balance>0?G.warn:G.success }}>
+                      {fmt(balance)}
+                    </span>
+                  </div>
+                  {balance<=0 && <p style={{ color:G.success,fontSize:12,marginTop:4 }}>✅ Proyecto pagado completamente</p>}
+                </Card>
+              );
+            })()}
+          </div>
+        ) : (
+          <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted }}>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:48,marginBottom:12 }}>🏗️</div>
+              <p>Selecciona un proyecto para ver el detalle</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: nuevo proyecto */}
+      {newProjectModal && (
+        <Modal title="Nuevo Proyecto" onClose={()=>setNewProjectModal(false)}>
+          <div style={{ display:"grid",gap:14 }}>
+            <Field label="Cliente">
+              <select value={newProject.clientId}
+                onChange={e=>{
+                  const c = clients.find(x=>String(x.id)===e.target.value);
+                  setNewProject({...newProject, clientId:e.target.value, clientName:c?.name||""});
+                }}>
+                <option value="">— Seleccionar cliente —</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Nombre del Proyecto">
+              <input value={newProject.name}
+                onChange={e=>setNewProject({...newProject,name:e.target.value})}
+                placeholder="Ej: Casa 10 Saint Regis — Automatización" />
+            </Field>
+          </div>
+          <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
+            <Btn variant="ghost" onClick={()=>setNewProjectModal(false)}>Cancelar</Btn>
+            <Btn variant="success" onClick={async()=>{
+              if (!newProject.clientId || !newProject.name) { alert("Selecciona cliente y nombre"); return; }
+              await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name });
+              setNewProjectModal(false);
+            }}>💾 Crear Proyecto</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal: agregar pago */}
+      {payModal && newPay && (
+        <Modal title="Registrar Pago" onClose={()=>setPayModal(false)}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+            <Field label="Fecha">
+              <input type="date" value={newPay.date} onChange={e=>setNewPay({...newPay,date:e.target.value})} />
+            </Field>
+            <Field label="Valor">
+              <NumInput value={newPay.amount||0} onChange={v=>setNewPay({...newPay,amount:v})} />
+            </Field>
+            <Field label="Concepto" style={{ gridColumn:"1/-1" }}>
+              <input value={newPay.concept} onChange={e=>setNewPay({...newPay,concept:e.target.value})}
+                placeholder="Ej: Anticipo 1, Pago parcial…" />
+            </Field>
+            <Field label="Vincular Cuenta de Cobro (opcional)" style={{ gridColumn:"1/-1" }}>
+              <select value={newPay.paymentRequestId||""} onChange={e=>setNewPay({...newPay,paymentRequestId:e.target.value||null})}>
+                <option value="">— Sin vincular —</option>
+                {paymentRequests
+                  .filter(pr => getProjQuotes(selected).some(q=>q.id===pr.quote_id))
+                  .map(pr=>(
+                    <option key={pr.id} value={pr.id}>{pr.number} — {fmt(pr.amount||0)}</option>
+                  ))
+                }
+              </select>
+            </Field>
+          </div>
+          <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
+            <Btn variant="ghost" onClick={()=>setPayModal(false)}>Cancelar</Btn>
+            <Btn variant="success" onClick={async()=>{
+              await saveProjectPayment(newPay);
+              setPayModal(false);
+            }}>💾 Guardar Pago</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal: agregar cotización al proyecto */}
+      {addQuoteModal && proj && (
+        <Modal title="Agregar Cotización al Proyecto" onClose={()=>setAddQuoteModal(false)}>
+          <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
+            Selecciona una cotización del mismo cliente para agregarla al proyecto.
+          </p>
+          <div style={{ maxHeight:400,overflowY:"auto" }}>
+            {quotes
+              .filter(q => {
+                const clientMatch = String(q.clientId||q.client_id) === String(proj.client_id);
+                const notInProject = !projectQuotes.find(pq=>pq.project_id===proj.id&&pq.quote_id===q.id);
+                const projActive = proj.status === "Activo";
+                return clientMatch && notInProject && q.isLatest!==false && projActive;
+              })
+              .map(q=>(
+                <div key={q.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                                          padding:"10px 0",borderBottom:`1px solid ${G.border}` }}>
+                  <div>
+                    <span style={{ fontFamily:G.mono,color:G.accent }}>#{q.number}</span>
+                    <span style={{ marginLeft:8,color:G.muted,fontSize:12 }}>{q.date}</span>
+                    <span style={{ marginLeft:8,fontFamily:G.mono }}>{fmt(q.total||0)}</span>
+                  </div>
+                  <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                    <StatusBadge s={q.status} />
+                    <Btn size="sm" variant="outline" onClick={async()=>{
+                      await addQuoteToProject(proj.id, q.id);
+                      setAddQuoteModal(false);
+                    }}>+ Agregar</Btn>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+          <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
+            <Btn variant="ghost" onClick={()=>setAddQuoteModal(false)}>Cerrar</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 // ── APP ROOT ──────────────────────────────────────────────────────
 export default function App() {
   const [view, setView]         = useState("dashboard");
@@ -2577,6 +3010,9 @@ export default function App() {
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [paymentRequests, setPaymentRequests] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [projectQuotes, setProjectQuotes] = useState([]);
+  const [projectPayments, setProjectPayments] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -2626,6 +3062,14 @@ export default function App() {
       // Products
       const { data: prods } = await sb.from("products").select("*").order("name");
       if (prods) setProducts(prods.map(p=>({...p, imageUrl: p.image_url||p.imageUrl||"", supplierMain: p.supplier_main||"", supplierSecondary: p.supplier_secondary||""})));
+
+      // Projects
+      const { data: projs } = await sb.from("projects").select("*").order("created_at", { ascending: false });
+      if (projs) setProjects(projs);
+      const { data: pqs } = await sb.from("project_quotes").select("*");
+      if (pqs) setProjectQuotes(pqs);
+      const { data: pps } = await sb.from("project_payments").select("*").order("date", { ascending: false });
+      if (pps) setProjectPayments(pps);
 
       // Payment requests
       const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
@@ -2761,6 +3205,47 @@ export default function App() {
     setSuppliers(ss => ss.filter(s => s.id !== id));
   };
 
+  // ── CRUD: Projects ──────────────────────────────────────────
+  const createProject = async (data) => {
+    const row = { name: data.name || (data.clientName + " — " + (data.date||"").substring(0,7)),
+                  client_id: data.clientId||null, client_name: data.clientName||"",
+                  status: "Activo", created_by: user.id };
+    const { data: proj } = await sb.from("projects").insert(row).select().single();
+    if (proj) {
+      setProjects(ps => [proj, ...ps]);
+      return proj;
+    }
+  };
+
+  const addQuoteToProject = async (projectId, quoteId) => {
+    const exists = projectQuotes.find(pq => pq.project_id===projectId && pq.quote_id===quoteId);
+    if (exists) return;
+    await sb.from("project_quotes").insert({ project_id: projectId, quote_id: quoteId });
+    setProjectQuotes(pqs => [...pqs, { project_id: projectId, quote_id: quoteId }]);
+  };
+
+  const saveProjectPayment = async (pp) => {
+    const row = { project_id: pp.projectId, payment_request_id: pp.paymentRequestId||null,
+                  concept: pp.concept, amount: pp.amount||0, date: pp.date, created_by: user.id };
+    if (pp.isNew) {
+      const { data } = await sb.from("project_payments").insert(row).select().single();
+      if (data) setProjectPayments(pps => [data, ...pps]);
+    } else {
+      await sb.from("project_payments").update(row).eq("id", pp.id);
+      setProjectPayments(pps => pps.map(p => p.id===pp.id ? {...p,...row} : p));
+    }
+  };
+
+  const deleteProjectPayment = async (id) => {
+    await sb.from("project_payments").delete().eq("id", id);
+    setProjectPayments(pps => pps.filter(p => p.id!==id));
+  };
+
+  const updateProjectStatus = async (id, status) => {
+    await sb.from("projects").update({ status }).eq("id", id);
+    setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
+  };
+
   // ── CRUD: Categories ────────────────────────────────────────
   const saveCategory = async (cat) => {
     // If isNew flag is set, insert; otherwise update
@@ -2837,6 +3322,8 @@ export default function App() {
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
                                    createRevision={createRevision}
                                    paymentRequests={paymentRequests} savePaymentRequest={savePaymentRequest}
+                                   projectQuotes={projectQuotes} projects={projects}
+                                   addQuoteToProject={addQuoteToProject}
                                    clients={clients} products={products} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient}
@@ -2848,6 +3335,17 @@ export default function App() {
                                    saveProduct={saveProduct} deleteProduct={deleteProduct}
                                    categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory}
                                    suppliers={suppliers} />}
+          {view==="projects"   && <ProjectsView
+                                   projects={projects} projectQuotes={projectQuotes}
+                                   projectPayments={projectPayments}
+                                   quotes={quotes} clients={clients}
+                                   paymentRequests={paymentRequests}
+                                   createProject={createProject}
+                                   addQuoteToProject={addQuoteToProject}
+                                   saveProjectPayment={saveProjectPayment}
+                                   deleteProjectPayment={deleteProjectPayment}
+                                   updateProjectStatus={updateProjectStatus}
+                                   config={config} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
           {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes}
