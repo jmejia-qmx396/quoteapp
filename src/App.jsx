@@ -2966,7 +2966,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
   const openAddPayment = () => {
     setNewPay({ isNew:true, projectId:selected, concept:"", amount:0,
-                date: new Date().toISOString().split("T")[0], paymentRequestId:null });
+                date: new Date().toISOString().split("T")[0], paymentRequestId:null, paymentType:"empresa" });
     setPayModal(true);
   };
 
@@ -3026,15 +3026,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         </table>
         ${pps.length ? `
         <table>
-          <thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Valor</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Cuenta</th><th style="text-align:right">Valor</th></tr></thead>
           <tbody>
             ${pps.map(p=>`<tr>
               <td>${p.date||""}</td>
               <td>${p.concept||""}</td>
+              <td style="font-size:10px;color:#64748b">${(p.payment_type||"empresa")==="personal"?"Personal":"Empresa"}</td>
               <td style="text-align:right">${fmtCOP(p.amount||0)}</td>
             </tr>`).join("")}
             <tr class="total-row">
-              <td colspan="2" style="text-align:right">Total Pagos Recibidos</td>
+              <td colspan="3" style="text-align:right">Total Pagos Recibidos</td>
               <td style="text-align:right">${fmtCOP(totalPaid)}</td>
             </tr>
           </tbody>
@@ -3042,7 +3043,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         <table>
           <tbody>
             <tr class="saldo-row">
-              <td colspan="2" style="text-align:right;padding:10px 12px">Saldo Pendiente</td>
+              <td colspan="3" style="text-align:right;padding:10px 12px">Saldo Pendiente</td>
               <td style="text-align:right;padding:10px 12px">${fmtCOP(balance)}</td>
             </tr>
           </tbody>
@@ -3052,6 +3053,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           const totalConIva = qs.reduce((s,q)=>s+(q.total||0),0) - totalSinIva;
           const personal = config.personal || {};
           const hasPersonal = !!(personal.accountHolder || personal.bankAccount);
+          // Payments split by type
+          const paidEmpresa  = pps.filter(p=>(p.payment_type||"empresa")==="empresa").reduce((s,p)=>s+(p.amount||0),0);
+          const paidPersonal = pps.filter(p=>p.payment_type==="personal").reduce((s,p)=>s+(p.amount||0),0);
+          // Pending per account
+          const pendienteEmpresa  = Math.max(0, totalConIva - paidEmpresa);
+          const pendientePersonal = Math.max(0, totalSinIva - paidPersonal);
           return `
           <div style="margin-top:16px">
             <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:6px;margin-bottom:8px">
@@ -3060,7 +3067,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   <strong>Cuenta Empresa</strong> — Consignar a nombre de: ${config.accountHolder||config.companyName||""}<br>
                   NIT: ${config.nit||""} &nbsp;|&nbsp; Cuenta ${config.bankType||"Ahorros"} ${config.bankName||""}: <strong>${config.bankAccount||""}</strong>
                 </div>
-                ${totalConIva>0 ? `<div style="text-align:right;margin-left:20px;font-size:14px;font-weight:700;color:#0d6e6e;white-space:nowrap">${fmtCOP(totalConIva)}</div>` : ""}
+                <div style="text-align:right;margin-left:20px;white-space:nowrap">
+                  <div style="font-size:14px;font-weight:700;color:#0d6e6e">${fmtCOP(pendienteEmpresa)}</div>
+                  <div style="font-size:10px;color:#64748b">saldo pendiente</div>
+                </div>
               </div>
             </div>
             ${hasPersonal ? `
@@ -3070,7 +3080,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   <strong>Cuenta Personal</strong> — Consignar a nombre de: ${personal.accountHolder||personal.companyName||""}<br>
                   CC/NIT: ${personal.nit||""} &nbsp;|&nbsp; Cuenta ${personal.bankType||"Ahorros"} ${personal.bankName||""}: <strong>${personal.bankAccount||""}</strong>
                 </div>
-                ${totalSinIva>0 ? `<div style="text-align:right;margin-left:20px;font-size:14px;font-weight:700;color:#1d4ed8;white-space:nowrap">${fmtCOP(totalSinIva)}</div>` : ""}
+                <div style="text-align:right;margin-left:20px;white-space:nowrap">
+                  <div style="font-size:14px;font-weight:700;color:#1d4ed8">${fmtCOP(pendientePersonal)}</div>
+                  <div style="font-size:10px;color:#64748b">saldo pendiente</div>
+                </div>
               </div>
             </div>` : "<!-- no personal account configured -->"}
           </div>`;
@@ -3206,7 +3219,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   {getProjPayments(proj.id).map(pp=>(
                     <tr key={pp.id}>
                       <td style={{ color:G.muted }}>{pp.date}</td>
-                      <td>{pp.concept}</td>
+                      <td>
+                        {pp.concept}
+                        <span style={{ marginLeft:6,fontSize:10,padding:"1px 6px",borderRadius:10,fontWeight:700,
+                          background:(pp.payment_type||"empresa")==="personal"?"rgba(59,130,246,.1)":"rgba(16,185,129,.1)",
+                          color:(pp.payment_type||"empresa")==="personal"?G.accent:G.success }}>
+                          {(pp.payment_type||"empresa")==="personal"?"👤 Personal":"🏢 Empresa"}
+                        </span>
+                      </td>
                       <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:600,color:G.success }}>{fmt(pp.amount||0)}</td>
                       <td>
                         <button onClick={async()=>{ const ok=await confirm("¿Eliminar pago?","Esta acción no se puede deshacer."); if(ok) deleteProjectPayment(pp.id); }}
@@ -3303,6 +3323,19 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             <Field label="Concepto" style={{ gridColumn:"1/-1" }}>
               <input value={newPay.concept} onChange={e=>setNewPay({...newPay,concept:e.target.value})}
                 placeholder="Ej: Anticipo 1, Pago parcial…" />
+            </Field>
+            <Field label="Tipo de Cuenta" style={{ gridColumn:"1/-1" }}>
+              <div style={{ display:"flex",gap:10 }}>
+                {["empresa","personal"].map(t=>(
+                  <button key={t} onClick={()=>setNewPay({...newPay,paymentType:t})}
+                    style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,fontWeight:600,fontSize:12,
+                             background:(newPay.paymentType||"empresa")===t?`rgba(59,130,246,.2)`:"transparent",
+                             border:`1px solid ${(newPay.paymentType||"empresa")===t?G.accent:G.border}`,
+                             color:(newPay.paymentType||"empresa")===t?G.accent:G.muted }}>
+                    {t==="empresa"?"🏢 Empresa (con IVA)":"👤 Personal (sin IVA)"}
+                  </button>
+                ))}
+              </div>
             </Field>
             <Field label="Vincular Cuenta de Cobro (opcional)" style={{ gridColumn:"1/-1" }}>
               <select value={newPay.paymentRequestId||""} onChange={e=>setNewPay({...newPay,paymentRequestId:e.target.value||null})}>
@@ -3610,7 +3643,8 @@ export default function App() {
 
   const saveProjectPayment = async (pp) => {
     const row = { project_id: pp.projectId, payment_request_id: pp.paymentRequestId||null,
-                  concept: pp.concept, amount: pp.amount||0, date: pp.date, created_by: user.id };
+                  concept: pp.concept, amount: pp.amount||0, date: pp.date,
+                  payment_type: pp.paymentType||'empresa', created_by: user.id };
     if (pp.isNew) {
       const { data } = await sb.from("project_payments").insert(row).select().single();
       if (data) setProjectPayments(pps => [data, ...pps]);
