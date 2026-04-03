@@ -166,6 +166,43 @@ const NumInput = ({ value, onChange, placeholder="", style={} }) => {
   );
 };
 
+// ── ConfirmDialog ────────────────────────────────────────────────
+const ConfirmDialog = ({ message, detail, onConfirm, onCancel, danger=true }) => (
+  <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.7)",
+                display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20 }}>
+    <div style={{ background:G.card,border:`1px solid ${danger?G.danger:G.border}`,
+                  borderRadius:12,padding:28,maxWidth:420,width:"100%",textAlign:"center" }}>
+      <div style={{ fontSize:36,marginBottom:12 }}>{danger?"⚠️":"❓"}</div>
+      <p style={{ fontWeight:700,fontSize:16,marginBottom:8 }}>{message}</p>
+      {detail && <p style={{ color:G.muted,fontSize:13,marginBottom:20 }}>{detail}</p>}
+      {!detail && <div style={{ marginBottom:20 }} />}
+      <div style={{ display:"flex",gap:10,justifyContent:"center" }}>
+        <Btn variant="ghost" onClick={onCancel}>Cancelar</Btn>
+        <Btn variant={danger?"danger":"primary"} onClick={onConfirm}>
+          {danger?"Sí, eliminar":"Confirmar"}
+        </Btn>
+      </div>
+    </div>
+  </div>
+);
+
+// ── useConfirm hook ───────────────────────────────────────────────
+function useConfirm() {
+  const [state, setState] = useState(null);
+  const confirm = (message, detail) => new Promise(resolve => {
+    setState({ message, detail, resolve });
+  });
+  const dialog = state ? (
+    <ConfirmDialog
+      message={state.message}
+      detail={state.detail}
+      onConfirm={() => { state.resolve(true);  setState(null); }}
+      onCancel={() =>  { state.resolve(false); setState(null); }}
+    />
+  ) : null;
+  return { confirm, dialog };
+}
+
 // ── Componentes base ──────────────────────────────────────────────
 const Btn = ({ children, onClick, variant = "primary", size = "md", style = {} }) => {
   const colors = {
@@ -452,6 +489,7 @@ const recalc = (q) => {
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
 const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [addToProjectQuote, setAddToProjectQuote] = useState(null);
   const [approvedQuoteForProject, setApprovedQuoteForProject] = useState(null);
@@ -538,7 +576,8 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
   };
 
   const remove = async (id) => {
-    if (window.confirm("¿Eliminar cotización?")) await deleteQuote(id);
+    const ok = await confirm("¿Eliminar cotización?", "Esta acción no se puede deshacer.");
+    if (ok) await deleteQuote(id);
   };
 
   const filtered = quotes.filter(q => {
@@ -710,6 +749,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
         </Modal>
       )}
 
+      {confirmDialog}
       {addToProjectQuote && (
         <Modal title={`Agregar #${addToProjectQuote.number} a Proyecto`} onClose={()=>setAddToProjectQuote(null)}>
           <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
@@ -1437,6 +1477,7 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
 
 // ── CLIENTES ─────────────────────────────────────────────────────
 const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuoteForClient }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [modal, setModal] = useState(false);
   const [cur, setCur] = useState(null);
   const [search, setSearch] = useState("");
@@ -1447,7 +1488,8 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
   const isExisting = cur && clients.some(c=>c.id===cur.id);
   const save = async () => { await saveClient(cur); setModal(false); };
   const remove = async (id) => {
-    if(window.confirm("¿Eliminar cliente?")) await deleteClient(id);
+    const ok = await confirm("¿Eliminar cliente?", "Esta acción no se puede deshacer.");
+    if (ok) await deleteClient(id);
   };
 
   const srch = search.toLowerCase();
@@ -1503,6 +1545,7 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
         </table>
       </Card></div>
 
+      {confirmDialog}
       {modal && cur && (
         <Modal title={isExisting?"Editar Cliente":"Nuevo Cliente"} onClose={()=>setModal(false)}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
@@ -1579,7 +1622,8 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
     setModal(false);
   };
   const remove = async (id) => {
-    if(window.confirm("¿Eliminar producto?")) await deleteProduct(id);
+    const ok = await confirm("¿Eliminar producto?", "Esta acción no se puede deshacer.");
+    if (ok) await deleteProduct(id);
   };
 
   const filt = products.filter(p=>{
@@ -1693,6 +1737,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
         {!filt.length && <div style={{ textAlign:"center",color:G.muted,padding:30 }}>Sin productos.</div>}
       </div>
 
+      {confirmDialog}
       {modal && cur && (
         <Modal title={isExisting?"Editar Producto":"Nuevo Producto"} onClose={()=>setModal(false)}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
@@ -2370,6 +2415,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 
 // ── PAYMENT REQUESTS VIEW ─────────────────────────────────────────
 const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
 
@@ -2415,7 +2461,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
                     <td>
                       <div style={{ display:"flex",gap:6 }}>
                         <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
-                        <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm("¿Eliminar?")) deletePaymentRequest(p.id); }}>✕</Btn>
+                        <Btn size="sm" variant="danger" onClick={async()=>{ const ok=await confirm("¿Eliminar cuenta de cobro?","Esta acción no se puede deshacer."); if(ok) deletePaymentRequest(p.id); }}>✕</Btn>
                       </div>
                     </td>
                   </tr>
@@ -2427,6 +2473,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
         </Card>
       </div>
 
+      {confirmDialog}
       {modal && (
         <PrintPaymentRequest pr={modal} config={config} onClose={()=>setModal(null)} />
       )}
@@ -2517,6 +2564,7 @@ const PrintPaymentRequest = ({ pr, config, onClose }) => {
 
 // ── PROVEEDORES ──────────────────────────────────────────────────
 const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [newName, setNewName] = useState("");
   const [editId, setEditId]   = useState(null);
   const [editName, setEditName] = useState("");
@@ -2536,7 +2584,8 @@ const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
     setEditId(null);
   };
   const remove = async (id) => {
-    if (window.confirm("¿Eliminar proveedor?")) await deleteSupplier(id);
+    const ok = await confirm("¿Eliminar proveedor?", "Esta acción no se puede deshacer.");
+    if (ok) await deleteSupplier(id);
   };
 
   return (
@@ -2557,6 +2606,7 @@ const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
         </div>
       </Card>
       <Card style={{ padding:0,overflow:"hidden" }}>
+        {confirmDialog}
         {suppliers.map((s,idx) => (
           <div key={s.id} style={{ display:"flex",alignItems:"center",gap:10,
                                     padding:"12px 16px",borderBottom:idx<suppliers.length-1?`1px solid ${G.border}`:"none" }}>
@@ -2589,6 +2639,7 @@ const SuppliersView = ({ suppliers, saveSupplier, deleteSupplier }) => {
 
 // ── CATEGORÍAS ───────────────────────────────────────────────────
 const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [newName, setNewName] = useState("");
   const [editId, setEditId]   = useState(null);
   const [editName, setEditName] = useState("");
@@ -2611,8 +2662,8 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   };
 
   const remove = async (id) => {
-    if (window.confirm("¿Eliminar categoría? Los productos con esta categoría no se verán afectados."))
-      await deleteCategory(id);
+    const ok = await confirm("¿Eliminar categoría?", "Los productos con esta categoría no se verán afectados.");
+    if (ok) await deleteCategory(id);
   };
 
   return (
@@ -2638,6 +2689,7 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 
       {/* Lista de categorías */}
       <Card style={{ padding:0,overflow:"hidden" }}>
+        {confirmDialog}
         {categories.map((cat,idx) => (
           <div key={cat.id} style={{ display:"flex",alignItems:"center",gap:10,
                                       padding:"12px 16px",borderBottom: idx<categories.length-1?`1px solid ${G.border}`:"none" }}>
@@ -2867,13 +2919,23 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   </>}
                   <Btn size="sm" variant="primary" onClick={printStatement}>🖨️ Estado de Cuenta</Btn>
                   {proj.status==="Activo"
-                    ? <Btn size="sm" variant="ghost" onClick={()=>{
+                    ? <Btn size="sm" variant="ghost" onClick={async()=>{
                         const { balance } = calcTotals(proj.id);
-                        if (balance > 0) { alert(`No se puede cerrar. Saldo pendiente: ${fmt(balance)}`); return; }
-                        if (window.confirm("¿Cerrar este proyecto?")) updateProjectStatus(proj.id,"Cerrado");
+                        if (balance > 0) { await confirm(`Saldo pendiente: ${fmt(balance)}`, "El proyecto no se puede cerrar hasta que el saldo sea cero."); return; }
+                        const ok = await confirm("¿Cerrar este proyecto?", "No podrás agregar más cotizaciones ni pagos.");
+                        if (ok) updateProjectStatus(proj.id,"Cerrado");
                       }}>🔒 Cerrar</Btn>
                     : <Btn size="sm" variant="outline" onClick={()=>updateProjectStatus(proj.id,"Activo")}>🔓 Reabrir</Btn>
                   }
+                  <Btn size="sm" variant="danger" onClick={async()=>{
+                    const ok = await confirm("¿Eliminar proyecto?", "Se eliminarán también todas las asociaciones de cotizaciones y pagos.");
+                    if (ok) {
+                      await sb.from("project_payments").delete().eq("project_id", proj.id);
+                      await sb.from("project_quotes").delete().eq("project_id", proj.id);
+                      await sb.from("projects").delete().eq("id", proj.id);
+                      setSelected(null);
+                    }
+                  }}>🗑️</Btn>
                 </div>
               </div>
             </Card>
@@ -2927,7 +2989,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       <td>{pp.concept}</td>
                       <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:600,color:G.success }}>{fmt(pp.amount||0)}</td>
                       <td>
-                        <button onClick={()=>{ if(window.confirm("¿Eliminar pago?")) deleteProjectPayment(pp.id); }}
+                        <button onClick={async()=>{ const ok=await confirm("¿Eliminar pago?","Esta acción no se puede deshacer."); if(ok) deleteProjectPayment(pp.id); }}
                           style={{ background:"none",border:"none",color:G.danger,cursor:"pointer",fontSize:16 }}>✕</button>
                       </td>
                     </tr>
@@ -3007,6 +3069,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         </Modal>
       )}
 
+      {confirmDialog}
       {/* Modal: agregar pago */}
       {payModal && newPay && (
         <Modal title="Registrar Pago" onClose={()=>setPayModal(false)}>
