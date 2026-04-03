@@ -2034,8 +2034,10 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
   const set = (k,v) => setPr(p => ({...p, [k]:v}));
 
   const switchProfile = (prof) => {
+    const data = getProfileData(prof);
+    console.log("Switching to profile:", prof, "data:", data, "config.personal:", config.personal);
     setProfile(prof);
-    setPr(p => ({ ...p, ...getProfileData(prof) }));
+    setPr(p => ({ ...p, ...data }));
   };
 
   const updateAmount = (pct) => {
