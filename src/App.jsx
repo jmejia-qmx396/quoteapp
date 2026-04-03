@@ -77,8 +77,8 @@ const normalizeQuote = (q) => {
   isLatest:      q.is_latest      !== false,
   profile:       q.profile        || 'empresa',
   };
-  // If taxAmt or subtotalConIva missing, recalculate
-  if (!base.taxAmt && base.items.length) return recalc(base);
+  // Always recalc to ensure subtotalConIva/subtotalSinIva are correct
+  if (base.items.length) return recalc(base);
   return base;
 };
 
@@ -1264,9 +1264,9 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
           {(() => {
             const hasSinIva = (quote.subtotalSinIva||0) > 0;
             const hasConIva = (quote.subtotalConIva||0) > 0;
+            const subConIva = hasConIva ? quote.subtotalConIva : ((quote.subtotal||0)-(quote.totalDisc||0)-(quote.subtotalSinIva||0));
             const rows = [
-              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
-              ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
+              ...(!hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : [["Subtotal con IVA", fmt(subConIva), G.text]]),
               ...(quote.totalDisc>0 ? [[`- Descuentos`, `-${fmt(quote.totalDisc||0)}`, G.danger]] : []),
               ...(quote.taxAmt>0 ? [[`+ IVA`, fmt(quote.taxAmt||0), G.text]] : []),
               ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
@@ -1637,9 +1637,9 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
           {(() => {
             const hasSinIva = (quote.subtotalSinIva||0) > 0;
             const hasConIva = (quote.subtotalConIva||0) > 0;
+            const subConIva2 = hasConIva ? quote.subtotalConIva : ((quote.subtotal||0)-(quote.totalDisc||0)-(quote.subtotalSinIva||0));
             const rows = [
-              ...(!hasConIva && !hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : []),
-              ...(hasConIva ? [["Subtotal con IVA", fmt(quote.subtotalConIva||0), G.text]] : []),
+              ...(!hasSinIva ? [["Subtotal", fmt(quote.subtotal||0), G.text]] : [["Subtotal con IVA", fmt(subConIva2), G.text]]),
               ...(quote.totalDisc>0?[[`- Descuentos`,`-${fmt(quote.totalDisc||0)}`,G.danger]]:[]),
               ...(quote.taxAmt>0?[[`+ IVA`,fmt(quote.taxAmt||0),G.text]]:[]),
               ...(hasSinIva ? [["Subtotal sin IVA", fmt(quote.subtotalSinIva||0), G.muted]] : []),
