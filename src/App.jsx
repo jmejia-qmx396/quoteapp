@@ -903,10 +903,41 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
            onClose={onClose} width={1400}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20 }}>
         <Field label="Cliente">
-          <select value={String(quote.clientId||"")} onChange={e=>selectClient(e.target.value)}>
-            <option value="">— Seleccionar cliente —</option>
-            {clients.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
-          </select>
+          <div style={{ position:"relative" }}>
+            <input
+              value={clientSearch !== undefined ? clientSearch : (quote.clientName||"")}
+              onChange={e => {
+                setClientSearch(e.target.value);
+                // If cleared, reset client
+                if (!e.target.value) setQuote(q=>({...q,clientId:null,clientName:"",clientContact:"",clientEmail:""}));
+              }}
+              onFocus={() => setClientSearch(quote.clientName||"")}
+              onBlur={() => setTimeout(()=>setClientSearch(undefined), 200)}
+              placeholder="Buscar cliente…"
+            />
+            {clientSearch !== undefined && (
+              <div style={{ position:"absolute",top:"100%",left:0,right:0,zIndex:100,
+                            background:G.card,border:`1px solid ${G.accent}`,borderRadius:6,
+                            maxHeight:200,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,.4)" }}>
+                {clients
+                  .filter(c=>(c.name||"").toLowerCase().includes((clientSearch||"").toLowerCase()))
+                  .map(c=>(
+                    <div key={c.id} onMouseDown={()=>{ selectClient(String(c.id)); setClientSearch(undefined); }}
+                      style={{ padding:"8px 12px",cursor:"pointer",fontSize:13,
+                               borderBottom:`1px solid ${G.border}` }}
+                      onMouseOver={e=>e.currentTarget.style.background="rgba(59,130,246,.1)"}
+                      onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                      <span style={{ fontWeight:600 }}>{c.name}</span>
+                      {c.contact && <span style={{ color:G.muted,fontSize:11,marginLeft:8 }}>{c.contact}</span>}
+                    </div>
+                  ))
+                }
+                {!clients.filter(c=>(c.name||"").toLowerCase().includes((clientSearch||"").toLowerCase())).length && (
+                  <div style={{ padding:"8px 12px",color:G.muted,fontSize:12 }}>Sin resultados</div>
+                )}
+              </div>
+            )}
+          </div>
         </Field>
         <Field label="Estado">
           <select value={quote.status} onChange={e=>set("status",e.target.value)}>
