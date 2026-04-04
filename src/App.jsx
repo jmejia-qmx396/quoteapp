@@ -155,12 +155,13 @@ const NumInput = ({ value, onChange, placeholder="", style={} }) => {
       value={display}
       onFocus={() => {
         setFocused(true);
-        // Show raw number without formatting, clear if zero
-        setDisplay(value && value !== 0 ? String(value) : "");
+        // Clear if zero, otherwise show raw number
+        setDisplay((!value || value === 0) ? "" : String(value).replace(".", ","));
       }}
       onBlur={() => {
         setFocused(false);
-        const raw = String(display).replace(/\./g,"").replace(/,/g,".").replace(/[^0-9.]/g,"");
+        // Remove thousands separators (.) and convert decimal comma to dot
+        const raw = String(display).replace(/[.]/g,"").replace(/[,]/g,".").replace(/[^0-9.]/g,"");
         const num = parseFloat(raw)||0;
         setDisplay(num ? fmtN(num) : "");
         onChange(num);
@@ -408,19 +409,19 @@ const Dashboard = ({ quotes, clients, products }) => {
       {/* KPIs del período */}
       <div style={{ display:"flex",gap:16,marginBottom:24,flexWrap:"wrap" }}>
         <StatCard label="Aprobadas — Valor" value={fmt(approvedTotal)} icon="✅" color={G.success} />
-        <StatCard label="Aprobadas — Cant." value={approvedInRange.length} icon="🏆" color={G.success} />
-        <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)} icon="⏳" color={G.warn} />
-        <StatCard label="Clientes Totales" value={clients.length} icon="👥" color={G.accent} />
         <Card style={{ flex:1 }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
             <div>
               <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>📈 Utilidad Presupuestada</p>
               <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(utilidad)}</p>
-              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>GM {gmPct}% sobre aprobadas</p>
+              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>GM {gmPct}%</p>
             </div>
             <span style={{ fontSize:22,opacity:.5 }}>💰</span>
           </div>
         </Card>
+        <StatCard label="Aprobadas — Cant." value={approvedInRange.length} icon="🏆" color={G.success} />
+        <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)} icon="⏳" color={G.warn} />
+        <StatCard label="Clientes Totales" value={clients.length} icon="👥" color={G.accent} />
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20 }}>
