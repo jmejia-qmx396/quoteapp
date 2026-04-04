@@ -387,7 +387,9 @@ const Dashboard = ({ quotes, clients, products }) => {
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
-          <p style={{ color:G.muted,fontSize:13 }}>Resumen del período seleccionado</p>
+          <p style={{ color:G.muted,fontSize:13 }}>Resumen del período seleccionado
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.2</span>
+          </p>
         </div>
         {/* Filtro de fechas */}
         <Card style={{ padding:"10px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap" }}>
