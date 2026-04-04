@@ -140,33 +140,36 @@ tr:hover td{background:rgba(59,130,246,.04)}
 
 // ── NumInput: input numérico con separadores de miles ───────────
 const NumInput = ({ value, onChange, placeholder="", style={} }) => {
-  const fmt = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:2}).format(n) : "";
-  const [display, setDisplay] = useState(fmt(value));
+  const fmtN = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:2}).format(n) : "";
+  const [display, setDisplay] = useState(() => value ? fmtN(value) : "");
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
-    if (!focused) setDisplay(fmt(value));
+    if (!focused) setDisplay(value ? fmtN(value) : "");
   }, [value, focused]);
 
   return (
     <input
       type="text"
       inputMode="numeric"
-      value={focused ? display : fmt(value)}
-      onFocus={() => { setFocused(true); setDisplay(value ? String(value) : ""); }}
+      value={display}
+      onFocus={() => {
+        setFocused(true);
+        // Show raw number without formatting, clear if zero
+        setDisplay(value && value !== 0 ? String(value) : "");
+      }}
       onBlur={() => {
         setFocused(false);
-        const raw = String(display).replace(/[.]/g,"").replace(/[,]/g,".").replace(/[^0-9.]/g,"");
+        const raw = String(display).replace(/\./g,"").replace(/,/g,".").replace(/[^0-9.]/g,"");
         const num = parseFloat(raw)||0;
-        setDisplay(fmt(num));
+        setDisplay(num ? fmtN(num) : "");
         onChange(num);
       }}
       onChange={e => {
-        // Allow typing: digits, dots, commas
         const raw = e.target.value.replace(/[^0-9.,]/g,"");
         setDisplay(raw);
       }}
-      placeholder={placeholder}
+      placeholder={placeholder||"0"}
       style={{ padding:"4px 8px",width:"100%",fontFamily:"'JetBrains Mono',monospace",
                textAlign:"right",...style }}
     />
@@ -722,7 +725,9 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
           onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config}
           onSaveProduct={async (p) => {
-            const tempId = Date.now();
+            // Check for duplicate name before inserting
+            const exists = products.find(x=>x.name.toLowerCase()===p.name.toLowerCase());
+            if (exists) { alert(`El producto "${p.name}" ya existe en el catálogo.`); return exists; }
             const row = { sku:p.sku, name:p.name, category:p.category, currency:p.currency||"COP",
                           cost:p.cost||0, margin:p.margin||30, price:p.price||0, unit:p.unit||"pza",
                           tax:p.tax||19, image_url:"" };
@@ -1869,10 +1874,17 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
   };
   const openEdit = (p) => { clearDraft(); setCur({...p}); setModal(true); };
   const isExisting = cur && products.some(p=>p.id===cur.id);
+  const [saving, setSaving] = useState(false);
   const save = async () => {
-    await saveProduct(cur);
-    clearDraft();
-    setModal(false);
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveProduct(cur);
+      clearDraft();
+      setModal(false);
+    } finally {
+      setSaving(false);
+    }
   };
   const remove = async (id) => {
     const ok = await confirm("¿Eliminar producto?", "Esta acción no se puede deshacer.");
