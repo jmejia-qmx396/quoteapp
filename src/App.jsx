@@ -908,12 +908,16 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               value={clientSearch !== undefined ? clientSearch : (quote.clientName||"")}
               onChange={e => {
                 setClientSearch(e.target.value);
-                // If cleared, reset client
                 if (!e.target.value) setQuote(q=>({...q,clientId:null,clientName:"",clientContact:"",clientEmail:""}));
               }}
-              onFocus={() => setClientSearch(quote.clientName||"")}
-              onBlur={() => setTimeout(()=>setClientSearch(undefined), 200)}
-              placeholder="Buscar cliente…"
+              onFocus={e => { setClientSearch(quote.clientName||""); e.target.select(); }}
+              onBlur={() => {
+                setTimeout(()=>{
+                  setClientSearch(undefined);
+                }, 200);
+              }}
+              placeholder="Buscar o escribir cliente…"
+              autoComplete="off"
             />
             {clientSearch !== undefined && (
               <div style={{ position:"absolute",top:"100%",left:0,right:0,zIndex:100,
