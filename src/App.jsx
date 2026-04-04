@@ -837,6 +837,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const [prodSearch, setProdSearch] = useState("");
   const [uploading, setUploading]   = useState(null);
   const [dragOver, setDragOver]     = useState(null); // id of item being dragged over
+  const [clientSearch, setClientSearch] = useState(undefined);
   const dragItem = useRef(null); // id of item being dragged
   const [newProdModal, setNewProdModal] = useState(false);
   const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
