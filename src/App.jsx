@@ -927,7 +927,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               placeholder="Buscar o escribir cliente…"
               autoComplete="off"
             />
-            {clientSearch !== undefined && (
+            {clientSearch !== undefined && clientSearch.length > 0 && (
               <div style={{ position:"absolute",top:"100%",left:0,right:0,zIndex:100,
                             background:G.card,border:`1px solid ${G.accent}`,borderRadius:6,
                             maxHeight:200,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,.4)" }}>
