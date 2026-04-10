@@ -566,20 +566,16 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
   };
 
   const openNew = () => {
-    const draft = localStorage.getItem("qa_draft_quote");
-    if (draft) { try { setCurrent(JSON.parse(draft)); } catch { setCurrent(null); } }
-    else {
-      const num = quoteCounter++;
-      setCurrent(recalc({
-        id: Date.now(), number: num,
-        date: today(), validUntil: addDays(today(), 30),
-        clientId: null,
-        clientName: "",
-        clientContact: "",
-        clientEmail: "",
-        status: "Pendiente", notes: config?.defaultNotes||"", discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
-      }));
-    }
+    // Always start fresh — clear any existing draft
+    clearQuoteDraft();
+    const num = quoteCounter++;
+    setCurrent(recalc({
+      id: Date.now(), number: num,
+      date: today(), validUntil: addDays(today(), 30),
+      clientId: null, clientName: "", clientContact: "", clientEmail: "",
+      status: "Pendiente", notes: config?.defaultNotes||"",
+      discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
+    }));
     setModal("new");
   };
 
