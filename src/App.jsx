@@ -917,10 +917,14 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
               onFocus={e => { setClientSearch(quote.clientName||""); e.target.select(); }}
               onBlur={() => {
                 setTimeout(()=>{
+                  // Keep whatever was typed as clientName even if not from list
+                  if (clientSearch !== undefined) {
+                    setQuote(q => ({...q, clientName: clientSearch||q.clientName}));
+                  }
                   setClientSearch(undefined);
                 }, 200);
               }}
-              placeholder="Buscar o escribir cliente…"
+              placeholder="Buscar o escribir nombre…"
               autoComplete="off"
             />
             {clientSearch !== undefined && clientSearch.length > 0 && (
@@ -941,7 +945,13 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                   ))
                 }
                 {!clients.filter(c=>(c.name||"").toLowerCase().includes((clientSearch||"").toLowerCase())).length && (
-                  <div style={{ padding:"8px 12px",color:G.muted,fontSize:12 }}>Sin resultados</div>
+                  <div style={{ padding:"8px 12px",color:G.muted,fontSize:12 }}>
+                    Sin resultados —{" "}
+                    <span style={{ color:G.accent,cursor:"pointer" }}
+                      onMouseDown={()=>{ setQuote(q=>({...q,clientName:clientSearch,clientId:null,clientContact:"",clientEmail:""})); setClientSearch(undefined); }}>
+                      usar "{clientSearch}" como cliente ocasional
+                    </span>
+                  </div>
                 )}
               </div>
             )}
