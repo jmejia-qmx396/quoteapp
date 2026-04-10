@@ -569,15 +569,14 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     const draft = localStorage.getItem("qa_draft_quote");
     if (draft) { try { setCurrent(JSON.parse(draft)); } catch { setCurrent(null); } }
     else {
-      const c0 = clients[0];
       const num = quoteCounter++;
       setCurrent(recalc({
         id: Date.now(), number: num,
         date: today(), validUntil: addDays(today(), 30),
-        clientId: c0?.id || null,
-        clientName: c0?.name || "",
-        clientContact: c0?.contact || "",
-        clientEmail: c0?.email || "",
+        clientId: null,
+        clientName: "",
+        clientContact: "",
+        clientEmail: "",
         status: "Pendiente", notes: config?.defaultNotes||"", discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
       }));
     }
