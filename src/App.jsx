@@ -965,8 +965,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         </Field>
         <Field label="TRM (USD → COP)" style={{ gridColumn:"1/-1" }}>
           <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-            <input type="number" min={1} value={quote.trm||4200}
-              onChange={e=>setQuote(q=>recalc({...q,trm:Number(e.target.value)}))}
+            <input type="number" min={1}
+              value={quote.trm===0||quote.trm?""+quote.trm:"4200"}
+              onChange={e=>{
+                const val = e.target.value;
+                setQuote(q=>recalc({...q,trm:val===""?0:Number(val)}));
+              }}
               style={{ maxWidth:180 }} />
             <div style={{ background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.2)",
                           borderRadius:6,padding:"7px 14px",fontSize:12,color:G.muted,flex:1 }}>
