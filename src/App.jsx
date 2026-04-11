@@ -588,6 +588,26 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     setModal("new");
   };
 
+  const duplicateQuote = (q) => {
+    const num = quoteCounter++;
+    const copy = recalc({
+      id: Date.now(), number: num,
+      date: today(), validUntil: addDays(today(), 30),
+      clientId: q.clientId||q.client_id||null,
+      clientName: q.clientName||q.client_name||"",
+      clientContact: q.clientContact||q.client_contact||"",
+      clientEmail: q.clientEmail||q.client_email||"",
+      clientRut: q.clientRut||q.client_rut||"",
+      status: "Pendiente",
+      notes: q.notes||"", discount: q.discount||0,
+      trm: q.trm||4200, currency: q.currency||"COP",
+      items: JSON.parse(JSON.stringify(q.items||[])), // deep copy
+      version: 1, parent_id: null, is_latest: true,
+    });
+    setCurrent(copy);
+    setModal("new");
+  };
+
   const save = async () => {
     const wasApproved = quotes.find(q=>q.id===current.id)?.status === "Aprobada";
     await saveQuote(current);
@@ -683,6 +703,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
                         <Btn size="sm" variant="outline" onClick={()=>openRevision(q)}
                           style={{ color:G.warn,borderColor:G.warn }}>
                           {q.status==="Aprobada" ? "＋ Adicionales" : "Nueva v."}
+                        </Btn>
+                      )}
+                      {q.isLatest!==false && (
+                        <Btn size="sm" variant="ghost" onClick={()=>duplicateQuote(q)}
+                          title="Duplicar cotización" style={{ color:G.muted }}>
+                          📋
                         </Btn>
                       )}
                       {q.isLatest!==false && addQuoteToProject && (() => {
