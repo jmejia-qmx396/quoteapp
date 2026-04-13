@@ -3737,6 +3737,15 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
 // ── APP ROOT ──────────────────────────────────────────────────────
 export default function App() {
+  // Set favicon and page title
+  useEffect(() => {
+    document.title = "QuoteApp ◈";
+    const favicon = document.querySelector("link[rel*='icon']") || document.createElement("link");
+    favicon.type = "image/svg+xml";
+    favicon.rel = "icon";
+    favicon.href = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d6e6e'/><text y='.85em' font-size='75' x='8'>◈</text></svg>";
+    document.head.appendChild(favicon);
+  }, []);
   const [view, setView]         = useState("dashboard");
   const [user, setUser]         = useState(null);
   const [profile, setProfile]   = useState(null);
