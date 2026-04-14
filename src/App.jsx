@@ -608,19 +608,30 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     setModal("new");
   };
 
+  const [saving, setSaving] = useState(false);
   const save = async (keepOpen=false) => {
-    const wasApproved = quotes.find(q=>q.id===current.id)?.status === "Aprobada";
-    await saveQuote(current);
-    if (!keepOpen) {
-      clearQuoteDraft();
-      setModal(null);
-      if (current.status === "Aprobada" && !wasApproved) {
-        const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
-        if (!alreadyInProject) {
-          setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
-          setApprovedQuoteForProject(current);
+    if (saving) return;
+    setSaving(true);
+    try {
+      const wasApproved = quotes.find(q=>q.id===current.id)?.status === "Aprobada";
+      const savedQuote = await saveQuote(current);
+      // After first save, update current with real DB id so next save is an UPDATE not INSERT
+      if (savedQuote && current.id !== savedQuote.id) {
+        setCurrent(c => ({...c, id: savedQuote.id}));
+      }
+      if (!keepOpen) {
+        clearQuoteDraft();
+        setModal(null);
+        if (current.status === "Aprobada" && !wasApproved) {
+          const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
+          if (!alreadyInProject) {
+            setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
+            setApprovedQuoteForProject(current);
+          }
         }
       }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1398,13 +1409,25 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 
       <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14 }}>
         <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
-        <Btn variant="outline" onClick={async()=>{ await onSave(true); }}
-          style={{ color:G.success,borderColor:G.success }}>
+        <button onClick={async()=>{ await onSave(true); }}
+          style={{ padding:"7px 18px",borderRadius:6,cursor:"pointer",fontFamily:G.font,fontSize:13,
+                   fontWeight:600,border:`2px solid ${G.success}`,background:"transparent",
+                   color:G.success,transition:"all .15s" }}
+          onMouseOver={e=>{ e.currentTarget.style.background=G.success; e.currentTarget.style.color="#fff"; e.currentTarget.style.transform="scale(1.03)"; }}
+          onMouseOut={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.color=G.success; e.currentTarget.style.transform="scale(1)"; }}
+          onMouseDown={e=>e.currentTarget.style.transform="scale(0.96)"}
+          onMouseUp={e=>e.currentTarget.style.transform="scale(1.03)"}>
           💾 Guardar
-        </Btn>
-        <Btn variant="success" onClick={()=>onSave(false)}>
+        </button>
+        <button onClick={()=>onSave(false)}
+          style={{ padding:"7px 18px",borderRadius:6,cursor:"pointer",fontFamily:G.font,fontSize:13,
+                   fontWeight:600,border:"none",background:G.success,color:"#fff",transition:"all .15s" }}
+          onMouseOver={e=>{ e.currentTarget.style.background="#34d399"; e.currentTarget.style.transform="scale(1.03)"; }}
+          onMouseOut={e=>{ e.currentTarget.style.background=G.success; e.currentTarget.style.transform="scale(1)"; }}
+          onMouseDown={e=>e.currentTarget.style.transform="scale(0.96)"}
+          onMouseUp={e=>e.currentTarget.style.transform="scale(1.03)"}>
           ✅ Guardar y Cerrar
-        </Btn>
+        </button>
       </div>
 
       {/* Modal editar descripción */}
@@ -3894,6 +3917,7 @@ export default function App() {
 
   // ── CRUD: Quotes ─────────────────────────────────────────────
   const saveQuote = async (q) => {
+    let savedData = null;
     const row = { number:q.number, date:q.date, valid_until:q.validUntil, profile:q.profile||'empresa',
       client_id:q.clientId||null, client_name:q.clientName, client_contact:q.clientContact,
       client_email:q.clientEmail, client_rut:q.clientRut||"", status:q.status, notes:q.notes, discount:q.discount||0,
@@ -3903,11 +3927,13 @@ export default function App() {
       version: q.version||1, parent_id: q.parent_id||null, is_latest: q.is_latest!==false };
     if (q.id && typeof q.id === "number" && q.id > 1000000000) {
       const { data } = await sb.from("quotes").insert(row).select().single();
-      if (data) setQuotes(qs => [normalizeQuote(data), ...qs.filter(x=>x.id!==q.id)]);
+      if (data) { savedData = normalizeQuote(data); setQuotes(qs => [savedData, ...qs.filter(x=>x.id!==q.id)]); }
     } else {
       await sb.from("quotes").update(row).eq("id", q.id);
       setQuotes(qs => qs.map(x => x.id===q.id ? {...q,...row} : x));
+      savedData = {...q, ...row};
     }
+    return savedData;
   };
 
   // Create a new revision of an existing quote
