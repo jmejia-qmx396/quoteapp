@@ -608,17 +608,18 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     setModal("new");
   };
 
-  const save = async () => {
+  const save = async (keepOpen=false) => {
     const wasApproved = quotes.find(q=>q.id===current.id)?.status === "Aprobada";
     await saveQuote(current);
-    clearQuoteDraft();
-    setModal(null);
-    // If newly approved, ask about project
-    if (current.status === "Aprobada" && !wasApproved) {
-      const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
-      if (!alreadyInProject) {
-        setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
-        setApprovedQuoteForProject(current);
+    if (!keepOpen) {
+      clearQuoteDraft();
+      setModal(null);
+      if (current.status === "Aprobada" && !wasApproved) {
+        const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
+        if (!alreadyInProject) {
+          setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
+          setApprovedQuoteForProject(current);
+        }
       }
     }
   };
@@ -867,6 +868,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const [uploading, setUploading]   = useState(null);
   const [dragOver, setDragOver]     = useState(null); // id of item being dragged over
   const [clientSearch, setClientSearch] = useState(undefined);
+  const [editDescModal, setEditDescModal] = useState(null); // {id, name}
   const dragItem = useRef(null); // id of item being dragged
   const [newProdModal, setNewProdModal] = useState(false);
   const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
@@ -1056,7 +1058,11 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 
       {/* Botón para agregar encabezado de sección */}
       <div style={{ display:"flex",gap:8,marginBottom:8 }}>
-        <button onClick={()=>setQuote(q=>({...q,items:[...q.items,{id:Date.now(),type:"header",name:"Nueva Sección"}]}))}
+        <button onClick={()=>{
+          const newId = Date.now();
+          setQuote(q=>({...q,items:[...q.items,{id:newId,type:"header",name:""}]}));
+          setTimeout(()=>{ const el=document.getElementById("header-"+newId); if(el) el.focus(); },50);
+        }}
           style={{ background:"rgba(59,130,246,.1)",border:`1px solid ${G.accent}`,color:G.accent,
                    borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
           + Encabezado de Sección
@@ -1070,13 +1076,14 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible",marginBottom:18 }}>
         <table style={{ minWidth:1300 }}>
-          <thead><tr>
+          <thead style={{ position:"sticky",top:0,zIndex:10 }}><tr>
             <th style={{width:24}}></th>
             <th style={{width:44}}>Img</th>
             <th style={{width:90}}>SKU</th><th>Descripción</th><th style={{width:55}}>Mon.</th>
             <th style={{width:140}}>Costo</th>
+            <th style={{width:65}}>Qty</th>
             <th style={{width:75}}>GM%</th>
-            <th style={{width:65}}>Qty</th><th style={{width:155}}>P. Unitario</th>
+            <th style={{width:155}}>P. Unitario</th>
             <th style={{width:80}}>Dto%</th>
             <th style={{width:100}}>IVA%</th>
             <th style={{width:150}}>Subtotal</th>
@@ -1116,8 +1123,9 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                                                 borderTop:`2px solid ${G.accent}` }}>
                         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                           <span style={{ color:G.accent,fontWeight:700,fontSize:13 }}>▸</span>
-                          <input value={item.name}
+                          <input id={"header-"+item.id} value={item.name}
                             onChange={e=>setQuote(q=>({...q,items:q.items.map(i=>i.id===item.id?{...i,name:e.target.value}:i)}))}
+                            placeholder="Nombre de la sección…"
                             style={{ fontWeight:700,fontSize:13,color:G.accent,background:"transparent",
                                      border:"none",outline:"none",flex:1,padding:"2px 4px" }} />
                           <button onClick={()=>setQuote(q=>({...q,items:q.items.filter(i=>i.id!==item.id)}))}
@@ -1178,6 +1186,8 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                       </td>
                       <td>
                         <input value={item.name} onChange={e=>updateItem(item.id,"name",e.target.value)}
+                          onDoubleClick={()=>setEditDescModal({id:item.id,name:item.name})}
+                          title="Doble clic para editar en ventana grande"
                           style={{ padding:"4px 8px" }} />
                       </td>
                       <td>
@@ -1196,6 +1206,13 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,cost,gmPct:gm}:i)}));
                           }} placeholder="0" />
                       </td>
+                      {/* Qty — after costo */}
+                      <td style={{ textAlign:"center" }}>
+                        <input type="number" min={1} value={item.qty}
+                          onChange={e=>updateItem(item.id,"qty",e.target.value)}
+                          style={{ padding:"4px 6px",width:"60px",textAlign:"center",
+                                   fontWeight:700,fontSize:14,color:G.text }} />
+                      </td>
                       {/* GM% — calcula precio en moneda original */}
                       <td>
                         <input type="number" min={0} max={99}
@@ -1213,12 +1230,6 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                             setQuote(q=>recalc({...q,items:q.items.map(i=>i.id===item.id?{...i,gmPct:gm,price:newPrice}:i)}));
                           }}
                           style={{ padding:"4px 8px",width:"100%" }} placeholder="%" />
-                      </td>
-                      <td style={{ textAlign:"center" }}>
-                        <input type="number" min={1} value={item.qty}
-                          onChange={e=>updateItem(item.id,"qty",e.target.value)}
-                          style={{ padding:"4px 6px",width:"60px",textAlign:"center",
-                                   fontWeight:700,fontSize:14,color:G.text }} />
                       </td>
                       <td>
                         <div style={{ display:"flex",gap:4,alignItems:"center" }}>
@@ -1387,8 +1398,36 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 
       <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14 }}>
         <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
-        <Btn variant="success" onClick={onSave}>💾 {isNew?"Crear Cotización":"Guardar Cambios"}</Btn>
+        <Btn variant="outline" onClick={async()=>{ await onSave(true); }}
+          style={{ color:G.success,borderColor:G.success }}>
+          💾 Guardar
+        </Btn>
+        <Btn variant="success" onClick={()=>onSave(false)}>
+          ✅ Guardar y Cerrar
+        </Btn>
       </div>
+
+      {/* Modal editar descripción */}
+      {editDescModal && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.8)",
+                      display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20 }}>
+          <div style={{ background:G.card,border:`1px solid ${G.accent}`,borderRadius:12,
+                        width:"100%",maxWidth:600,padding:24 }}>
+            <p style={{ fontWeight:700,fontSize:15,marginBottom:12 }}>✏️ Editar Descripción</p>
+            <textarea rows={5} autoFocus
+              value={editDescModal.name}
+              onChange={e=>setEditDescModal({...editDescModal,name:e.target.value})}
+              style={{ width:"100%",resize:"vertical",fontSize:14,padding:"8px 12px" }} />
+            <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14 }}>
+              <Btn variant="ghost" onClick={()=>setEditDescModal(null)}>Cancelar</Btn>
+              <Btn variant="success" onClick={()=>{
+                updateItem(editDescModal.id,"name",editDescModal.name);
+                setEditDescModal(null);
+              }}>✓ Aplicar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mini modal: crear producto desde cotización */}
       {newProdModal && (
@@ -1422,11 +1461,11 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                 <input value={newProd.unit} onChange={e=>setNewProd({...newProd,unit:e.target.value})} placeholder="pza, m, hr…" />
               </Field>
               <Field label="Costo">
-                <NumInput value={newProd.cost||""} onChange={v=>{
+                <NumInput value={newProd.cost||0} onChange={v=>{
                   const gm = newProd.margin||30;
                   const price = gm<100 ? calcPrice(v,gm) : 0;
                   setNewProd({...newProd,cost:v,price});
-                }} placeholder="0" />
+                }} placeholder="" />
               </Field>
               <Field label="GM%">
                 <input type="number" value={newProd.margin||30}
