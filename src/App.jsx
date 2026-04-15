@@ -3287,12 +3287,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             const trm = q.trm || 4200;
             let sinIva = 0;
             items.forEach(i => {
-              const tax = i.itemTax !== undefined ? Number(i.itemTax) : (i.tax !== undefined ? Number(i.tax) : 19);
+              // itemTax comes from recalc, tax is original field, default 19%
+              const tax = (i.itemTax !== undefined && i.itemTax !== null)
+                ? Number(i.itemTax)
+                : (i.tax !== undefined && i.tax !== null ? Number(i.tax) : 19);
               if (tax === 0) {
                 const priceCOP = i.manualPrice ? Number(i.manualPrice)
-                  : (i.currency==="USD" ? Number(i.price)*trm : Number(i.price));
+                  : (i.currency==="USD" ? Number(i.price||0)*trm : Number(i.price||0));
                 const disc = priceCOP * ((Number(i.discount)||0)/100);
-                sinIva += Number(i.qty) * (priceCOP - disc);
+                const qty = Number(i.qty||1);
+                sinIva += qty * (priceCOP - disc);
               }
             });
             const conIva = total - sinIva;
