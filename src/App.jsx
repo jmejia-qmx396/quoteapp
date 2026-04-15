@@ -3310,14 +3310,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           totalPagadoEmpresa  += pps.filter(pp=>(pp.payment_type||"empresa")==="empresa").reduce((s,pp)=>s+(pp.amount||0),0);
           totalPagadoPersonal += pps.filter(pp=>pp.payment_type==="personal").reduce((s,pp)=>s+(pp.amount||0),0);
         });
-        const saldoEmpresa  = Math.max(0, totalConIvaTotal  - totalPagadoEmpresa);
-        const saldoPersonal = Math.max(0, totalSinIvaTotal  - totalPagadoPersonal);
+        const saldoEmpresa  = totalConIvaTotal  - totalPagadoEmpresa;
+        const saldoPersonal = totalSinIvaTotal  - totalPagadoPersonal;
         const saldoTotal    = saldoEmpresa + saldoPersonal;
-        console.log("DASHBOARD DEBUG:", {
-          totalSinIvaTotal, totalConIvaTotal, totalProyecto,
-          totalPagadoEmpresa, totalPagadoPersonal,
-          saldoEmpresa, saldoPersonal
-        });
         return (
           <div style={{ display:"flex",gap:12,marginBottom:20,flexWrap:"wrap" }}>
             <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accent}` }}>
@@ -3331,7 +3326,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
                 Saldo Total Pendiente
               </p>
-              <p style={{ fontSize:22,fontWeight:700,color:G.warn }}>{fmt(saldoTotal)}</p>
+              <p style={{ fontSize:22,fontWeight:700,color:saldoTotal>0?G.warn:G.success }}>{fmt(saldoTotal)}</p>
               <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
                 Pagado: {fmt(totalPagadoEmpresa+totalPagadoPersonal)}
               </p>
@@ -3340,7 +3335,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
                 🏢 Saldo Empresa (con IVA)
               </p>
-              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(saldoEmpresa)}</p>
+              <p style={{ fontSize:22,fontWeight:700,color:saldoEmpresa>0?G.warn:G.success }}>{fmt(saldoEmpresa)}</p>
               <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
                 Total c/IVA: {fmt(totalConIvaTotal)}
               </p>
@@ -3349,7 +3344,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
                 👤 Saldo Personal (sin IVA)
               </p>
-              <p style={{ fontSize:22,fontWeight:700,color:G.accentH }}>{fmt(saldoPersonal)}</p>
+              <p style={{ fontSize:22,fontWeight:700,color:saldoPersonal>0?G.warn:G.success }}>{fmt(saldoPersonal)}</p>
               <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
                 Total s/IVA: {fmt(totalSinIvaTotal)}
               </p>
