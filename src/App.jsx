@@ -3313,6 +3313,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         const saldoEmpresa  = Math.max(0, totalConIvaTotal  - totalPagadoEmpresa);
         const saldoPersonal = Math.max(0, totalSinIvaTotal  - totalPagadoPersonal);
         const saldoTotal    = saldoEmpresa + saldoPersonal;
+        console.log("DASHBOARD DEBUG:", {
+          totalSinIvaTotal, totalConIvaTotal, totalProyecto,
+          totalPagadoEmpresa, totalPagadoPersonal,
+          saldoEmpresa, saldoPersonal
+        });
         return (
           <div style={{ display:"flex",gap:12,marginBottom:20,flexWrap:"wrap" }}>
             <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accent}` }}>
