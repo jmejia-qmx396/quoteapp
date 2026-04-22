@@ -303,83 +303,43 @@ const StatCard = ({ label, value, color = G.accent, icon }) => (
 );
 
 // ── SIDEBAR ───────────────────────────────────────────────────────
-const NAV_GROUPS = [
-  {
-    label: "OPERACIONES",
-    items: [
-      { id:"dashboard",  label:"Dashboard",     icon:"📊" },
-      { id:"quotes",     label:"Cotizaciones",  icon:"📋" },
-      { id:"projects",   label:"Proyectos",     icon:"🏗️" },
-      { id:"payments",   label:"Cuentas Cobro", icon:"🧾" },
-    ]
-  },
-  {
-    label: "ADMINISTRACIÓN",
-    items: [
-      { id:"clients",    label:"Clientes",      icon:"👥" },
-      { id:"products",   label:"Catálogo",      icon:"📦" },
-    ]
-  },
-  {
-    label: "CONFIGURACIÓN",
-    items: [
-      { id:"categories", label:"Categorías",    icon:"🏷️" },
-      { id:"suppliers",  label:"Proveedores",   icon:"🏭" },
-      { id:"config",     label:"Mi Empresa",    icon:"⚙️" },
-    ]
-  },
+const NAV = [
+  { id:"dashboard",   label:"Dashboard",    icon:"⬛" },
+  { id:"quotes",      label:"Cotizaciones", icon:"📋" },
+  { id:"projects",    label:"Proyectos",    icon:"🏗️" },
+  { id:"clients",     label:"Clientes",     icon:"👥" },
+  { id:"products",    label:"Catálogo",     icon:"📦" },
+  { id:"categories",  label:"Categorías",   icon:"🏷️" },
+  { id:"suppliers",   label:"Proveedores",  icon:"🏭" },
+  { id:"payments",    label:"Cuentas Cobro", icon:"🧾" },
+  { id:"config",      label:"Mi Empresa",   icon:"⚙️" },
 ];
-// Flat list for mobile bottom nav
-const NAV = NAV_GROUPS.flatMap(g => g.items);
 
 const Sidebar = ({ view, setView, user, logout }) => (
-  <div style={{ width:230,background:G.surface,borderRight:`1px solid ${G.border}`,
+  <div style={{ width:220,background:G.surface,borderRight:`1px solid ${G.border}`,
                 display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0,flexShrink:0 }}>
-    {/* Logo */}
-    <div style={{ padding:"20px 18px 16px",borderBottom:`1px solid ${G.border}` }}>
+    <div style={{ padding:"22px 20px",borderBottom:`1px solid ${G.border}` }}>
       <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:17,color:G.accent,letterSpacing:"-.02em" }}>
         ◈ QuoteApp
       </div>
       <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>Sistema de Cotizaciones</div>
     </div>
-
-    {/* Grouped navigation */}
-    <nav style={{ flex:1,padding:"12px 8px",overflowY:"auto" }}>
-      {NAV_GROUPS.map((group, gi) => (
-        <div key={group.label} style={{ marginBottom: gi < NAV_GROUPS.length-1 ? 8 : 0 }}>
-          {/* Group header */}
-          <div style={{ fontSize:10,fontWeight:700,color:G.muted,letterSpacing:".1em",
-                        padding:"6px 12px 4px",textTransform:"uppercase",opacity:.6 }}>
-            {group.label}
-          </div>
-          {/* Group items */}
-          {group.items.map(n => (
-            <div key={n.id} onClick={() => setView(n.id)}
-              style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
-                       borderRadius:7,marginBottom:2,cursor:"pointer",
-                       background: view === n.id ? `rgba(59,130,246,.14)` : "transparent",
-                       color: view === n.id ? G.accentH : G.muted,
-                       fontWeight: view === n.id ? 600 : 400,
-                       borderLeft: view === n.id ? `3px solid ${G.accent}` : "3px solid transparent",
-                       transition:".15s" }}>
-              <span style={{ fontSize:15 }}>{n.icon}</span>
-              <span style={{ fontSize:13 }}>{n.label}</span>
-            </div>
-          ))}
-          {/* Divider between groups */}
-          {gi < NAV_GROUPS.length-1 && (
-            <div style={{ height:1,background:G.border,margin:"8px 12px 4px" }} />
-          )}
+    <nav style={{ flex:1,padding:"14px 10px" }}>
+      {NAV.map(n => (
+        <div key={n.id} onClick={() => setView(n.id)}
+          style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
+                   borderRadius:7,marginBottom:2,cursor:"pointer",
+                   background: view === n.id ? `rgba(59,130,246,.12)` : "transparent",
+                   color: view === n.id ? G.accentH : G.muted,
+                   fontWeight: view === n.id ? 600 : 400,
+                   transition:".15s" }}>
+          <span>{n.icon}</span>{n.label}
         </div>
       ))}
     </nav>
-
-    {/* User footer */}
     <div style={{ padding:"10px 14px",borderTop:`1px solid ${G.border}`,background:G.surface }}>
-      <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",
-                    textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
-      <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",
-                                        border:"none",cursor:"pointer",padding:0 }}>
+      <div style={{ fontSize:11,color:G.muted,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</div>
+      <button onClick={logout} style={{ fontSize:11,color:G.danger,background:"none",border:"none",cursor:"pointer",padding:0 }}>
         Cerrar sesión
       </button>
     </div>
@@ -393,7 +353,7 @@ const StatusBadge = ({ s }) => {
 };
 
 // ── DASHBOARD ────────────────────────────────────────────────────
-const Dashboard = ({ quotes, clients, products, projects, projectPayments, projectQuotes, paymentRequests, setView }) => {
+const Dashboard = ({ quotes, clients, products }) => {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
   const lastOfMonth  = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split("T")[0];
@@ -401,61 +361,33 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo,   setDateTo]   = useState(lastOfMonth);
 
-  // ── Cotizaciones ────────────────────────────────────────────────
+  // Only latest versions
   const latestQuotes = quotes.filter(q => q.isLatest !== false);
-  const inRange = latestQuotes.filter(q => { const d = q.date||""; return d >= dateFrom && d <= dateTo; });
+
+  // Filter by date range
+  const inRange = latestQuotes.filter(q => {
+    const d = q.date || "";
+    return d >= dateFrom && d <= dateTo;
+  });
+
   const approvedInRange  = inRange.filter(q => q.status === "Aprobada");
   const approvedTotal    = approvedInRange.reduce((s,q) => s+(q.total||0), 0);
   const pendingInRange   = inRange.filter(q => q.status === "Pendiente" || q.status === "Enviada");
   const pendingTotal     = pendingInRange.reduce((s,q) => s+(q.total||0), 0);
-  const utilidad  = approvedInRange.reduce((s,q) => s+(q.profit||0), 0);
-  const ventaNeta = approvedInRange.reduce((s,q) => s+(q.ventaNeta||(q.total||0)-(q.taxAmt||0)), 0);
-  const gmPct     = ventaNeta > 0 ? Math.round(utilidad/ventaNeta*100) : 0;
 
-  // ── Proyectos ───────────────────────────────────────────────────
-  const activeProjects = (projects||[]).filter(p => p.status === "En ejecución" || p.status === "Activo" || !p.status || p.status === "activo");
-  const totalProjects  = (projects||[]).length;
+  // Utilidad presupuestada: de cotizaciones aprobadas en el período
+  const utilidad     = approvedInRange.reduce((s,q) => s+(q.profit||0), 0);
+  const ventaNeta    = approvedInRange.reduce((s,q) => s+(q.ventaNeta||(q.total||0)-(q.taxAmt||0)), 0);
+  const gmPct        = ventaNeta > 0 ? Math.round(utilidad/ventaNeta*100) : 0;
 
-  // Calcular saldo pendiente global: suma de totales de cotizaciones por proyecto menos pagos
-  const projectsBalance = (projects||[]).reduce((acc, proj) => {
-    const pqIds = (projectQuotes||[]).filter(pq => pq.project_id === proj.id).map(pq => pq.quote_id);
-    const projTotal = quotes.filter(q => pqIds.includes(q.id)).reduce((s,q) => s+(q.total||0), 0);
-    const paid = (projectPayments||[]).filter(pp => pp.project_id === proj.id).reduce((s,pp) => s+(pp.amount||0), 0);
-    return acc + Math.max(0, projTotal - paid);
-  }, 0);
-
-  // ── Cuentas de cobro pendientes (últimas emitidas sin pago registrado en proyectos) ──
-  const recentPaymentReqs = (paymentRequests||[]).slice(0,5);
-
-  // ── Actividad reciente (mix de cotizaciones + pagos) ───────────
-  const recentActivity = [
-    ...latestQuotes.slice(0,4).map(q => ({
-      type: "quote", date: q.date||"", label: `Cotización #${q.number}`,
-      sub: q.clientName||q.client_name||"", value: q.total||0, status: q.status,
-    })),
-    ...(projectPayments||[]).slice(0,3).map(pp => ({
-      type: "payment", date: pp.date||"", label: `Pago recibido`,
-      sub: pp.description||pp.concept||"", value: pp.amount||0, status: "Pagado",
-    })),
-  ].sort((a,b) => b.date.localeCompare(a.date)).slice(0,7);
-
-  // ── Acciones rápidas ────────────────────────────────────────────
-  const quickActions = [
-    { label:"Nueva Cotización", icon:"📋", color:G.accent,  view:"quotes"    },
-    { label:"Ver Proyectos",    icon:"🏗️", color:"#8b5cf6", view:"projects"  },
-    { label:"Cuenta de Cobro",  icon:"🧾", color:G.success,  view:"payments"  },
-    { label:"Nuevo Cliente",    icon:"👥", color:G.warn,     view:"clients"   },
-  ];
+  const monthName = now.toLocaleString("es-CO", { month:"long", year:"numeric" });
 
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
-
-      {/* ── Header ── */}
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12 }}>
         <div>
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
-          <p style={{ color:G.muted,fontSize:13 }}>
-            Resumen del período seleccionado
+          <p style={{ color:G.muted,fontSize:13 }}>Resumen del período seleccionado
             <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.2</span>
           </p>
         </div>
@@ -468,102 +400,61 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
             style={{ width:140,padding:"5px 8px",fontSize:12 }} />
           <button onClick={()=>{ setDateFrom(firstOfMonth); setDateTo(lastOfMonth); }}
-            style={{ fontSize:11,color:G.accent,background:"rgba(59,130,246,.1)",border:"none",
-                     cursor:"pointer",fontFamily:G.font,padding:"4px 8px",borderRadius:4 }}>
+            style={{ fontSize:11,color:G.accent,background:"none",border:"none",cursor:"pointer",
+                     fontFamily:G.font,padding:"4px 8px",borderRadius:4,
+                     background:"rgba(59,130,246,.1)" }}>
             Este mes
           </button>
         </Card>
       </div>
 
-      {/* ── Acciones rápidas ── */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:24 }}>
-        {quickActions.map(a => (
-          <button key={a.view} onClick={() => setView(a.view)}
-            style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:10,
-                     padding:"14px 16px",cursor:"pointer",textAlign:"left",fontFamily:G.font,
-                     transition:".15s",display:"flex",alignItems:"center",gap:10,color:G.text }}
-            onMouseOver={e => { e.currentTarget.style.borderColor = a.color; e.currentTarget.style.background = `${a.color}18`; }}
-            onMouseOut={e =>  { e.currentTarget.style.borderColor = G.border; e.currentTarget.style.background = G.card; }}>
-            <span style={{ fontSize:20 }}>{a.icon}</span>
-            <span style={{ fontSize:13,fontWeight:600,color: a.color }}>{a.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* ── KPIs Cotizaciones ── */}
-      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",
-                  letterSpacing:".08em",marginBottom:10 }}>Cotizaciones — Período</p>
-      <div style={{ display:"flex",gap:14,marginBottom:24,flexWrap:"wrap" }}>
-        <StatCard label="Aprobadas — Valor"  value={fmt(approvedTotal)}       icon="✅" color={G.success} />
-        <Card style={{ flex:1,minWidth:160 }}>
+      {/* KPIs del período */}
+      <div style={{ display:"flex",gap:16,marginBottom:24,flexWrap:"wrap" }}>
+        <StatCard label="Aprobadas — Valor" value={fmt(approvedTotal)} icon="✅" color={G.success} />
+        <Card style={{ flex:1 }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
             <div>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>Utilidad Presupuestada</p>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>📈 Utilidad Presupuestada</p>
               <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(utilidad)}</p>
               <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>GM {gmPct}%</p>
             </div>
             <span style={{ fontSize:22,opacity:.5 }}>💰</span>
           </div>
         </Card>
-        <StatCard label="Aprobadas — Cant."  value={approvedInRange.length}   icon="🏆" color={G.success} />
-        <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)}        icon="⏳" color={G.warn} />
-        <StatCard label="Clientes Totales"   value={clients.length}           icon="👥" color={G.accent} />
+        <StatCard label="Aprobadas — Cant." value={approvedInRange.length} icon="🏆" color={G.success} />
+        <StatCard label="En Proceso — Valor" value={fmt(pendingTotal)} icon="⏳" color={G.warn} />
+        <StatCard label="Clientes Totales" value={clients.length} icon="👥" color={G.accent} />
       </div>
 
-      {/* ── KPIs Proyectos ── */}
-      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",
-                  letterSpacing:".08em",marginBottom:10 }}>Proyectos — Estado Global</p>
-      <div style={{ display:"flex",gap:14,marginBottom:24,flexWrap:"wrap" }}>
-        <StatCard label="Proyectos Activos"   value={activeProjects.length}  icon="🏗️" color="#8b5cf6" />
-        <StatCard label="Total Proyectos"     value={totalProjects}           icon="📁" color={G.accent} />
-        <StatCard label="Saldo por Cobrar"    value={fmt(projectsBalance)}    icon="💵" color={G.warn}   />
-        <StatCard label="Cuentas de Cobro"    value={(paymentRequests||[]).length} icon="🧾" color={G.success} />
-      </div>
-
-      {/* ── Grilla inferior ── */}
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20 }}>
-
-        {/* Actividad reciente */}
         <Card>
-          <p style={{ fontWeight:700,marginBottom:14,fontSize:14 }}>🕐 Actividad Reciente</p>
-          {recentActivity.length === 0 && (
-            <div style={{ textAlign:"center",padding:"20px 0",color:G.muted,fontSize:13 }}>
-              Aún no hay actividad registrada.<br/>
-              <span style={{ fontSize:12 }}>Crea tu primera cotización para empezar.</span>
-            </div>
-          )}
-          {recentActivity.map((a,i) => (
-            <div key={i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                                   padding:"8px 0",borderBottom:`1px solid ${G.border}` }}>
-              <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                <span style={{ fontSize:16 }}>{a.type==="quote"?"📋":"💳"}</span>
-                <div>
-                  <div style={{ fontSize:13,fontWeight:500 }}>{a.label}</div>
-                  <div style={{ fontSize:11,color:G.muted }}>{a.sub || a.date}</div>
-                </div>
+          <p style={{ fontWeight:700,marginBottom:14 }}>Cotizaciones Recientes</p>
+          {latestQuotes.slice(0,6).map(q => (
+            <div key={q.id} style={{ display:"flex",justifyContent:"space-between",
+                                     padding:"8px 0",borderBottom:`1px solid ${G.border}` }}>
+              <div>
+                <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span>
+                <span style={{ marginLeft:8,fontSize:13 }}>{q.clientName||q.client_name}</span>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontSize:12,color: a.type==="payment"?G.success:G.text }}>{fmt(a.value)}</div>
-                {a.status && <StatusBadge s={a.status} />}
+              <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+                <span style={{ color:G.muted,fontSize:12 }}>{fmt(q.total||0)}</span>
+                <StatusBadge s={q.status} />
               </div>
             </div>
           ))}
+          {!latestQuotes.length && <p style={{ color:G.muted }}>Sin cotizaciones aún.</p>}
         </Card>
 
-        {/* Estado cotizaciones por período */}
         <Card>
-          <p style={{ fontWeight:700,marginBottom:14,fontSize:14 }}>📊 Estado — Período Seleccionado</p>
+          <p style={{ fontWeight:700,marginBottom:14 }}>Estado — Período Seleccionado</p>
           {[["Pendiente","warn"],["Enviada","blue"],["Aprobada","green"],["Rechazada","red"]].map(([s,c])=>{
             const cnt = inRange.filter(q=>q.status===s).length;
             const pct = inRange.length ? Math.round(cnt/inRange.length*100) : 0;
             const val = inRange.filter(q=>q.status===s).reduce((sum,q)=>sum+(q.total||0),0);
             return (
-              <div key={s} style={{ marginBottom:14 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
-                  <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                    <span className={`badge badge-${c}`}>{s}</span>
-                    <span style={{ fontSize:12,color:G.muted }}>({cnt})</span>
-                  </div>
+              <div key={s} style={{ marginBottom:12 }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                  <span style={{ fontSize:12 }}>{s} ({cnt})</span>
                   <span style={{ fontSize:12,color:G.muted }}>{fmt(val)}</span>
                 </div>
                 <div style={{ background:G.border,borderRadius:4,height:6 }}>
@@ -574,44 +465,8 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
               </div>
             );
           })}
-          {!inRange.length && (
-            <div style={{ textAlign:"center",padding:"20px 0",color:G.muted,fontSize:13 }}>
-              Sin cotizaciones en este período.
-            </div>
-          )}
+          {!inRange.length && <p style={{ color:G.muted,fontSize:12 }}>Sin cotizaciones en este período.</p>}
         </Card>
-
-        {/* Proyectos activos */}
-        {(projects||[]).length > 0 && (
-          <Card>
-            <p style={{ fontWeight:700,marginBottom:14,fontSize:14 }}>🏗️ Proyectos Recientes</p>
-            {(projects||[]).slice(0,5).map(proj => {
-              const pqIds = (projectQuotes||[]).filter(pq=>pq.project_id===proj.id).map(pq=>pq.quote_id);
-              const projTotal = quotes.filter(q=>pqIds.includes(q.id)).reduce((s,q)=>s+(q.total||0),0);
-              const paid = (projectPayments||[]).filter(pp=>pp.project_id===proj.id).reduce((s,pp)=>s+(pp.amount||0),0);
-              const saldo = Math.max(0, projTotal - paid);
-              const pct = projTotal > 0 ? Math.min(100, Math.round(paid/projTotal*100)) : 0;
-              return (
-                <div key={proj.id} style={{ marginBottom:14,paddingBottom:14,borderBottom:`1px solid ${G.border}` }}>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                    <span style={{ fontSize:13,fontWeight:600 }}>{proj.name}</span>
-                    <span style={{ fontSize:11,color:G.muted }}>{pct}% pagado</span>
-                  </div>
-                  <div style={{ background:G.border,borderRadius:4,height:5,marginBottom:4 }}>
-                    <div style={{ width:`${pct}%`,height:5,borderRadius:4,background:G.success,transition:".4s" }} />
-                  </div>
-                  <div style={{ display:"flex",justifyContent:"space-between" }}>
-                    <span style={{ fontSize:11,color:G.muted }}>Saldo: {fmt(saldo)}</span>
-                    <span style={{ fontSize:10,color:proj.status==="Finalizado"?G.success:G.warn,fontWeight:600 }}>
-                      {proj.status||"Activo"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </Card>
-        )}
-
       </div>
     </div>
   );
@@ -4319,10 +4174,7 @@ export default function App() {
         <main style={{ flex:1,overflowY:"auto",
                        paddingTop:"env(safe-area-inset-top)" }}>
           {/* Mobile spacer for fixed top header */}
-          {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products}
-                                   projects={projects} projectPayments={projectPayments}
-                                   projectQuotes={projectQuotes} paymentRequests={paymentRequests}
-                                   setView={setView} />}
+          {view==="dashboard" && <Dashboard quotes={quotes} clients={clients} products={products} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
                                    createRevision={createRevision}
