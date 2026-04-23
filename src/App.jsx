@@ -1060,6 +1060,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
 // ── QUOTE FORM ───────────────────────────────────────────────────
 const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct }) => {
   const [prodSearch, setProdSearch] = useState("");
+  const [prodCat, setProdCat] = useState("Todos");
   const [uploading, setUploading]   = useState(null);
   const [dragOver, setDragOver]     = useState(null); // id of item being dragged over
   const [clientSearch, setClientSearch] = useState(undefined);
@@ -1121,9 +1122,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                              clientRut: c.rfc||"" }));
   };
 
-  const filtProd = products.filter(p =>
-    p.name.toLowerCase().includes(prodSearch.toLowerCase()) ||
-    p.sku.toLowerCase().includes(prodSearch.toLowerCase()));
+  const filtProd = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(prodSearch.toLowerCase()) ||
+                        (p.sku||"").toLowerCase().includes(prodSearch.toLowerCase());
+    const matchCat = prodCat === "Todos" || p.category === prodCat;
+    return matchSearch && matchCat;
+  });
 
   return (
     <Modal title={isNew ? (quote.version>1 ? `Nueva Revisión v${quote.version} — #${quote.number}` : "Nueva Cotización") : `Editar Cotización #${quote.number}${(quote.version||1)>1?' v'+quote.version:''}`}
@@ -1210,6 +1214,18 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
 
       <p style={{ fontWeight:700,marginBottom:10,fontSize:13 }}>Agregar del Catálogo</p>
       <div style={{ background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:14,marginBottom:18 }}>
+        <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+          {["Todos",...[...new Set(products.map(p=>p.category).filter(Boolean))].sort()].map(cat=>(
+            <button key={cat} onClick={()=>setProdCat(cat)}
+              style={{ padding:"3px 10px",borderRadius:12,cursor:"pointer",fontSize:11,fontWeight:600,
+                       fontFamily:G.font,transition:".15s",
+                       background: prodCat===cat ? G.accent : "transparent",
+                       border: `1px solid ${prodCat===cat ? G.accent : G.border}`,
+                       color: prodCat===cat ? "#fff" : G.muted }}>
+              {cat}
+            </button>
+          ))}
+        </div>
         <input placeholder="Buscar producto o SKU…" value={prodSearch}
           onChange={e=>setProdSearch(e.target.value)} style={{ marginBottom:10 }} />
         <div style={{ display:"flex",flexWrap:"wrap",gap:8,maxHeight:120,overflowY:"auto" }}>
