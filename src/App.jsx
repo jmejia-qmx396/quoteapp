@@ -2159,7 +2159,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
   const openEdit = (p) => { clearDraft(); setCur({...p}); setModal(true); };
   const isExisting = cur && products.some(p=>p.id===cur.id);
   const [saving, setSaving] = useState(false);
-  const [editNameModal, setEditNameModal] = useState(false);
+  const [editNameModal, setEditNameModal] = useState(null); // stores current name text
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -2302,12 +2302,12 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
               <div style={{ position:"relative" }}>
                 <input value={cur.name} onChange={e=>setCur({...cur,name:e.target.value})}
                   placeholder="Descripción del producto o servicio"
-                  onDoubleClick={()=>setEditNameModal(true)}
+                  onDoubleClick={()=>setEditNameModal(cur.name)}
                   title="Doble clic para editar en ventana grande"
                   style={{ paddingRight:28 }} />
                 <span style={{ position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
                                fontSize:11,color:G.muted,pointerEvents:"none" }}
-                  title="Doble clic para editar">✏️</span>
+                  title="Doble clic para editar en ventana grande">✏️</span>
               </div>
             </Field>
             <Field label="Proveedor Principal">
