@@ -2159,7 +2159,6 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
   const openEdit = (p) => { clearDraft(); setCur({...p}); setModal(true); };
   const isExisting = cur && products.some(p=>p.id===cur.id);
   const [saving, setSaving] = useState(false);
-  const [editNameModal, setEditNameModal] = useState(false);
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -2299,16 +2298,7 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
               </select>
             </Field>
             <Field label="Nombre del Producto" style={{ gridColumn:"1/-1" }}>
-              <div style={{ position:"relative" }}>
-                <input value={cur.name} onChange={e=>setCur({...cur,name:e.target.value})}
-                  placeholder="Descripción del producto o servicio"
-                  onDoubleClick={()=>setEditNameModal(true)}
-                  title="Doble clic para editar en ventana grande"
-                  style={{ paddingRight:28 }} />
-                <span style={{ position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
-                               fontSize:11,color:G.muted,pointerEvents:"none" }}
-                  title="Doble clic para editar">✏️</span>
-              </div>
+              <input value={cur.name} onChange={e=>setCur({...cur,name:e.target.value})} placeholder="Descripción del producto o servicio" />
             </Field>
             <Field label="Proveedor Principal">
               <select value={cur.supplierMain||""} onChange={e=>setCur({...cur,supplierMain:e.target.value})}>
