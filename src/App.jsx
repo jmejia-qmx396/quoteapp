@@ -2387,6 +2387,28 @@ const ProductsView = ({ products, setProducts, saveProduct, deleteProduct, categ
             <Btn variant="ghost" onClick={()=>setModal(false)}>Cancelar</Btn>
             <Btn variant="success" onClick={save}>💾 Guardar</Btn>
           </div>
+
+          {/* Modal doble clic nombre producto */}
+          {editNameModal !== null && (
+            <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.8)",
+                          display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20 }}>
+              <div style={{ background:G.card,border:`1px solid ${G.accent}`,borderRadius:12,
+                            width:"100%",maxWidth:600,padding:24 }}>
+                <p style={{ fontWeight:700,fontSize:15,marginBottom:12 }}>✏️ Editar Nombre del Producto</p>
+                <textarea rows={5} autoFocus
+                  value={editNameModal}
+                  onChange={e=>setEditNameModal(e.target.value)}
+                  style={{ width:"100%",resize:"vertical",fontSize:14,padding:"8px 12px" }} />
+                <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14 }}>
+                  <Btn variant="ghost" onClick={()=>setEditNameModal(null)}>Cancelar</Btn>
+                  <Btn variant="success" onClick={()=>{
+                    setCur(c=>({...c, name: editNameModal}));
+                    setEditNameModal(null);
+                  }}>✓ Aplicar</Btn>
+                </div>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </div>
