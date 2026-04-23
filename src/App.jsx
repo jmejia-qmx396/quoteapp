@@ -871,40 +871,55 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
                   <td><StatusBadge s={q.status} /></td>
                   <td>
                     <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                      <Btn size="sm" variant="ghost" onClick={()=>openView(q)}>Ver</Btn>
-                      {q.isLatest!==false && <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}>Editar</Btn>}
+                      <Btn size="sm" variant="ghost" onClick={()=>openView(q)}
+                        title="Ver cotización en detalle">Ver</Btn>
+                      {q.isLatest!==false && <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}
+                        title="Editar esta cotización">Editar</Btn>}
                       {q.isLatest!==false && (
                         <Btn size="sm" variant="outline" onClick={()=>openRevision(q)}
+                          title={q.status==="Aprobada" ? "Agregar ítems adicionales a esta cotización aprobada" : "Crear una nueva versión de esta cotización"}
                           style={{ color:G.warn,borderColor:G.warn }}>
                           {q.status==="Aprobada" ? "＋ Adicionales" : "Nueva v."}
                         </Btn>
                       )}
                       {q.isLatest!==false && (
                         <Btn size="sm" variant="ghost" onClick={()=>duplicateQuote(q)}
-                          title="Duplicar cotización" style={{ color:G.muted }}>
+                          title="Duplicar como nueva cotización independiente" style={{ color:G.muted }}>
                           📋
                         </Btn>
                       )}
                       {q.isLatest!==false && addQuoteToProject && (() => {
                         const inProject = projectQuotes.find(pq=>pq.quote_id===q.id);
                         const activeProjects = projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(q.clientId||q.client_id));
-                        if (inProject) return <span style={{fontSize:10,color:G.success,padding:"2px 6px",background:"rgba(16,185,129,.1)",borderRadius:10}}>🏗️ En proyecto</span>;
+                        if (inProject) return <span title="Esta cotización ya está asociada a un proyecto" style={{fontSize:10,color:G.success,padding:"2px 6px",background:"rgba(16,185,129,.1)",borderRadius:10}}>🏗️ En proyecto</span>;
                         if (!activeProjects.length) return null;
                         return (
                           <Btn size="sm" variant="ghost" onClick={()=>setAddToProjectQuote(q)}
+                            title="Asociar esta cotización a un proyecto existente"
                             style={{color:G.success,borderColor:G.success,border:"1px solid"}}>
                             🏗️
                           </Btn>
                         );
                       })()}
                       {q.isLatest!==false && (
-                        <Btn size="sm" variant="ghost" onClick={()=>archiveQuote(q.id, !q.archived)}
-                          title={q.archived?"Desarchivar cotización":"Archivar cotización"}
+                        <Btn size="sm" variant="ghost"
+                          title={q.archived ? "Mover de vuelta a cotizaciones activas" : "Archivar — ocultar de la lista principal"}
+                          onClick={async()=>{
+                            if (!q.archived) {
+                              const ok = await confirm(
+                                `¿Archivar cotización #${q.number}?`,
+                                "Se ocultará de la lista principal. Puedes verla o recuperarla desde el botón 'Archivadas'."
+                              );
+                              if (!ok) return;
+                            }
+                            archiveQuote(q.id, !q.archived);
+                          }}
                           style={{ color:q.archived?G.success:G.muted }}>
                           {q.archived ? "📤" : "📦"}
                         </Btn>
                       )}
-                      <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>🗑️</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}
+                        title="Eliminar cotización permanentemente">🗑️</Btn>
                     </div>
                   </td>
                 </tr>
