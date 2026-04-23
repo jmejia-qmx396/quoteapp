@@ -76,6 +76,7 @@ const normalizeQuote = (q) => {
   parentId:      q.parent_id      || null,
   isLatest:      q.is_latest      !== false,
   profile:       q.profile        || 'empresa',
+  archived:      q.archived       || false,
   };
   // Always recalc to ensure subtotalConIva/subtotalSinIva are correct
   if (base.items.length) return recalc(base);
@@ -666,7 +667,7 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject, createProject }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, createRevision, clients, products, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject, createProject }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [addToProjectQuote, setAddToProjectQuote] = useState(null);
@@ -674,6 +675,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
   const [newProjName, setNewProjName] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("Todos");
+  const [showArchived, setShowArchived] = useState(false);
 
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
@@ -791,20 +793,35 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
     const status = (q.status || "").toLowerCase();
     const matchesSearch = name.includes(srch) || String(q.number||"").includes(srch) || status.includes(srch);
     const matchesStatus = filterStatus === "Todos" || (q.status||"") === filterStatus;
-    // Si se busca por número, mostrar todas las versiones; si no, solo la última
     const isSearchingByNumber = srch && /^\d+$/.test(srch.trim());
     const showVersion = isSearchingByNumber ? true : (q.isLatest !== false);
-    return matchesSearch && matchesStatus && showVersion;
+    const matchesArchived = showArchived ? q.archived : !q.archived;
+    return matchesSearch && matchesStatus && showVersion && matchesArchived;
   });
 
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
         <div>
-          <h1 style={{ fontSize:22,fontWeight:700 }}>Cotizaciones</h1>
-          <p style={{ color:G.muted }}>{quotes.length} cotización(es) en total</p>
+          <h1 style={{ fontSize:22,fontWeight:700 }}>
+            {showArchived ? "📦 Cotizaciones Archivadas" : "Cotizaciones"}
+          </h1>
+          <p style={{ color:G.muted }}>
+            {showArchived
+              ? `${quotes.filter(q=>q.archived&&q.isLatest!==false).length} archivada(s)`
+              : `${quotes.filter(q=>!q.archived&&q.isLatest!==false).length} cotización(es) activa(s)`}
+          </p>
         </div>
-        <Btn onClick={openNew}>+ Nueva Cotización</Btn>
+        <div style={{ display:"flex",gap:8 }}>
+          <button onClick={()=>{ setShowArchived(s=>!s); setFilterStatus("Todos"); setSearch(""); }}
+            style={{ padding:"7px 14px",borderRadius:7,border:`1px solid ${showArchived?G.accent:G.border}`,
+                     background:showArchived?`rgba(59,130,246,.12)`:"transparent",
+                     color:showArchived?G.accent:G.muted,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                     display:"flex",alignItems:"center",gap:6 }}>
+            📦 {showArchived ? "Ver activas" : `Archivadas (${quotes.filter(q=>q.archived&&q.isLatest!==false).length})`}
+          </button>
+          {!showArchived && <Btn onClick={openNew}>+ Nueva Cotización</Btn>}
+        </div>
       </div>
 
       <Card style={{ marginBottom:16 }}>
@@ -880,6 +897,13 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, createRevision,
                           </Btn>
                         );
                       })()}
+                      {q.isLatest!==false && (
+                        <Btn size="sm" variant="ghost" onClick={()=>archiveQuote(q.id, !q.archived)}
+                          title={q.archived?"Desarchivar cotización":"Archivar cotización"}
+                          style={{ color:q.archived?G.success:G.muted }}>
+                          {q.archived ? "📤" : "📦"}
+                        </Btn>
+                      )}
                       <Btn size="sm" variant="danger" onClick={()=>remove(q.id)}>🗑️</Btn>
                     </div>
                   </td>
@@ -3247,11 +3271,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
+  const [showArchived, setShowArchived] = useState(false);
 
-  const filt = projects.filter(p =>
-    (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
-    (p.client_name||"").toLowerCase().includes(search.toLowerCase())
-  );
+  const filt = projects.filter(p => {
+    const matchesSearch = (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
+      (p.client_name||"").toLowerCase().includes(search.toLowerCase());
+    const isArchived = p.status === "Archivado";
+    return matchesSearch && (showArchived ? isArchived : !isArchived);
+  });
 
   const proj = projects.find(p => p.id === selected);
 
@@ -3408,12 +3435,27 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
         <div>
-          <h1 style={{ fontSize:22,fontWeight:700 }}>Proyectos</h1>
-          <p style={{ color:G.muted }}>{projects.length} proyecto(s)</p>
+          <h1 style={{ fontSize:22,fontWeight:700 }}>
+            {showArchived ? "📦 Proyectos Archivados" : "Proyectos"}
+          </h1>
+          <p style={{ color:G.muted }}>
+            {showArchived
+              ? `${projects.filter(p=>p.status==="Archivado").length} archivado(s)`
+              : `${projects.filter(p=>p.status!=="Archivado").length} proyecto(s) activo(s)`}
+          </p>
         </div>
-        <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:""}); setNewProjectModal(true); }}>
-          + Nuevo Proyecto
-        </Btn>
+        <div style={{ display:"flex",gap:8 }}>
+          <button onClick={()=>{ setShowArchived(s=>!s); setSearch(""); setSelected(null); }}
+            style={{ padding:"7px 14px",borderRadius:7,border:`1px solid ${showArchived?G.accent:G.border}`,
+                     background:showArchived?`rgba(59,130,246,.12)`:"transparent",
+                     color:showArchived?G.accent:G.muted,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                     display:"flex",alignItems:"center",gap:6 }}>
+            📦 {showArchived ? "Ver activos" : `Archivados (${projects.filter(p=>p.status==="Archivado").length})`}
+          </button>
+          {!showArchived && <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:""}); setNewProjectModal(true); }}>
+            + Nuevo Proyecto
+          </Btn>}
+        </div>
       </div>
 
       {/* ── Dashboard de saldos ── */}
@@ -3563,7 +3605,17 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         const ok = await confirm("¿Cerrar este proyecto?", "No podrás agregar más cotizaciones ni pagos.");
                         if (ok) updateProjectStatus(proj.id,"Cerrado");
                       }}>🔒 Cerrar</Btn>
-                    : <Btn size="sm" variant="outline" onClick={()=>updateProjectStatus(proj.id,"Activo")}>🔓 Reabrir</Btn>
+                    : proj.status==="Cerrado"
+                      ? <>
+                          <Btn size="sm" variant="outline" onClick={()=>updateProjectStatus(proj.id,"Activo")}>🔓 Reabrir</Btn>
+                          <Btn size="sm" variant="ghost" onClick={async()=>{
+                            const ok = await confirm("¿Archivar este proyecto?","Se moverá al archivo y dejará de aparecer en la lista principal.",false);
+                            if (ok) { updateProjectStatus(proj.id,"Archivado"); setSelected(null); setShowArchived(false); }
+                          }} style={{ color:G.muted,border:`1px solid ${G.border}` }}>📦 Archivar</Btn>
+                        </>
+                      : proj.status==="Archivado"
+                        ? <Btn size="sm" variant="outline" onClick={()=>{ updateProjectStatus(proj.id,"Activo"); setShowArchived(false); }}>📤 Desarchivar</Btn>
+                        : <Btn size="sm" variant="outline" onClick={()=>updateProjectStatus(proj.id,"Activo")}>🔓 Reabrir</Btn>
                   }
                   <Btn size="sm" variant="danger" onClick={async()=>{
                     const ok = await confirm("¿Eliminar proyecto?", "Se eliminarán también todas las asociaciones de cotizaciones y pagos.");
@@ -4073,7 +4125,8 @@ export default function App() {
       trm:q.trm||4200, subtotal:q.subtotal||0, total_disc:q.totalDisc||0,
       tax_amt:q.taxAmt||0, total:q.total||0, total_cost:q.totalCost||0,
       profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id,
-      version: q.version||1, parent_id: q.parent_id||null, is_latest: q.is_latest!==false };
+      version: q.version||1, parent_id: q.parent_id||null, is_latest: q.is_latest!==false,
+      archived: q.archived||false };
     if (q.id && typeof q.id === "number" && q.id > 1000000000) {
       const { data } = await sb.from("quotes").insert(row).select().single();
       if (data) { savedData = normalizeQuote(data); setQuotes(qs => [savedData, ...qs.filter(x=>x.id!==q.id)]); }
@@ -4085,7 +4138,10 @@ export default function App() {
     return savedData;
   };
 
-  // Create a new revision of an existing quote
+  const archiveQuote = async (id, archived) => {
+    await sb.from("quotes").update({ archived }).eq("id", id);
+    setQuotes(qs => qs.map(q => q.id===id ? {...q, archived} : q));
+  };
   const createRevision = async (q) => {
     if (q.status === "Aprobada") {
       // ── Aprobada: editar en el mismo registro, solo agregar sección Adicionales ──
@@ -4325,6 +4381,7 @@ export default function App() {
                                    setView={setView} />}
           {view==="quotes"    && <QuotesView quotes={quotes} setQuotes={setQuotes}
                                    saveQuote={saveQuote} deleteQuote={deleteQuote}
+                                   archiveQuote={archiveQuote}
                                    createRevision={createRevision}
                                    paymentRequests={paymentRequests} savePaymentRequest={savePaymentRequest}
                                    projectQuotes={projectQuotes} projects={projects}
