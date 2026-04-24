@@ -319,6 +319,7 @@ const NAV_GROUPS = [
     items: [
       { id:"clients",    label:"Clientes",      icon:"👥" },
       { id:"products",   label:"Catálogo",      icon:"📦" },
+      { id:"kits",       label:"Kits",          icon:"🧩" },
     ]
   },
   {
@@ -944,6 +945,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
           onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config}
+          templates={templates} saveTemplate={saveTemplate}
           onSaveProduct={async (p) => {
             // Check for duplicate name before inserting
             const exists = products.find(x=>x.name.toLowerCase()===p.name.toLowerCase());
@@ -1058,7 +1060,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
 };
 
 // ── QUOTE FORM ───────────────────────────────────────────────────
-const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct }) => {
+const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct, templates=[], saveTemplate }) => {
   const [prodSearch, setProdSearch] = useState("");
   const [prodCat, setProdCat] = useState("Todos");
   const [uploading, setUploading]   = useState(null);
@@ -1069,6 +1071,11 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const [newProdModal, setNewProdModal] = useState(false);
   const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
   const [savingProd, setSavingProd] = useState(false);
+  const [kitInsertModal, setKitInsertModal] = useState(false);
+  const [saveKitModal, setSaveKitModal] = useState(false);
+  const [saveKitName, setSaveKitName] = useState("");
+  const [saveKitDesc, setSaveKitDesc] = useState("");
+  const [savingKit, setSavingKit] = useState(false);
   const calcPrice = (cost, margin) => margin >= 100 ? 0 : Math.round(cost / (1 - margin/100));
 
   const set = (k, v) => setQuote(q => recalc({ ...q, [k]: v }));
@@ -1268,7 +1275,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
       </div>
 
       {/* Botón para agregar encabezado de sección */}
-      <div style={{ display:"flex",gap:8,marginBottom:8 }}>
+      <div style={{ display:"flex",gap:8,marginBottom:8,flexWrap:"wrap" }}>
         <button onClick={()=>{
           const newId = Date.now();
           setQuote(q=>({...q,items:[...q.items,{id:newId,type:"header",name:""}]}));
@@ -1283,6 +1290,23 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
                    borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
           + Línea Libre
         </button>
+        {/* ── Kit buttons ── */}
+        {saveTemplate && quote.items.filter(i=>i.type!=="header"&&i.name).length > 0 && (
+          <button onClick={()=>{ setSaveKitName(""); setSaveKitDesc(""); setSaveKitModal(true); }}
+            title="Guardar los productos actuales como un kit reutilizable"
+            style={{ background:"rgba(139,92,246,.1)",border:`1px solid #8b5cf6`,color:"#8b5cf6",
+                     borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
+            💾 Guardar como Kit
+          </button>
+        )}
+        {templates.length > 0 && (
+          <button onClick={()=>setKitInsertModal(true)}
+            title="Insertar un kit guardado en esta cotización"
+            style={{ background:"rgba(16,185,129,.1)",border:`1px solid ${G.success}`,color:G.success,
+                     borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:12,fontFamily:G.font,fontWeight:600 }}>
+            🧩 Insertar Kit
+          </button>
+        )}
       </div>
 
       <div style={{ overflowX:"auto" }}><Card style={{ padding:0,overflow:"visible",marginBottom:18 }}>
@@ -1729,10 +1753,96 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
         </div>
       )}
     </Modal>
+
+    {/* ── Modal: Insertar Kit ── */}
+    {kitInsertModal && (
+      <Modal title="🧩 Insertar Kit" onClose={()=>setKitInsertModal(false)} width={520}>
+        <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
+          Selecciona un kit para agregar sus productos al final de la cotización.
+        </p>
+        <div style={{ maxHeight:420,overflowY:"auto",display:"flex",flexDirection:"column",gap:10 }}>
+          {templates.map(t => {
+            const prodItems = (t.items||[]).filter(i=>i.type!=="header");
+            return (
+              <div key={t.id}
+                style={{ border:`1px solid ${G.border}`,borderRadius:8,padding:"12px 14px",
+                         background:G.card }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontWeight:700,fontSize:14 }}>{t.name}</div>
+                    {t.description && <div style={{ color:G.muted,fontSize:12,marginTop:2 }}>{t.description}</div>}
+                    <div style={{ fontSize:11,color:G.accent,marginTop:4 }}>
+                      {prodItems.length} producto{prodItems.length!==1?"s":""}
+                    </div>
+                  </div>
+                  <Btn size="sm" variant="success" onClick={()=>{
+                    // Assign fresh ids to each item and append to quote
+                    const newItems = (t.items||[]).map(i => ({ ...i, id: Date.now() + Math.random() }));
+                    setQuote(q => recalc({ ...q, items: [...q.items, ...newItems] }));
+                    setKitInsertModal(false);
+                  }}>
+                    + Insertar
+                  </Btn>
+                </div>
+                {/* Preview de productos */}
+                <div style={{ fontSize:12,color:G.muted }}>
+                  {prodItems.slice(0,4).map((i,idx) => (
+                    <span key={idx} style={{ marginRight:8 }}>· {i.name}</span>
+                  ))}
+                  {prodItems.length > 4 && <span>…+{prodItems.length-4} más</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
+          <Btn variant="ghost" onClick={()=>setKitInsertModal(false)}>Cerrar</Btn>
+        </div>
+      </Modal>
+    )}
+
+    {/* ── Modal: Guardar como Kit ── */}
+    {saveKitModal && (
+      <Modal title="💾 Guardar como Kit" onClose={()=>setSaveKitModal(false)} width={460}>
+        <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
+          Se guardarán los <strong>{quote.items.filter(i=>i.type!=="header"&&i.name).length} productos</strong> de esta cotización como un kit reutilizable.
+        </p>
+        <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+          <div>
+            <label style={{ fontSize:13,fontWeight:600,display:"block",marginBottom:4 }}>
+              Nombre del Kit *
+            </label>
+            <input value={saveKitName} onChange={e=>setSaveKitName(e.target.value)}
+              placeholder="Ej: Kit Sala Automatizada, Sistema Seguridad Básico…"
+              style={{ width:"100%" }} />
+          </div>
+          <div>
+            <label style={{ fontSize:13,fontWeight:600,display:"block",marginBottom:4 }}>
+              Descripción (opcional)
+            </label>
+            <input value={saveKitDesc} onChange={e=>setSaveKitDesc(e.target.value)}
+              placeholder="Breve descripción del kit" style={{ width:"100%" }} />
+          </div>
+          <div style={{ display:"flex",gap:8,justifyContent:"flex-end",marginTop:4 }}>
+            <Btn variant="ghost" onClick={()=>setSaveKitModal(false)}>Cancelar</Btn>
+            <Btn onClick={async()=>{
+              if (!saveKitName.trim()) { alert("El kit necesita un nombre."); return; }
+              if (savingKit) return;
+              setSavingKit(true);
+              try {
+                await saveTemplate(saveKitName.trim(), saveKitDesc.trim(), quote.items);
+                setSaveKitModal(false);
+              } finally { setSavingKit(false); }
+            }}>
+              {savingKit ? "Guardando…" : "💾 Guardar Kit"}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+    )}
+  </Modal>
   );
 };
-
-// ── QUOTE PREVIEW / PDF ──────────────────────────────────────────
 const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = null }) => {
   const handlePrint = () => {
     const w = window.open("","_blank","width=900,height=700");
@@ -4061,6 +4171,173 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   );
 };
 
+// ── KITS VIEW ────────────────────────────────────────────────────
+const KitsView = ({ templates, deleteTemplate, updateTemplate }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [search, setSearch] = useState("");
+  const [editModal, setEditModal] = useState(null); // {id, name, description}
+  const [expanded, setExpanded] = useState(null);
+
+  const filtered = templates.filter(t =>
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
+    (t.description||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
+        <div>
+          <h1 style={{ fontSize:22,fontWeight:700 }}>🧩 Kits</h1>
+          <p style={{ color:G.muted,fontSize:13 }}>
+            Conjuntos de productos reutilizables en cotizaciones.
+            Crea kits desde el formulario de cotización con "💾 Guardar como Kit".
+          </p>
+        </div>
+      </div>
+
+      {/* Búsqueda */}
+      <Card style={{ marginBottom:16,padding:"10px 14px" }}>
+        <input placeholder="Buscar kit…" value={search} onChange={e=>setSearch(e.target.value)}
+          style={{ width:"100%" }} />
+      </Card>
+
+      {/* Lista vacía */}
+      {!templates.length && (
+        <Card style={{ textAlign:"center",padding:"40px 20px" }}>
+          <div style={{ fontSize:40,marginBottom:12 }}>🧩</div>
+          <p style={{ fontWeight:600,fontSize:15,marginBottom:8 }}>Aún no tienes kits guardados</p>
+          <p style={{ color:G.muted,fontSize:13 }}>
+            Abre o crea una cotización, arma el listado de productos<br/>
+            y usa el botón <strong>"💾 Guardar como Kit"</strong> para crear tu primer kit.
+          </p>
+        </Card>
+      )}
+
+      {/* Grid de kits */}
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
+        {filtered.map(t => {
+          const items = Array.isArray(t.items) ? t.items : [];
+          const prodItems = items.filter(i => i.type !== "header");
+          const isOpen = expanded === t.id;
+          return (
+            <Card key={t.id} style={{ padding:0,overflow:"hidden" }}>
+              {/* Header del kit */}
+              <div style={{ padding:"14px 16px",borderBottom: isOpen?`1px solid ${G.border}`:"none" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontWeight:700,fontSize:15,marginBottom:2 }}>{t.name}</div>
+                    {t.description && (
+                      <div style={{ color:G.muted,fontSize:12,marginBottom:6 }}>{t.description}</div>
+                    )}
+                    <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11,background:"rgba(59,130,246,.1)",color:G.accent,
+                                     padding:"2px 8px",borderRadius:10,fontWeight:600 }}>
+                        {prodItems.length} producto{prodItems.length!==1?"s":""}
+                      </span>
+                      <span style={{ fontSize:11,color:G.muted }}>
+                        Creado {t.created_at ? new Date(t.created_at).toLocaleDateString("es-CO") : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex",gap:6,marginLeft:10,flexShrink:0 }}>
+                    <button onClick={()=>setExpanded(isOpen?null:t.id)}
+                      title={isOpen?"Ocultar productos":"Ver productos del kit"}
+                      style={{ background:"transparent",border:`1px solid ${G.border}`,borderRadius:6,
+                               padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.muted }}>
+                      {isOpen?"▲":"▼"}
+                    </button>
+                    <button onClick={()=>setEditModal({id:t.id,name:t.name,description:t.description||""})}
+                      title="Editar nombre y descripción"
+                      style={{ background:"transparent",border:`1px solid ${G.border}`,borderRadius:6,
+                               padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.muted }}>
+                      ✏️
+                    </button>
+                    <button onClick={async()=>{
+                        const ok = await confirm(`¿Eliminar kit "${t.name}"?`,"Esta acción no se puede deshacer.");
+                        if (ok) deleteTemplate(t.id);
+                      }}
+                      title="Eliminar kit"
+                      style={{ background:"transparent",border:`1px solid rgba(239,68,68,.3)`,borderRadius:6,
+                               padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.danger }}>
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detalle de productos (expandible) */}
+              {isOpen && (
+                <div style={{ padding:"10px 16px" }}>
+                  {items.length === 0 && (
+                    <p style={{ color:G.muted,fontSize:12,textAlign:"center",padding:"10px 0" }}>
+                      Kit vacío
+                    </p>
+                  )}
+                  {items.map((item,i) => item.type==="header" ? (
+                    <div key={i} style={{ fontSize:11,fontWeight:700,textTransform:"uppercase",
+                                          color:G.muted,letterSpacing:".06em",
+                                          padding:"8px 0 4px",borderTop: i>0?`1px solid ${G.border}`:"none",
+                                          marginTop: i>0?8:0 }}>
+                      {item.name||"Sección"}
+                    </div>
+                  ) : (
+                    <div key={i} style={{ display:"flex",justifyContent:"space-between",
+                                          padding:"5px 0",borderBottom:`1px solid ${G.border}`,
+                                          fontSize:13 }}>
+                      <div style={{ display:"flex",gap:8,alignItems:"center",flex:1,minWidth:0 }}>
+                        {item.imageUrl && (
+                          <img src={item.imageUrl} alt="" style={{ width:24,height:24,
+                                objectFit:"contain",borderRadius:4,flexShrink:0 }} />
+                        )}
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",
+                                        whiteSpace:"nowrap" }}>{item.name}</div>
+                          {item.sku && <div style={{ fontSize:11,color:G.muted }}>{item.sku}</div>}
+                        </div>
+                      </div>
+                      <div style={{ textAlign:"right",flexShrink:0,marginLeft:12 }}>
+                        <div style={{ fontFamily:G.mono,fontSize:12 }}>x{item.qty||1}</div>
+                        <div style={{ fontSize:11,color:G.muted }}>
+                          {item.currency==="USD"?"USD ":"$"}{new Intl.NumberFormat("es-CO",{maximumFractionDigits:0}).format(item.price||0)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Modal editar kit */}
+      {editModal && (
+        <Modal title="Editar Kit" onClose={()=>setEditModal(null)}>
+          <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+            <label style={{ fontSize:13,fontWeight:600 }}>Nombre del Kit</label>
+            <input value={editModal.name} onChange={e=>setEditModal(m=>({...m,name:e.target.value}))}
+              placeholder="Ej: Sala automatizada, Kit básico seguridad…" />
+            <label style={{ fontSize:13,fontWeight:600 }}>Descripción (opcional)</label>
+            <input value={editModal.description}
+              onChange={e=>setEditModal(m=>({...m,description:e.target.value}))}
+              placeholder="Breve descripción del kit" />
+            <div style={{ display:"flex",gap:8,justifyContent:"flex-end",marginTop:4 }}>
+              <Btn variant="ghost" onClick={()=>setEditModal(null)}>Cancelar</Btn>
+              <Btn onClick={async()=>{
+                if (!editModal.name.trim()) { alert("El kit necesita un nombre."); return; }
+                await updateTemplate(editModal.id, editModal.name.trim(), editModal.description);
+                setEditModal(null);
+              }}>Guardar</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmDialog}
+    </div>
+  );
+};
+
 // ── APP ROOT ──────────────────────────────────────────────────────
 export default function App() {
   // Set favicon and page title
@@ -4088,6 +4365,7 @@ export default function App() {
   const [projectQuotes, setProjectQuotes] = useState([]);
   const [projectPayments, setProjectPayments] = useState([]);
   const [projectPurchases, setProjectPurchases] = useState([]);
+  const [templates, setTemplates] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -4171,6 +4449,10 @@ export default function App() {
       if (cfg) setConfig(cfg.data);
       else { await sb.from("config").insert({ data: INIT_CONFIG }); }
 
+      // Templates (Kits)
+      const { data: tmpl } = await sb.from("quote_templates").select("*").order("name");
+      if (tmpl) setTemplates(tmpl);
+
       // Counter
       const maxQ = qs?.length ? Math.max(...qs.map(q=>q.number||1000)) : 1000;
       quoteCounter = maxQ + 1;
@@ -4204,6 +4486,28 @@ export default function App() {
   const archiveQuote = async (id, archived) => {
     await sb.from("quotes").update({ archived }).eq("id", id);
     setQuotes(qs => qs.map(q => q.id===id ? {...q, archived} : q));
+  };
+
+  // ── CRUD: Kits (quote_templates) ─────────────────────────────
+  const saveTemplate = async (name, description, items) => {
+    // Strip ids so items get fresh ids when inserted into quotes
+    const cleanItems = items
+      .filter(i => i.name || i.type === "header")
+      .map(({ id, productId, ...rest }) => ({ ...rest, productId: productId||null }));
+    const row = { name, description: description||"", items: cleanItems, created_by: user.id };
+    const { data } = await sb.from("quote_templates").insert(row).select().single();
+    if (data) setTemplates(ts => [...ts, data].sort((a,b)=>a.name.localeCompare(b.name)));
+    return data;
+  };
+
+  const updateTemplate = async (id, name, description) => {
+    await sb.from("quote_templates").update({ name, description }).eq("id", id);
+    setTemplates(ts => ts.map(t => t.id===id ? {...t, name, description} : t));
+  };
+
+  const deleteTemplate = async (id) => {
+    await sb.from("quote_templates").delete().eq("id", id);
+    setTemplates(ts => ts.filter(t => t.id !== id));
   };
   const createRevision = async (q) => {
     if (q.status === "Aprobada") {
@@ -4482,6 +4786,7 @@ export default function App() {
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
+          {view==="kits"     && <KitsView templates={templates} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
       </div>
