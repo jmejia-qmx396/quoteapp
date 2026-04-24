@@ -3069,10 +3069,13 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 };
 
 // ── PAYMENT REQUESTS VIEW ─────────────────────────────────────────
-const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config }) => {
+const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config, clients=[] }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const [modal, setModal] = useState(null);
-  const [search, setSearch] = useState("");
+  const [modal, setModal]           = useState(null);   // pr to print
+  const [search, setSearch]         = useState("");
+  const [pickQuoteModal, setPickQuoteModal] = useState(false);
+  const [quoteSearch, setQuoteSearch]       = useState("");
+  const [selectedQuote, setSelectedQuote]   = useState(null); // quote to create PR from
 
   const filt = paymentRequests.filter(p =>
     (p.number||"").toLowerCase().includes(search.toLowerCase()) ||
@@ -3082,6 +3085,17 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
 
   const getQuote = (id) => quotes.find(q => q.id === id);
 
+  // Cotizaciones aprobadas y activas para seleccionar
+  const approvedQuotes = quotes.filter(q =>
+    q.status === "Aprobada" && !q.archived && q.isLatest !== false
+  ).sort((a,b) => (b.number||0) - (a.number||0));
+
+  const filtApproved = approvedQuotes.filter(q => {
+    const s = quoteSearch.toLowerCase();
+    return (q.clientName||q.client_name||"").toLowerCase().includes(s) ||
+           String(q.number||"").includes(s);
+  });
+
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
@@ -3089,6 +3103,9 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
           <h1 style={{ fontSize:22,fontWeight:700 }}>Cuentas de Cobro</h1>
           <p style={{ color:G.muted }}>{paymentRequests.length} cuenta(s) generada(s)</p>
         </div>
+        <Btn onClick={()=>{ setQuoteSearch(""); setPickQuoteModal(true); }}>
+          + Nueva Cuenta de Cobro
+        </Btn>
       </div>
 
       <Card style={{ marginBottom:16 }}>
@@ -3115,7 +3132,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
                     <td>{q ? <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span> : "-"}</td>
                     <td>
                       <div style={{ display:"flex",gap:6 }}>
-                        <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
+                        <Btn size="sm" variant="ghost" onClick={()=>setModal(p)} title="Imprimir cuenta de cobro">🖨️</Btn>
                         <Btn size="sm" variant="danger" onClick={async()=>{ const ok=await confirm("¿Eliminar cuenta de cobro?","Esta acción no se puede deshacer."); if(ok) deletePaymentRequest(p.id); }}>🗑️</Btn>
                       </div>
                     </td>
@@ -3129,8 +3146,87 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
       </div>
 
       {confirmDialog}
+
+      {/* Modal imprimir */}
       {modal && (
         <PrintPaymentRequest pr={modal} config={config} onClose={()=>setModal(null)} />
+      )}
+
+      {/* Modal: seleccionar cotización */}
+      {pickQuoteModal && (
+        <Modal title="Seleccionar Cotización" onClose={()=>{ setPickQuoteModal(false); setSelectedQuote(null); }} width={560}>
+          <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
+            Selecciona la cotización aprobada a la que quieres ligar esta cuenta de cobro.
+          </p>
+          <input placeholder="Buscar por cliente o # cotización…" value={quoteSearch}
+            onChange={e=>setQuoteSearch(e.target.value)} style={{ marginBottom:12 }} autoFocus />
+
+          {!approvedQuotes.length && (
+            <div style={{ textAlign:"center",padding:"24px 0",color:G.muted }}>
+              <div style={{ fontSize:32,marginBottom:8 }}>📋</div>
+              <p style={{ fontSize:13 }}>No hay cotizaciones aprobadas aún.</p>
+            </div>
+          )}
+
+          <div style={{ maxHeight:380,overflowY:"auto",display:"flex",flexDirection:"column",gap:8 }}>
+            {filtApproved.map(q => {
+              const prsForQuote = paymentRequests.filter(p=>p.quote_id===q.id).length;
+              const isSelected  = selectedQuote?.id === q.id;
+              return (
+                <div key={q.id} onClick={()=>setSelectedQuote(q)}
+                  style={{ border:`1px solid ${isSelected?G.accent:G.border}`,borderRadius:8,
+                           padding:"12px 14px",cursor:"pointer",
+                           background:isSelected?`rgba(59,130,246,.1)`:G.card,
+                           transition:".15s" }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+                    <div>
+                      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+                        <span style={{ fontFamily:G.mono,fontWeight:700,color:G.accent,fontSize:14 }}>
+                          #{q.number}
+                        </span>
+                        <span style={{ fontWeight:600,fontSize:13 }}>{q.clientName||q.client_name}</span>
+                      </div>
+                      <div style={{ fontSize:12,color:G.muted }}>
+                        {q.date} · {prsForQuote > 0
+                          ? <span style={{ color:G.warn }}>Ya tiene {prsForQuote} cuenta(s) de cobro</span>
+                          : <span style={{ color:G.success }}>Sin cuentas de cobro</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontFamily:G.mono,fontWeight:700,fontSize:14 }}>{fmt(q.total||0)}</div>
+                      <StatusBadge s={q.status} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {filtApproved.length === 0 && approvedQuotes.length > 0 && (
+              <p style={{ textAlign:"center",color:G.muted,padding:16 }}>Sin resultados para "{quoteSearch}"</p>
+            )}
+          </div>
+
+          <div style={{ display:"flex",justifyContent:"flex-end",gap:8,marginTop:16 }}>
+            <Btn variant="ghost" onClick={()=>{ setPickQuoteModal(false); setSelectedQuote(null); }}>Cancelar</Btn>
+            <Btn onClick={()=>{
+              if (!selectedQuote) { alert("Selecciona una cotización primero."); return; }
+              setPickQuoteModal(false);
+            }} style={{ opacity: selectedQuote?1:.5 }}>
+              Continuar →
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* PaymentRequestModal una vez seleccionada la cotización */}
+      {selectedQuote && !pickQuoteModal && (
+        <PaymentRequestModal
+          quote={selectedQuote}
+          config={config}
+          clients={clients}
+          paymentRequests={paymentRequests}
+          onSave={async (pr) => { await savePaymentRequest(pr); setSelectedQuote(null); }}
+          onClose={()=>setSelectedQuote(null)}
+        />
       )}
     </div>
   );
@@ -5202,7 +5298,7 @@ export default function App() {
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
           {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes}
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
-                                   config={config} />}
+                                   config={config} clients={clients} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
