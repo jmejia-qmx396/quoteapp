@@ -3139,9 +3139,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
 // ── PRINT EXISTING PAYMENT REQUEST ───────────────────────────────
 const PrintPaymentRequest = ({ pr, config, onClose }) => {
   useEffect(() => {
-    const profile = pr.profile || pr.payment_type || "empresa";
-    const prof = profile === "personal" && config.personal ? {...config, ...config.personal} : config;
-    const pc = prof.primaryColor || config.primaryColor || "#0d6e6e";
+    const pc = config.primaryColor || "#0d6e6e";
     const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
@@ -3383,7 +3381,9 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
-                        updateProjectStatus, projectPurchases=[], togglePurchase, config }) => {
+                        updateProjectStatus, projectPurchases=[], togglePurchase,
+                        projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
+                        config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [selected, setSelected] = useState(null);
   const [payModal, setPayModal] = useState(false);
@@ -3395,8 +3395,48 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
   const [showArchived, setShowArchived] = useState(false);
+  const [taskModal, setTaskModal]   = useState(false);
+  const [editTask, setEditTask]     = useState(null);
 
-  const filt = projects.filter(p => {
+  const TASK_TYPES = [
+    { id:"reunion",     label:"Reunión",      icon:"🤝" },
+    { id:"visita",      label:"Visita",        icon:"🏠" },
+    { id:"entrega",     label:"Entrega",       icon:"📦" },
+    { id:"seguimiento", label:"Seguimiento",   icon:"📞" },
+    { id:"tarea",       label:"Tarea",         icon:"✅" },
+    { id:"otro",        label:"Otro",          icon:"📌" },
+  ];
+
+  const taskTypeIcon = (type) => TASK_TYPES.find(t=>t.id===type)?.icon || "📌";
+
+  const gcalLink = (task, projName) => {
+    const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+    const title = encodeURIComponent(`[${projName}] ${task.title}`);
+    const details = encodeURIComponent(task.notes || "");
+    const pad = n => String(n).padStart(2,"0");
+    let dates = "";
+    if (task.date) {
+      const [y,m,d] = task.date.split("-");
+      if (task.time) {
+        const [hh,mm] = task.time.split(":");
+        const start = `${y}${m}${d}T${hh}${mm}00`;
+        const dur = parseInt(task.duration||60);
+        const endMin = parseInt(mm) + dur;
+        const endHH = parseInt(hh) + Math.floor(endMin/60);
+        const endMM = endMin % 60;
+        const end = `${y}${m}${d}T${pad(endHH)}${pad(endMM)}00`;
+        dates = `${start}/${end}`;
+      } else {
+        dates = `${y}${m}${d}/${y}${m}${d}`;
+      }
+    }
+    return `${base}&text=${title}&details=${details}${dates?`&dates=${dates}`:""}`;
+  };
+
+  const blankTask = (projId) => ({
+    id: Date.now(), project_id: projId, title:"", type:"tarea",
+    date: today(), time:"09:00", duration:60, notes:"", done:false,
+  });
     const matchesSearch = (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
       (p.client_name||"").toLowerCase().includes(search.toLowerCase());
     const isArchived = p.status === "Archivado";
@@ -3750,7 +3790,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
             {/* Tabs */}
             <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}` }}>
-              {[["resumen","📋 Resumen"],["compras","🛒 Compras"]].map(([id,label])=>(
+              {[["resumen","📋 Resumen"],["compras","🛒 Compras"],["tareas","📅 Tareas"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setActiveTab(id)}
                   style={{ padding:"8px 20px",background:"none",border:"none",cursor:"pointer",
                            fontFamily:G.font,fontSize:13,fontWeight:activeTab===id?700:400,
@@ -3967,6 +4007,135 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               );
             })()}
             </>}
+
+            {/* ── Tab: Tareas ── */}
+            {activeTab==="tareas" && (() => {
+              const tasks = projectTasks.filter(t => t.project_id === proj.id);
+              const pending = tasks.filter(t => !t.done);
+              const done    = tasks.filter(t =>  t.done);
+              return (
+                <div>
+                  {/* Header */}
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
+                    <div>
+                      <span style={{ fontWeight:700,fontSize:14 }}>Tareas y Citas</span>
+                      <span style={{ marginLeft:10,fontSize:12,color:G.muted }}>
+                        {pending.length} pendiente{pending.length!==1?"s":""}
+                      </span>
+                    </div>
+                    <Btn size="sm" onClick={()=>{ setEditTask(blankTask(proj.id)); setTaskModal(true); }}>
+                      + Nueva Tarea
+                    </Btn>
+                  </div>
+
+                  {/* Empty state */}
+                  {!tasks.length && (
+                    <Card style={{ textAlign:"center",padding:"30px 16px" }}>
+                      <div style={{ fontSize:32,marginBottom:8 }}>📅</div>
+                      <p style={{ fontWeight:600,fontSize:13,marginBottom:6 }}>Sin tareas aún</p>
+                      <p style={{ color:G.muted,fontSize:12 }}>
+                        Crea reuniones, visitas, entregas o recordatorios<br/>
+                        y sincronízalos con Google Calendar en un clic.
+                      </p>
+                    </Card>
+                  )}
+
+                  {/* Pending tasks */}
+                  {pending.map(task => (
+                    <Card key={task.id} style={{ marginBottom:10,padding:"12px 14px" }}>
+                      <div style={{ display:"flex",gap:12,alignItems:"flex-start" }}>
+                        {/* Done checkbox */}
+                        <input type="checkbox" checked={!!task.done}
+                          onChange={e => toggleProjectTask(task.id, e.target.checked)}
+                          style={{ marginTop:3,flexShrink:0,width:16,height:16,cursor:"pointer" }} />
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4 }}>
+                            <span style={{ fontSize:16 }}>{taskTypeIcon(task.type)}</span>
+                            <span style={{ fontWeight:700,fontSize:14 }}>{task.title}</span>
+                            <span style={{ fontSize:11,background:"rgba(59,130,246,.1)",color:G.accent,
+                                           padding:"2px 8px",borderRadius:10,fontWeight:600 }}>
+                              {TASK_TYPES.find(t=>t.id===task.type)?.label||task.type}
+                            </span>
+                          </div>
+                          <div style={{ display:"flex",gap:14,flexWrap:"wrap",fontSize:12,color:G.muted }}>
+                            {task.date && (
+                              <span>📅 {new Date(task.date+"T12:00:00").toLocaleDateString("es-CO",{weekday:"short",day:"numeric",month:"short"})}</span>
+                            )}
+                            {task.time && <span>🕐 {task.time}</span>}
+                            {task.duration && <span>⏱️ {task.duration} min</span>}
+                          </div>
+                          {task.notes && (
+                            <p style={{ fontSize:12,color:G.muted,marginTop:6,
+                                        fontStyle:"italic",borderLeft:`2px solid ${G.border}`,paddingLeft:8 }}>
+                              {task.notes}
+                            </p>
+                          )}
+                        </div>
+                        {/* Actions */}
+                        <div style={{ display:"flex",gap:6,flexShrink:0 }}>
+                          <a href={gcalLink(task, proj.name)} target="_blank" rel="noopener noreferrer"
+                            title="Abrir en Google Calendar"
+                            style={{ display:"flex",alignItems:"center",gap:4,padding:"4px 10px",
+                                     borderRadius:6,border:`1px solid ${G.border}`,
+                                     background:"#fff",color:"#1a73e8",fontSize:12,fontWeight:600,
+                                     textDecoration:"none",cursor:"pointer" }}>
+                            <img src="https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_20_2x.png"
+                              style={{ width:14,height:14,objectFit:"contain" }} alt="" />
+                            GCal
+                          </a>
+                          <button onClick={()=>{ setEditTask({...task}); setTaskModal(true); }}
+                            title="Editar tarea"
+                            style={{ background:"transparent",border:`1px solid ${G.border}`,borderRadius:6,
+                                     padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.muted }}>
+                            ✏️
+                          </button>
+                          <button onClick={async()=>{
+                              const ok = await confirm(`¿Eliminar "${task.title}"?`,"Esta acción no se puede deshacer.");
+                              if (ok) deleteProjectTask(task.id);
+                            }}
+                            title="Eliminar tarea"
+                            style={{ background:"transparent",border:`1px solid rgba(239,68,68,.3)`,
+                                     borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.danger }}>
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+
+                  {/* Completed tasks (collapsed) */}
+                  {done.length > 0 && (
+                    <details style={{ marginTop:16 }}>
+                      <summary style={{ cursor:"pointer",fontSize:13,color:G.muted,
+                                        padding:"8px 0",userSelect:"none" }}>
+                        ✅ {done.length} completada{done.length!==1?"s":""} — clic para ver
+                      </summary>
+                      <div style={{ marginTop:8 }}>
+                        {done.map(task => (
+                          <Card key={task.id} style={{ marginBottom:8,padding:"10px 14px",opacity:.6 }}>
+                            <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+                              <input type="checkbox" checked={true}
+                                onChange={e => toggleProjectTask(task.id, e.target.checked)}
+                                style={{ flexShrink:0,cursor:"pointer" }} />
+                              <span style={{ fontSize:14,textDecoration:"line-through",color:G.muted }}>
+                                {taskTypeIcon(task.type)} {task.title}
+                              </span>
+                              {task.date && <span style={{ fontSize:12,color:G.muted }}>{task.date}</span>}
+                              <button onClick={async()=>{
+                                  const ok = await confirm(`¿Eliminar "${task.title}"?`,"");
+                                  if (ok) deleteProjectTask(task.id);
+                                }}
+                                style={{ marginLeft:"auto",background:"transparent",border:"none",
+                                         cursor:"pointer",color:G.danger,fontSize:13 }}>🗑️</button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted }}>
@@ -4030,7 +4199,75 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
       )}
 
       {confirmDialog}
-      {/* Modal: agregar pago */}
+
+      {/* Modal: nueva / editar tarea */}
+      {taskModal && editTask && (
+        <Modal title={editTask.id && typeof editTask.id==="number" && editTask.id < 1e12 ? "Editar Tarea" : "Nueva Tarea"} onClose={()=>{ setTaskModal(false); setEditTask(null); }} width={520}>
+          <div style={{ display:"grid",gap:14 }}>
+            <Field label="Título *">
+              <input value={editTask.title} onChange={e=>setEditTask(t=>({...t,title:e.target.value}))}
+                placeholder="Ej: Reunión de avance, Visita de instalación…" autoFocus />
+            </Field>
+            <Field label="Tipo">
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                {TASK_TYPES.map(tt => (
+                  <button key={tt.id} onClick={()=>setEditTask(t=>({...t,type:tt.id}))}
+                    style={{ padding:"5px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                             fontWeight:editTask.type===tt.id?700:400,
+                             background:editTask.type===tt.id?`rgba(59,130,246,.15)`:"transparent",
+                             border:`1px solid ${editTask.type===tt.id?G.accent:G.border}`,
+                             color:editTask.type===tt.id?G.accent:G.muted }}>
+                    {tt.icon} {tt.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+              <Field label="Fecha">
+                <input type="date" value={editTask.date||""} onChange={e=>setEditTask(t=>({...t,date:e.target.value}))} />
+              </Field>
+              <Field label="Hora">
+                <input type="time" value={editTask.time||""} onChange={e=>setEditTask(t=>({...t,time:e.target.value}))} />
+              </Field>
+              <Field label="Duración (min)">
+                <select value={editTask.duration||60} onChange={e=>setEditTask(t=>({...t,duration:Number(e.target.value)}))}>
+                  {[15,30,45,60,90,120,180,240].map(d=>(
+                    <option key={d} value={d}>{d < 60 ? `${d} min` : `${d/60}h` + (d%60 ? ` ${d%60}min` : "")}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label="Notas (opcional)">
+              <textarea value={editTask.notes||""} onChange={e=>setEditTask(t=>({...t,notes:e.target.value}))}
+                rows={3} placeholder="Agenda, instrucciones, dirección…"
+                style={{ width:"100%",resize:"vertical" }} />
+            </Field>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4 }}>
+              {editTask.date ? (
+                <a href={gcalLink(editTask, projects.find(p=>p.id===editTask.project_id)?.name||"")}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 14px",
+                           borderRadius:7,border:`1px solid #dadce0`,background:"#fff",
+                           color:"#1a73e8",fontSize:12,fontWeight:600,textDecoration:"none" }}>
+                  <img src="https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_20_2x.png"
+                    style={{ width:16,height:16 }} alt="" />
+                  Abrir en Google Calendar
+                </a>
+              ) : <div />}
+              <div style={{ display:"flex",gap:8 }}>
+                <Btn variant="ghost" onClick={()=>{ setTaskModal(false); setEditTask(null); }}>Cancelar</Btn>
+                <Btn onClick={async()=>{
+                  if (!editTask.title.trim()) { alert("La tarea necesita un título."); return; }
+                  await saveProjectTask(editTask);
+                  setTaskModal(false); setEditTask(null);
+                }}>💾 Guardar</Btn>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal: registrar pago */}
       {payModal && newPay && (
         <Modal title="Registrar Pago" onClose={()=>setPayModal(false)}>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
@@ -4448,6 +4685,7 @@ export default function App() {
   const [projectQuotes, setProjectQuotes] = useState([]);
   const [projectPayments, setProjectPayments] = useState([]);
   const [projectPurchases, setProjectPurchases] = useState([]);
+  const [projectTasks, setProjectTasks] = useState([]);
   const [templates, setTemplates] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
@@ -4513,6 +4751,12 @@ export default function App() {
       if (pps) setProjectPayments(pps);
       const { data: ppurch } = await sb.from("project_purchases").select("*");
       if (ppurch) setProjectPurchases(ppurch);
+
+      // Project tasks (tabla puede no existir aún)
+      try {
+        const { data: ptasks } = await sb.from("project_tasks").select("*").order("date", { ascending: true });
+        if (ptasks) setProjectTasks(ptasks);
+      } catch(e) { console.warn("project_tasks table not found:", e.message); }
 
       // Payment requests
       const { data: prs } = await sb.from("payment_requests").select("*").order("id", { ascending: false });
@@ -4753,10 +4997,46 @@ export default function App() {
   const deleteProject = async (id) => {
     await sb.from("project_payments").delete().eq("project_id", id);
     await sb.from("project_quotes").delete().eq("project_id", id);
+    await sb.from("project_tasks").delete().eq("project_id", id);
     await sb.from("projects").delete().eq("id", id);
     setProjectPayments(pps => pps.filter(p => p.project_id !== id));
     setProjectQuotes(pqs => pqs.filter(pq => pq.project_id !== id));
+    setProjectTasks(ts => ts.filter(t => t.project_id !== id));
     setProjects(ps => ps.filter(p => p.id !== id));
+  };
+
+  // ── CRUD: Project Tasks ──────────────────────────────────────
+  const saveProjectTask = async (task) => {
+    const row = {
+      project_id: task.project_id,
+      title:       task.title || "",
+      type:        task.type  || "tarea",
+      date:        task.date  || null,
+      time:        task.time  || null,
+      duration:    task.duration || 60,
+      notes:       task.notes || "",
+      done:        task.done  || false,
+      created_by:  user.id,
+    };
+    if (task.id && typeof task.id === "number" && task.id < 1e12) {
+      // existing DB record
+      await sb.from("project_tasks").update(row).eq("id", task.id);
+      setProjectTasks(ts => ts.map(t => t.id === task.id ? { ...t, ...row } : t));
+    } else {
+      const { data } = await sb.from("project_tasks").insert(row).select().single();
+      if (data) setProjectTasks(ts => [...ts, data].sort((a,b)=>(a.date||"").localeCompare(b.date||"")));
+      return data;
+    }
+  };
+
+  const deleteProjectTask = async (id) => {
+    await sb.from("project_tasks").delete().eq("id", id);
+    setProjectTasks(ts => ts.filter(t => t.id !== id));
+  };
+
+  const toggleProjectTask = async (id, done) => {
+    await sb.from("project_tasks").update({ done }).eq("id", id);
+    setProjectTasks(ts => ts.map(t => t.id === id ? { ...t, done } : t));
   };
 
   // ── CRUD: Categories ────────────────────────────────────────
@@ -4868,6 +5148,10 @@ export default function App() {
                                    updateProjectStatus={updateProjectStatus}
                                    projectPurchases={projectPurchases}
                                    togglePurchase={togglePurchase}
+                                   projectTasks={projectTasks}
+                                   saveProjectTask={saveProjectTask}
+                                   deleteProjectTask={deleteProjectTask}
+                                   toggleProjectTask={toggleProjectTask}
                                    config={config} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
