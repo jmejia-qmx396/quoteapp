@@ -3139,7 +3139,9 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
 // ── PRINT EXISTING PAYMENT REQUEST ───────────────────────────────
 const PrintPaymentRequest = ({ pr, config, onClose }) => {
   useEffect(() => {
-    const pc = config.primaryColor || "#0d6e6e";
+    const profile = pr.profile || pr.payment_type || "empresa";
+    const prof = profile === "personal" && config.personal ? {...config, ...config.personal} : config;
+    const pc = prof.primaryColor || config.primaryColor || "#0d6e6e";
     const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
