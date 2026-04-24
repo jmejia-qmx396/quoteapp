@@ -1071,6 +1071,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
   const [newProdModal, setNewProdModal] = useState(false);
   const [newProd, setNewProd] = useState({ sku:"",name:"",category:"Servicios",currency:"COP",cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
   const [savingProd, setSavingProd] = useState(false);
+  const [prodTab, setProdTab] = useState("productos");
   const calcPrice = (cost, margin) => margin >= 100 ? 0 : Math.round(cost / (1 - margin/100));
 
   const set = (k, v) => setQuote(q => recalc({ ...q, [k]: v }));
@@ -1217,118 +1218,113 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
       <p style={{ fontWeight:700,marginBottom:10,fontSize:13 }}>Agregar productos o kits</p>
       <div style={{ background:G.surface,border:`1px solid ${G.border}`,borderRadius:8,padding:14,marginBottom:18 }}>
         {/* ── Tab selector ── */}
-        {(() => {
-          const [prodTab, setProdTab] = useState("productos");
-          return <>
-            <div style={{ display:"flex",gap:0,marginBottom:12,borderBottom:`1px solid ${G.border}` }}>
-              {[["productos","📦 Productos"],["kits","🧩 Kits"]].map(([id,label])=>(
-                <button key={id} onClick={()=>setProdTab(id)}
-                  style={{ padding:"6px 18px",background:"transparent",fontFamily:G.font,fontSize:13,
-                           fontWeight:prodTab===id?700:400,cursor:"pointer",
-                           color:prodTab===id?G.accent:G.muted,
-                           borderBottom:prodTab===id?`2px solid ${G.accent}`:"2px solid transparent",
-                           border:"none",marginBottom:-1 }}>
-                  {label}
-                </button>
-              ))}
-            </div>
+        <div style={{ display:"flex",gap:0,marginBottom:12,borderBottom:`1px solid ${G.border}` }}>
+          {[["productos","📦 Productos"],["kits","🧩 Kits"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setProdTab(id)}
+              style={{ padding:"6px 18px",background:"transparent",fontFamily:G.font,fontSize:13,
+                       fontWeight:prodTab===id?700:400,cursor:"pointer",
+                       color:prodTab===id?G.accent:G.muted,
+                       borderBottom:prodTab===id?`2px solid ${G.accent}`:"2px solid transparent",
+                       border:"none",marginBottom:-1 }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-            {prodTab==="productos" && <>
-              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
-                {["Todos",...[...new Set(products.map(p=>p.category).filter(Boolean))].sort()].map(cat=>(
-                  <button key={cat} onClick={()=>setProdCat(cat)}
-                    style={{ padding:"3px 10px",borderRadius:12,cursor:"pointer",fontSize:11,fontWeight:600,
-                             fontFamily:G.font,transition:".15s",
-                             background: prodCat===cat ? G.accent : "transparent",
-                             border: `1px solid ${prodCat===cat ? G.accent : G.border}`,
-                             color: prodCat===cat ? "#fff" : G.muted }}>
-                    {cat}
+        {prodTab==="productos" && <>
+          <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:10 }}>
+            {["Todos",...[...new Set(products.map(p=>p.category).filter(Boolean))].sort()].map(cat=>(
+              <button key={cat} onClick={()=>setProdCat(cat)}
+                style={{ padding:"3px 10px",borderRadius:12,cursor:"pointer",fontSize:11,fontWeight:600,
+                         fontFamily:G.font,transition:".15s",
+                         background: prodCat===cat ? G.accent : "transparent",
+                         border: `1px solid ${prodCat===cat ? G.accent : G.border}`,
+                         color: prodCat===cat ? "#fff" : G.muted }}>
+                {cat}
+              </button>
+            ))}
+          </div>
+          <input placeholder="Buscar producto o SKU…" value={prodSearch}
+            onChange={e=>setProdSearch(e.target.value)} style={{ marginBottom:10 }} />
+          <div style={{ display:"flex",flexWrap:"wrap",gap:8,maxHeight:120,overflowY:"auto" }}>
+            {filtProd.map(p=>(
+              <button key={p.id} onClick={()=>addItem(p)}
+                style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:6,
+                         padding:"6px 12px",color:G.text,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                         textAlign:"left",display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ color:G.accent,fontFamily:G.mono,fontSize:11,
+                               background:"rgba(59,130,246,.1)",padding:"1px 6px",borderRadius:4,flexShrink:0 }}>
+                  {p.sku||"—"}
+                </span>
+                <span style={{ flex:1 }}>{p.name}</span>
+                <span style={{ fontSize:10,padding:"1px 6px",borderRadius:10,flexShrink:0,
+                               background: p.currency==="USD"?"rgba(245,158,11,.15)":"rgba(16,185,129,.15)",
+                               color: p.currency==="USD"?G.warn:G.success,fontWeight:700 }}>
+                  {p.currency||"COP"}
+                </span>
+                <span style={{ color:G.muted,flexShrink:0 }}>{fmtCur(p.price, p.currency||"COP")}</span>
+              </button>
+            ))}
+            {!filtProd.length && (
+              <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                <span style={{ color:G.muted,fontSize:12 }}>Sin coincidencias.</span>
+                {onSaveProduct && (
+                  <button onClick={()=>{
+                    setNewProd({ sku:"",name:prodSearch,category:"Servicios",currency:"COP",
+                                 cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
+                    setNewProdModal(true);
+                  }}
+                    style={{ background:"rgba(59,130,246,.1)",border:`1px solid ${G.accent}`,
+                             color:G.accent,borderRadius:6,padding:"4px 12px",cursor:"pointer",
+                             fontSize:12,fontFamily:G.font,fontWeight:600 }}>
+                    + Crear "{prodSearch}"
                   </button>
-                ))}
-              </div>
-              <input placeholder="Buscar producto o SKU…" value={prodSearch}
-                onChange={e=>setProdSearch(e.target.value)} style={{ marginBottom:10 }} />
-              <div style={{ display:"flex",flexWrap:"wrap",gap:8,maxHeight:120,overflowY:"auto" }}>
-                {filtProd.map(p=>(
-                  <button key={p.id} onClick={()=>addItem(p)}
-                    style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:6,
-                             padding:"6px 12px",color:G.text,cursor:"pointer",fontSize:12,fontFamily:G.font,
-                             textAlign:"left",display:"flex",alignItems:"center",gap:8 }}>
-                    <span style={{ color:G.accent,fontFamily:G.mono,fontSize:11,
-                                   background:"rgba(59,130,246,.1)",padding:"1px 6px",borderRadius:4,flexShrink:0 }}>
-                      {p.sku||"—"}
-                    </span>
-                    <span style={{ flex:1 }}>{p.name}</span>
-                    <span style={{ fontSize:10,padding:"1px 6px",borderRadius:10,flexShrink:0,
-                                   background: p.currency==="USD"?"rgba(245,158,11,.15)":"rgba(16,185,129,.15)",
-                                   color: p.currency==="USD"?G.warn:G.success,fontWeight:700 }}>
-                      {p.currency||"COP"}
-                    </span>
-                    <span style={{ color:G.muted,flexShrink:0 }}>{fmtCur(p.price, p.currency||"COP")}</span>
-                  </button>
-                ))}
-                {!filtProd.length && (
-                  <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                    <span style={{ color:G.muted,fontSize:12 }}>Sin coincidencias.</span>
-                    {onSaveProduct && (
-                      <button onClick={()=>{
-                        setNewProd({ sku:"",name:prodSearch,category:"Servicios",currency:"COP",
-                                     cost:0,margin:30,price:0,unit:"pza",imageUrl:"",tax:19 });
-                        setNewProdModal(true);
-                      }}
-                        style={{ background:"rgba(59,130,246,.1)",border:`1px solid ${G.accent}`,
-                                 color:G.accent,borderRadius:6,padding:"4px 12px",cursor:"pointer",
-                                 fontSize:12,fontFamily:G.font,fontWeight:600 }}>
-                        + Crear "{prodSearch}"
-                      </button>
-                    )}
-                  </div>
                 )}
               </div>
-            </>}
+            )}
+          </div>
+        </>}
 
-            {prodTab==="kits" && <>
-              {!templates.length ? (
-                <div style={{ textAlign:"center",padding:"20px 0",color:G.muted,fontSize:13 }}>
-                  No hay kits creados aún. Ve a <strong>🧩 Kits</strong> en el menú para crear uno.
-                </div>
-              ) : (
-                <div style={{ display:"flex",flexDirection:"column",gap:8,maxHeight:200,overflowY:"auto" }}>
-                  {templates.map(t => {
-                    const prodItems = (t.items||[]).filter(i=>i.type!=="header");
-                    return (
-                      <div key={t.id}
-                        style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                                 border:`1px solid ${G.border}`,borderRadius:8,
-                                 padding:"10px 14px",background:G.card }}>
-                        <div>
-                          <div style={{ fontWeight:700,fontSize:13 }}>{t.name}</div>
-                          {t.description && (
-                            <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>{t.description}</div>
-                          )}
-                          <div style={{ fontSize:11,color:G.accent,marginTop:4 }}>
-                            {prodItems.length} producto{prodItems.length!==1?"s":""}
-                            {prodItems.slice(0,3).map((i,idx)=>(
-                              <span key={idx} style={{ color:G.muted,marginLeft:6 }}>· {i.name}</span>
-                            ))}
-                            {prodItems.length>3 && <span style={{ color:G.muted }}> …+{prodItems.length-3} más</span>}
-                          </div>
-                        </div>
-                        <Btn size="sm" variant="success"
-                          onClick={()=>{
-                            const newItems = (t.items||[]).map(i=>({...i,id:Date.now()+Math.random()}));
-                            setQuote(q=>recalc({...q,items:[...q.items,...newItems]}));
-                          }}>
-                          + Insertar
-                        </Btn>
+        {prodTab==="kits" && <>
+          {!templates.length ? (
+            <div style={{ textAlign:"center",padding:"20px 0",color:G.muted,fontSize:13 }}>
+              No hay kits creados aún. Ve a <strong>🧩 Kits</strong> en el menú para crear uno.
+            </div>
+          ) : (
+            <div style={{ display:"flex",flexDirection:"column",gap:8,maxHeight:200,overflowY:"auto" }}>
+              {templates.map(t => {
+                const prodItems = (t.items||[]).filter(i=>i.type!=="header");
+                return (
+                  <div key={t.id}
+                    style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                             border:`1px solid ${G.border}`,borderRadius:8,
+                             padding:"10px 14px",background:G.card }}>
+                    <div>
+                      <div style={{ fontWeight:700,fontSize:13 }}>{t.name}</div>
+                      {t.description && (
+                        <div style={{ color:G.muted,fontSize:11,marginTop:2 }}>{t.description}</div>
+                      )}
+                      <div style={{ fontSize:11,color:G.accent,marginTop:4 }}>
+                        {prodItems.length} producto{prodItems.length!==1?"s":""}
+                        {prodItems.slice(0,3).map((i,idx)=>(
+                          <span key={idx} style={{ color:G.muted,marginLeft:6 }}>· {i.name}</span>
+                        ))}
+                        {prodItems.length>3 && <span style={{ color:G.muted }}> …+{prodItems.length-3} más</span>}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>}
-          </>;
-        })()}
+                    </div>
+                    <Btn size="sm" variant="success"
+                      onClick={()=>{
+                        const newItems = (t.items||[]).map(i=>({...i,id:Date.now()+Math.random()}));
+                        setQuote(q=>recalc({...q,items:[...q.items,...newItems]}));
+                      }}>
+                      + Insertar
+                    </Btn>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>}
       </div>
 
       {/* Botones de fila */}
