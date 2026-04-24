@@ -3628,18 +3628,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         const activos = projects.filter(p=>p.status==="Activo");
         let totalProyecto=0, totalPagadoEmpresa=0, totalPagadoPersonal=0,
             totalConIvaTotal=0, totalSinIvaTotal=0,
-            totalUtilidad=0, totalVentaNeta=0;
+            totalUtilidad=0, totalVentaNeta=0, totalPorComprar=0;
         activos.forEach(p => {
           const qs = getProjQuotes(p.id);
           const pps = getProjPayments(p.id);
           qs.forEach(q => {
             const total = q.total || 0;
-            // Calculate sinIva from items directly (most reliable)
             const items = (q.items||[]).filter(i=>i.type!=="header");
             const trm = q.trm || 4200;
             let sinIva = 0;
             items.forEach(i => {
-              // itemTax comes from recalc, tax is original field, default 19%
               const tax = (i.itemTax !== undefined && i.itemTax !== null)
                 ? Number(i.itemTax)
                 : (i.tax !== undefined && i.tax !== null ? Number(i.tax) : 19);
@@ -3650,12 +3648,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 const qty = Number(i.qty||1);
                 sinIva += qty * (priceCOP - disc);
               }
+              // Por comprar: items no chuleados
+              const purch = (projectPurchases||[]).find(pp=>pp.project_id===p.id&&pp.quote_id===q.id&&pp.item_id===String(i.id));
+              if (!purch?.purchased) {
+                totalPorComprar += Number(i.costCOP||i.cost||0) * Number(i.qty||1);
+              }
             });
             const conIva = total - sinIva;
             totalConIvaTotal  += conIva;
             totalSinIvaTotal  += sinIva;
             totalProyecto     += total;
-            // Utilidad from quote
             totalUtilidad  += q.profit || 0;
             totalVentaNeta += q.ventaNeta || ((q.subtotalConIva||0)+(q.subtotalSinIva||0)) || (total - (q.taxAmt||0));
           });
@@ -3665,41 +3667,51 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         const saldoEmpresa  = totalConIvaTotal  - totalPagadoEmpresa;
         const saldoPersonal = totalSinIvaTotal  - totalPagadoPersonal;
         const saldoTotal    = saldoEmpresa + saldoPersonal;
+        const superavitGlobal = saldoTotal - totalPorComprar;
         return (
           <div style={{ display:"flex",gap:12,marginBottom:20,flexWrap:"wrap" }}>
-            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accent}` }}>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
-                Proyectos Activos
-              </p>
+            <Card style={{ flex:1,minWidth:160,borderLeft:`4px solid ${G.accent}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>Proyectos Activos</p>
               <p style={{ fontSize:22,fontWeight:700,color:G.accent }}>{activos.length}</p>
               <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>Total: {fmt(totalProyecto)}</p>
             </Card>
-            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.warn}` }}>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
-                Saldo Total Pendiente
-              </p>
+            <Card style={{ flex:1,minWidth:160,borderLeft:`4px solid ${G.warn}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>Saldo Total Pendiente</p>
               <p style={{ fontSize:22,fontWeight:700,color:saldoTotal>0?G.warn:G.success }}>{fmt(saldoTotal)}</p>
-              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
-                Pagado: {fmt(totalPagadoEmpresa+totalPagadoPersonal)}
-              </p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>Pagado: {fmt(totalPagadoEmpresa+totalPagadoPersonal)}</p>
             </Card>
-            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.success}` }}>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
-                🏢 Saldo Empresa (con IVA)
-              </p>
+            <Card style={{ flex:1,minWidth:160,borderLeft:`4px solid ${G.success}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>🏢 Saldo Empresa (con IVA)</p>
               <p style={{ fontSize:22,fontWeight:700,color:saldoEmpresa>0?G.warn:G.success }}>{fmt(saldoEmpresa)}</p>
-              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
-                Total c/IVA: {fmt(totalConIvaTotal)}
-              </p>
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>Total c/IVA: {fmt(totalConIvaTotal)}</p>
             </Card>
-            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accentH}` }}>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
-                👤 Saldo Personal (sin IVA)
-              </p>
+            <Card style={{ flex:1,minWidth:160,borderLeft:`4px solid ${G.accentH}` }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>👤 Saldo Personal (sin IVA)</p>
               <p style={{ fontSize:22,fontWeight:700,color:saldoPersonal>0?G.warn:G.success }}>{fmt(saldoPersonal)}</p>
-              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
-                Total s/IVA: {fmt(totalSinIvaTotal)}
+              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>Total s/IVA: {fmt(totalSinIvaTotal)}</p>
+            </Card>
+            {/* ── Tarjeta Por Cobrar vs Por Comprar ── */}
+            <Card style={{ flex:1,minWidth:200,borderLeft:`4px solid ${superavitGlobal>=0?G.success:G.danger}`,
+                           background:superavitGlobal>=0?"rgba(16,185,129,.05)":"rgba(239,68,68,.05)" }}>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8 }}>
+                Compras vs Cobros
               </p>
+              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                <span style={{ fontSize:12,color:G.muted }}>Por cobrar</span>
+                <span style={{ fontSize:13,fontWeight:700,color:G.warn,fontFamily:G.mono }}>{fmt(saldoTotal)}</span>
+              </div>
+              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:8 }}>
+                <span style={{ fontSize:12,color:G.muted }}>Por comprar</span>
+                <span style={{ fontSize:13,fontWeight:700,color:"#8b5cf6",fontFamily:G.mono }}>{fmt(totalPorComprar)}</span>
+              </div>
+              <div style={{ borderTop:`1px solid ${G.border}`,paddingTop:6,display:"flex",justifyContent:"space-between" }}>
+                <span style={{ fontSize:12,fontWeight:700,color:superavitGlobal>=0?G.success:G.danger }}>
+                  {superavitGlobal>=0?"✅ Superávit":"⚠️ Déficit"}
+                </span>
+                <span style={{ fontSize:15,fontWeight:700,fontFamily:G.mono,color:superavitGlobal>=0?G.success:G.danger }}>
+                  {fmt(Math.abs(superavitGlobal))}
+                </span>
+              </div>
             </Card>
           </div>
         );
@@ -3988,11 +4000,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               // Calcular "por comprar": costo de items NO chuleados en pestaña compras
               const allProjQuotes = getProjQuotes(proj.id);
               const porComprar = allProjQuotes.reduce((total, q) => {
-                const trm = q.trm || 4200;
                 return total + (q.items||[]).filter(i=>i.type!=="header"&&i.name).reduce((s,i) => {
-                  const purch = (projectPurchases||[]).find(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id||i.productId));
-                  if (purch?.purchased) return s; // ya comprado, no contar
-                  const cost = i.currency==="USD" ? Number(i.cost||0)*trm : Number(i.cost||0);
+                  const purch = (projectPurchases||[]).find(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id));
+                  if (purch?.purchased) return s;
+                  const cost = Number(i.costCOP||i.cost||0);
                   return s + cost * Number(i.qty||1);
                 }, 0);
               }, 0);
