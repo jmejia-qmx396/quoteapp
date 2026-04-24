@@ -3701,15 +3701,6 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 Total s/IVA: {fmt(totalSinIvaTotal)}
               </p>
             </Card>
-            <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.success}` }}>
-              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>
-                📈 Utilidad Presupuestada
-              </p>
-              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(totalUtilidad)}</p>
-              <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
-                GM: {totalVentaNeta>0?Math.round(totalUtilidad/totalVentaNeta*100):0}%
-              </p>
-            </Card>
           </div>
         );
       })()}
@@ -3994,18 +3985,59 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             {/* Saldo */}
             {(() => {
               const { totalProject, totalPaid, balance } = calcTotals(proj.id);
+              // Calcular "por comprar": costo de items NO chuleados en pestaña compras
+              const allProjQuotes = getProjQuotes(proj.id);
+              const porComprar = allProjQuotes.reduce((total, q) => {
+                const trm = q.trm || 4200;
+                return total + (q.items||[]).filter(i=>i.type!=="header"&&i.name).reduce((s,i) => {
+                  const purch = (projectPurchases||[]).find(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id||i.productId));
+                  if (purch?.purchased) return s; // ya comprado, no contar
+                  const cost = i.currency==="USD" ? Number(i.cost||0)*trm : Number(i.cost||0);
+                  return s + cost * Number(i.qty||1);
+                }, 0);
+              }, 0);
+              const superavit  = balance - porComprar;
               return (
-                <Card style={{ background: balance>0?"rgba(245,158,11,.08)":"rgba(16,185,129,.08)",
-                               border:`1px solid ${balance>0?"rgba(245,158,11,.3)":"rgba(16,185,129,.3)"}` }}>
-                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                    <span style={{ fontWeight:700,fontSize:16 }}>Saldo Pendiente</span>
-                    <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:22,
-                                   color: balance>0?G.warn:G.success }}>
-                      {fmt(balance)}
-                    </span>
+                <>
+                  <Card style={{ background: balance>0?"rgba(245,158,11,.08)":"rgba(16,185,129,.08)",
+                                 border:`1px solid ${balance>0?"rgba(245,158,11,.3)":"rgba(16,185,129,.3)"}`,
+                                 marginBottom:12 }}>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                      <span style={{ fontWeight:700,fontSize:16 }}>Saldo Pendiente</span>
+                      <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:22,
+                                     color: balance>0?G.warn:G.success }}>
+                        {fmt(balance)}
+                      </span>
+                    </div>
+                    {balance<=0 && <p style={{ color:G.success,fontSize:12,marginTop:4 }}>✅ Proyecto pagado completamente</p>}
+                  </Card>
+
+                  {/* Tarjeta superávit para compras */}
+                  <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+                    <Card style={{ borderLeft:`3px solid ${G.warn}` }}>
+                      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",marginBottom:6 }}>Por Cobrar</p>
+                      <p style={{ fontSize:18,fontWeight:700,color:G.warn,fontFamily:G.mono }}>{fmt(balance)}</p>
+                      <p style={{ fontSize:11,color:G.muted,marginTop:4 }}>Saldo pendiente del cliente</p>
+                    </Card>
+                    <Card style={{ borderLeft:`3px solid #8b5cf6` }}>
+                      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",marginBottom:6 }}>Por Comprar</p>
+                      <p style={{ fontSize:18,fontWeight:700,color:"#8b5cf6",fontFamily:G.mono }}>{fmt(porComprar)}</p>
+                      <p style={{ fontSize:11,color:G.muted,marginTop:4 }}>Costo estimado pendiente</p>
+                    </Card>
+                    <Card style={{ borderLeft:`3px solid ${superavit>=0?G.success:G.danger}`,
+                                   background: superavit>=0?"rgba(16,185,129,.06)":"rgba(239,68,68,.06)" }}>
+                      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",marginBottom:6 }}>
+                        {superavit>=0?"✅ Superávit":"⚠️ Déficit"}
+                      </p>
+                      <p style={{ fontSize:18,fontWeight:700,color:superavit>=0?G.success:G.danger,fontFamily:G.mono }}>
+                        {fmt(Math.abs(superavit))}
+                      </p>
+                      <p style={{ fontSize:11,color:G.muted,marginTop:4 }}>
+                        {superavit>=0?"Disponible para compras":"Falta para cubrir costos"}
+                      </p>
+                    </Card>
                   </div>
-                  {balance<=0 && <p style={{ color:G.success,fontSize:12,marginTop:4 }}>✅ Proyecto pagado completamente</p>}
-                </Card>
+                </>
               );
             })()}
             </>}
