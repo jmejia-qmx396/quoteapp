@@ -3437,6 +3437,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
     id: Date.now(), project_id: projId, title:"", type:"tarea",
     date: today(), time:"09:00", duration:60, notes:"", done:false,
   });
+
+  const filt = projects.filter(p => {
     const matchesSearch = (p.name||"").toLowerCase().includes(search.toLowerCase()) ||
       (p.client_name||"").toLowerCase().includes(search.toLowerCase());
     const isArchived = p.status === "Archivado";
@@ -3748,7 +3750,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
         {/* ── Detalle del proyecto ── */}
         {proj ? (
-          <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ flex:1 }}>
             <Card style={{ marginBottom:16 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10 }}>
                 <div>
@@ -3789,7 +3791,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </Card>
 
             {/* Tabs */}
-            <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}`,overflowX:"auto",flexShrink:0 }}>
+            <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}` }}>
               {[["resumen","📋 Resumen"],["compras","🛒 Compras"],["tareas","📅 Tareas"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setActiveTab(id)}
                   style={{ padding:"8px 20px",background:"none",border:"none",cursor:"pointer",
