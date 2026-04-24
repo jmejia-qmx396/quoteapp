@@ -3748,7 +3748,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
         {/* ── Detalle del proyecto ── */}
         {proj ? (
-          <div style={{ flex:1 }}>
+          <div style={{ flex:1, minWidth:0 }}>
             <Card style={{ marginBottom:16 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10 }}>
                 <div>
@@ -3789,7 +3789,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </Card>
 
             {/* Tabs */}
-            <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}` }}>
+            <div style={{ display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${G.border}`,overflowX:"auto",flexShrink:0 }}>
               {[["resumen","📋 Resumen"],["compras","🛒 Compras"],["tareas","📅 Tareas"]].map(([id,label])=>(
                 <button key={id} onClick={()=>setActiveTab(id)}
                   style={{ padding:"8px 20px",background:"none",border:"none",cursor:"pointer",
