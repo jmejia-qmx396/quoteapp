@@ -672,6 +672,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [addToProjectQuote, setAddToProjectQuote] = useState(null);
+  const [newProjNameInline, setNewProjNameInline] = useState("");
   const [approvedQuoteForProject, setApprovedQuoteForProject] = useState(null);
   const [newProjName, setNewProjName] = useState("");
   const [search, setSearch] = useState("");
@@ -891,12 +892,10 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
                       )}
                       {q.isLatest!==false && addQuoteToProject && (() => {
                         const inProject = projectQuotes.find(pq=>pq.quote_id===q.id);
-                        const activeProjects = projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(q.clientId||q.client_id));
                         if (inProject) return <span title="Esta cotización ya está asociada a un proyecto" style={{fontSize:10,color:G.success,padding:"2px 6px",background:"rgba(16,185,129,.1)",borderRadius:10}}>🏗️ En proyecto</span>;
-                        if (!activeProjects.length) return null;
                         return (
                           <Btn size="sm" variant="ghost" onClick={()=>setAddToProjectQuote(q)}
-                            title="Asociar esta cotización a un proyecto existente"
+                            title="Asociar o crear proyecto para esta cotización"
                             style={{color:G.success,borderColor:G.success,border:"1px solid"}}>
                             🏗️
                           </Btn>
@@ -1018,33 +1017,69 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
 
       {confirmDialog}
       {addToProjectQuote && (
-        <Modal title={`Agregar #${addToProjectQuote.number} a Proyecto`} onClose={()=>setAddToProjectQuote(null)}>
-          <p style={{ color:G.muted,fontSize:13,marginBottom:14 }}>
-            Selecciona el proyecto activo al que quieres agregar esta cotización:
+        <Modal title={`🏗️ Cotización #${addToProjectQuote.number} — Proyecto`} onClose={()=>{ setAddToProjectQuote(null); setNewProjNameInline(""); }}>
+          <p style={{ color:G.muted,fontSize:13,marginBottom:16 }}>
+            Asocia esta cotización a un proyecto existente o crea uno nuevo.
+            {addToProjectQuote.status !== "Aprobada" && (
+              <span style={{ display:"block",marginTop:6,color:G.warn,fontWeight:600 }}>
+                ⚠️ La cotización se marcará como <strong>Aprobada</strong> automáticamente.
+              </span>
+            )}
           </p>
-          {projects
-            .filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id))
-            .map(p=>(
-              <div key={p.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-                                        padding:"12px 0",borderBottom:`1px solid ${G.border}` }}>
-                <div>
-                  <div style={{ fontWeight:600 }}>{p.name}</div>
-                  <div style={{ color:G.muted,fontSize:12 }}>{p.client_name}</div>
-                </div>
-                <Btn size="sm" variant="success" onClick={async()=>{
-                  await addQuoteToProject(p.id, addToProjectQuote.id);
-                  setAddToProjectQuote(null);
-                }}>+ Agregar</Btn>
-              </div>
-            ))
-          }
-          {!projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id)).length && (
-            <p style={{ color:G.muted,padding:16,textAlign:"center" }}>
-              No hay proyectos activos para este cliente. Créalo desde la pestaña Proyectos.
-            </p>
+
+          {/* Proyectos existentes del cliente */}
+          {projects.filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id)).length > 0 && (
+            <>
+              <p style={{ fontWeight:700,fontSize:13,marginBottom:8 }}>Proyectos activos del cliente:</p>
+              {projects
+                .filter(p=>p.status==="Activo"&&String(p.client_id)===String(addToProjectQuote.clientId||addToProjectQuote.client_id))
+                .map(p=>(
+                  <div key={p.id} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                                            padding:"10px 0",borderBottom:`1px solid ${G.border}` }}>
+                    <div>
+                      <div style={{ fontWeight:600 }}>{p.name}</div>
+                      <div style={{ color:G.muted,fontSize:12 }}>{p.client_name}</div>
+                    </div>
+                    <Btn size="sm" variant="success" onClick={async()=>{
+                      // Aprobar cotización si no lo está
+                      if (addToProjectQuote.status !== "Aprobada") {
+                        await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+                      }
+                      await addQuoteToProject(p.id, addToProjectQuote.id);
+                      setAddToProjectQuote(null); setNewProjNameInline("");
+                    }}>+ Agregar</Btn>
+                  </div>
+                ))
+              }
+              <div style={{ height:1,background:G.border,margin:"16px 0" }} />
+            </>
           )}
-          <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
-            <Btn variant="ghost" onClick={()=>setAddToProjectQuote(null)}>Cerrar</Btn>
+
+          {/* Crear nuevo proyecto */}
+          <p style={{ fontWeight:700,fontSize:13,marginBottom:8 }}>Crear nuevo proyecto:</p>
+          <Field label="Nombre del Proyecto">
+            <input value={newProjNameInline}
+              onChange={e=>setNewProjNameInline(e.target.value)}
+              placeholder={`${addToProjectQuote.clientName||addToProjectQuote.client_name||""} — ${new Date().toISOString().substring(0,7)}`}
+              autoFocus />
+          </Field>
+          <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
+            <Btn variant="ghost" onClick={()=>{ setAddToProjectQuote(null); setNewProjNameInline(""); }}>Cancelar</Btn>
+            <Btn variant="success" onClick={async()=>{
+              const name = newProjNameInline.trim() ||
+                `${addToProjectQuote.clientName||addToProjectQuote.client_name||""} — ${new Date().toISOString().substring(0,7)}`;
+              // Aprobar cotización si no lo está
+              if (addToProjectQuote.status !== "Aprobada") {
+                await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+              }
+              const proj = await createProject({
+                clientId: addToProjectQuote.clientId||addToProjectQuote.client_id,
+                clientName: addToProjectQuote.clientName||addToProjectQuote.client_name||"",
+                name
+              });
+              if (proj) await addQuoteToProject(proj.id, addToProjectQuote.id);
+              setAddToProjectQuote(null); setNewProjNameInline("");
+            }}>🏗️ Crear Proyecto</Btn>
           </div>
         </Modal>
       )}
