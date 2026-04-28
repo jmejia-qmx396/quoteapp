@@ -1041,11 +1041,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
                       <div style={{ color:G.muted,fontSize:12 }}>{p.client_name}</div>
                     </div>
                     <Btn size="sm" variant="success" onClick={async()=>{
-                      // Aprobar cotización si no lo está
+                      let quoteId = addToProjectQuote.id;
                       if (addToProjectQuote.status !== "Aprobada") {
-                        await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+                        const saved = await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+                        if (saved?.id) quoteId = saved.id;
                       }
-                      await addQuoteToProject(p.id, addToProjectQuote.id);
+                      await addQuoteToProject(p.id, quoteId);
                       setAddToProjectQuote(null); setNewProjNameInline("");
                     }}>+ Agregar</Btn>
                   </div>
@@ -1068,16 +1069,19 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
             <Btn variant="success" onClick={async()=>{
               const name = newProjNameInline.trim() ||
                 `${addToProjectQuote.clientName||addToProjectQuote.client_name||""} — ${new Date().toISOString().substring(0,7)}`;
-              // Aprobar cotización si no lo está
+              let quoteId = addToProjectQuote.id;
               if (addToProjectQuote.status !== "Aprobada") {
-                await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+                const saved = await saveQuote({ ...addToProjectQuote, status:"Aprobada" });
+                if (saved?.id) quoteId = saved.id;
               }
               const proj = await createProject({
                 clientId: addToProjectQuote.clientId||addToProjectQuote.client_id,
                 clientName: addToProjectQuote.clientName||addToProjectQuote.client_name||"",
                 name
               });
-              if (proj) await addQuoteToProject(proj.id, addToProjectQuote.id);
+              if (proj) {
+                await addQuoteToProject(proj.id, quoteId);
+              }
               setAddToProjectQuote(null); setNewProjNameInline("");
             }}>🏗️ Crear Proyecto</Btn>
           </div>
