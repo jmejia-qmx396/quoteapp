@@ -3819,8 +3819,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   {proj.status==="Activo"
                     ? <Btn size="sm" variant="ghost" onClick={async()=>{
                         const { balance } = calcTotals(proj.id);
-                        if (balance > 0) { await confirm(`Saldo pendiente: ${fmt(balance)}`, "El proyecto no se puede cerrar hasta que el saldo sea cero."); return; }
-                        const ok = await confirm("¿Cerrar este proyecto?", "No podrás agregar más cotizaciones ni pagos.");
+                        if (balance > 0) {
+                          const force = await confirm(
+                            `Saldo pendiente: ${fmt(balance)}`,
+                            "Hay un saldo pendiente. ¿Deseas cerrar el proyecto de todas formas?"
+                          );
+                          if (!force) return;
+                        }
+                        const ok = await confirm("¿Cerrar este proyecto?", "Una vez cerrado puedes reabrirlo o archivarlo.");
                         if (ok) updateProjectStatus(proj.id,"Cerrado");
                       }}>🔒 Cerrar</Btn>
                     : proj.status==="Cerrado"
