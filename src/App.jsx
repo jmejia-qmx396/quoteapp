@@ -3752,6 +3752,42 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </span>
               </div>
             </Card>
+            {/* ── Tarjeta tiempo promedio ── */}
+            {(() => {
+              const cerrados = projects.filter(p=>p.status==="Cerrado"||p.status==="Archivado");
+              const tiempos  = cerrados.filter(p=>p.created_at).map(p=>
+                Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000)
+              );
+              const promDias = tiempos.length ? Math.round(tiempos.reduce((s,d)=>s+d,0)/tiempos.length) : null;
+              const activosDias = activos.filter(p=>p.created_at).map(p=>
+                Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000)
+              );
+              const promActivos = activosDias.length ? Math.round(activosDias.reduce((s,d)=>s+d,0)/activosDias.length) : null;
+              return (
+                <Card style={{ flex:1,minWidth:160,borderLeft:`4px solid ${G.accent}` }}>
+                  <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:8 }}>
+                    🕐 Tiempo Proyectos
+                  </p>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                    <span style={{ fontSize:12,color:G.muted }}>Prom. activos</span>
+                    <span style={{ fontSize:13,fontWeight:700,color:G.accent }}>
+                      {promActivos !== null ? `${promActivos}d` : "—"}
+                    </span>
+                  </div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                    <span style={{ fontSize:12,color:G.muted }}>Prom. cerrados</span>
+                    <span style={{ fontSize:13,fontWeight:700,color:G.success }}>
+                      {promDias !== null ? `${promDias}d` : "—"}
+                    </span>
+                  </div>
+                  <div style={{ borderTop:`1px solid ${G.border}`,paddingTop:6 }}>
+                    <span style={{ fontSize:11,color:G.muted }}>
+                      Basado en {cerrados.length} proyecto{cerrados.length!==1?"s":""} cerrado{cerrados.length!==1?"s":""}
+                    </span>
+                  </div>
+                </Card>
+              );
+            })()}
           </div>
         );
       })()}
@@ -3809,6 +3845,18 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 <div>
                   <h2 style={{ fontSize:18,fontWeight:700 }}>{proj.client_name}</h2>
                   <p style={{ color:G.muted,fontSize:13 }}>{proj.name}</p>
+                  {proj.created_at && (() => {
+                    const days = Math.floor((Date.now() - new Date(proj.created_at).getTime()) / 86400000);
+                    return (
+                      <p style={{ color:G.muted,fontSize:11,marginTop:4 }}>
+                        🕐 {days === 0 ? "Creado hoy" : `${days} día${days!==1?"s":""} activo`}
+                        <span style={{ marginLeft:8,color:G.border }}>·</span>
+                        <span style={{ marginLeft:8,color:G.muted }}>
+                          Creado {new Date(proj.created_at).toLocaleDateString("es-CO",{day:"numeric",month:"short",year:"numeric"})}
+                        </span>
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
                   {proj.status==="Activo" && <>
