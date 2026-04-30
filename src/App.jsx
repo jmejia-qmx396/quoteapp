@@ -3831,6 +3831,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     Saldo: <strong>{fmt(balance)}</strong>
                   </span>
                 </div>
+                {p.created_at && (() => {
+                  const days = Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000);
+                  return (
+                    <div style={{ marginTop:6,fontSize:11,color:G.muted }}>
+                      🕐 {days === 0 ? "Creado hoy" : `${days} día${days!==1?"s":""} activo`}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
