@@ -426,6 +426,13 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
     return acc + Math.max(0, projTotal - paid);
   }, 0);
 
+  // ── Ingresos (pagos de proyectos en el período seleccionado) ────
+  const paymentsInRange   = (projectPayments||[]).filter(pp => { const d = pp.date||""; return d >= dateFrom && d <= dateTo; });
+  const ingresosTotal     = paymentsInRange.reduce((s,pp) => s+(pp.amount||0), 0);
+  const ingresosEmpresa   = paymentsInRange.filter(pp => (pp.payment_type||"empresa")==="empresa").reduce((s,pp) => s+(pp.amount||0), 0);
+  const ingresosPersonal  = paymentsInRange.filter(pp => pp.payment_type==="personal").reduce((s,pp) => s+(pp.amount||0), 0);
+  const ingresosCantidad  = paymentsInRange.length;
+
   // ── Cuentas de cobro pendientes (últimas emitidas sin pago registrado en proyectos) ──
   const recentPaymentReqs = (paymentRequests||[]).slice(0,5);
 
@@ -518,8 +525,45 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
       <div style={{ display:"flex",gap:14,marginBottom:24,flexWrap:"wrap" }}>
         <StatCard label="Proyectos Activos"   value={activeProjects.length}  icon="🏗️" color="#8b5cf6" />
         <StatCard label="Total Proyectos"     value={totalProjects}           icon="📁" color={G.accent} />
-        <StatCard label="Saldo por Cobrar"    value={fmt(projectsBalance)}    icon="💵" color={G.warn}   />
         <StatCard label="Cuentas de Cobro"    value={(paymentRequests||[]).length} icon="🧾" color={G.success} />
+      </div>
+
+      {/* ── KPIs Ingresos ── */}
+      <p style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",
+                  letterSpacing:".08em",marginBottom:10 }}>Ingresos — Período</p>
+      <div style={{ display:"flex",gap:14,marginBottom:24,flexWrap:"wrap" }}>
+        <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.success}` }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+            <div>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>💰 Total Ingresado</p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.success }}>{fmt(ingresosTotal)}</p>
+              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>{ingresosCantidad} pago{ingresosCantidad!==1?"s":""} registrado{ingresosCantidad!==1?"s":""}</p>
+            </div>
+          </div>
+        </Card>
+        <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid #10b981` }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+            <div>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>🏢 Empresa (con IVA)</p>
+              <p style={{ fontSize:22,fontWeight:700,color:"#10b981" }}>{fmt(ingresosEmpresa)}</p>
+              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>
+                {ingresosTotal>0 ? Math.round(ingresosEmpresa/ingresosTotal*100) : 0}% del total
+              </p>
+            </div>
+          </div>
+        </Card>
+        <Card style={{ flex:1,minWidth:180,borderLeft:`4px solid ${G.accent}` }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+            <div>
+              <p style={{ color:G.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",marginBottom:6 }}>👤 Personal (sin IVA)</p>
+              <p style={{ fontSize:22,fontWeight:700,color:G.accent }}>{fmt(ingresosPersonal)}</p>
+              <p style={{ color:G.muted,fontSize:12,marginTop:4 }}>
+                {ingresosTotal>0 ? Math.round(ingresosPersonal/ingresosTotal*100) : 0}% del total
+              </p>
+            </div>
+          </div>
+        </Card>
+        <StatCard label="Saldo por Cobrar" value={fmt(projectsBalance)} icon="💵" color={G.warn} />
       </div>
 
       {/* ── Grilla inferior ── */}
