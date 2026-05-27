@@ -4860,6 +4860,178 @@ const KitsView = ({ templates, saveTemplate, deleteTemplate, updateTemplate, pro
 };
 
 // ── APP ROOT ──────────────────────────────────────────────────────
+
+// ── Vista Técnico ────────────────────────────────────────────────
+const TechnicianView = ({ user, profile, logout }) => {
+  const [jobs, setJobs]         = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [form, setForm] = useState({
+    fecha: new Date().toISOString().split("T")[0],
+    descripcion: "", proyecto: "", valor_acordado: "", notas: ""
+  });
+
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const { data: js } = await sb.from("technician_jobs").select("*")
+      .eq("technician_id", user.id).order("fecha", { ascending: false });
+    const { data: ps } = await sb.from("technician_payments").select("*")
+      .eq("technician_id", user.id).order("fecha", { ascending: false });
+    setJobs(js || []);
+    setPayments(ps || []);
+    setLoading(false);
+  };
+
+  const totalAcordado  = jobs.reduce((s,j) => s + Number(j.valor_acordado||0), 0);
+  const totalPagado    = payments.reduce((s,p) => s + Number(p.monto||0), 0);
+  const totalPendiente = totalAcordado - totalPagado;
+
+  const handleSave = async () => {
+    if (!form.descripcion || !form.valor_acordado) return;
+    setSaving(true);
+    await sb.from("technician_jobs").insert({
+      technician_id: user.id,
+      fecha: form.fecha,
+      descripcion: form.descripcion,
+      proyecto: form.proyecto || null,
+      valor_acordado: Number(form.valor_acordado),
+      notas: form.notas || null
+    });
+    setForm({ fecha: new Date().toISOString().split("T")[0], descripcion:"", proyecto:"", valor_acordado:"", notas:"" });
+    setShowForm(false);
+    setSaving(false);
+    loadData();
+  };
+
+  const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`,
+                borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
+
+  return (
+    <div style={{ minHeight:"100vh", background:G.bg, padding:"20px 16px", maxWidth:700, margin:"0 auto" }}>
+      <style>{css}</style>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+        <div>
+          <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:18, color:G.accent }}>◈ QuoteApp</div>
+          <div style={{ color:G.muted, fontSize:12, marginTop:2 }}>Hola, {profile?.name || user.email}</div>
+        </div>
+        <button onClick={logout}
+          style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                   padding:"6px 14px", borderRadius:6, cursor:"pointer", fontSize:12 }}>
+          Salir
+        </button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:24 }}>
+        {[
+          { label:"Total acordado",  value:fmtCOP(totalAcordado),  color:G.text },
+          { label:"Total pagado",    value:fmtCOP(totalPagado),    color:"#22c55e" },
+          { label:"Pendiente",       value:fmtCOP(totalPendiente), color:totalPendiente>0?"#f59e0b":G.muted },
+        ].map(c => (
+          <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`,
+                                      borderRadius:8, padding:"12px 10px", textAlign:"center" }}>
+            <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>{c.label}</div>
+            <div style={{ color:c.color, fontWeight:700, fontSize:13 }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <button onClick={() => setShowForm(!showForm)}
+          style={{ background: showForm ? G.surface : G.accent, color: showForm ? G.muted : "#fff",
+                   border:`1px solid ${G.border}`, padding:"8px 18px",
+                   borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+          {showForm ? "✕ Cancelar" : "+ Agregar trabajo"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
+                      padding:16, marginBottom:24 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
+              <input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={inp} />
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Valor acordado (COP) *</div>
+              <input type="number" value={form.valor_acordado} onChange={e=>setForm({...form,valor_acordado:e.target.value})}
+                placeholder="0" style={inp} />
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Descripción *</div>
+            <input value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})}
+              placeholder="¿Qué trabajo realizaste?" style={inp} />
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Proyecto (opcional)</div>
+              <input value={form.proyecto} onChange={e=>setForm({...form,proyecto:e.target.value})}
+                placeholder="Nombre del proyecto" style={inp} />
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas (opcional)</div>
+              <input value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})}
+                placeholder="Observaciones" style={inp} />
+            </div>
+          </div>
+          <button onClick={handleSave}
+            disabled={saving || !form.descripcion || !form.valor_acordado}
+            style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 22px",
+                     borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13,
+                     opacity:(saving||!form.descripcion||!form.valor_acordado)?0.5:1 }}>
+            {saving ? "Guardando..." : "💾 Guardar trabajo"}
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign:"center", color:G.muted, padding:40 }}>Cargando...</div>
+      ) : jobs.length === 0 ? (
+        <div style={{ textAlign:"center", color:G.muted, padding:40 }}>
+          No hay trabajos registrados aún.<br/>
+          <span style={{ fontSize:12 }}>Usa el botón de arriba para agregar tu primer trabajo.</span>
+        </div>
+      ) : (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"10px 16px", borderBottom:`1px solid ${G.border}`,
+                        fontWeight:700, fontSize:13 }}>Mis trabajos</div>
+          {jobs.map(j => {
+            const pagadoJob    = payments.filter(p => p.job_id === j.id).reduce((s,p) => s+Number(p.monto||0), 0);
+            const pendienteJob = Number(j.valor_acordado||0) - pagadoJob;
+            return (
+              <div key={j.id} style={{ padding:"12px 16px", borderBottom:`1px solid ${G.border}`,
+                                       display:"flex", justifyContent:"space-between",
+                                       alignItems:"flex-start", gap:12 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:600, fontSize:13 }}>{j.descripcion}</div>
+                  <div style={{ color:G.muted, fontSize:11, marginTop:3 }}>
+                    📅 {j.fecha}{j.proyecto ? ` · 📁 ${j.proyecto}` : ""}
+                  </div>
+                  {j.notas && <div style={{ color:G.muted, fontSize:11, fontStyle:"italic", marginTop:2 }}>{j.notas}</div>}
+                </div>
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700 }}>{fmtCOP(j.valor_acordado)}</div>
+                  {pagadoJob > 0 && <div style={{ fontSize:11, color:"#22c55e" }}>✓ Pagado: {fmtCOP(pagadoJob)}</div>}
+                  {pendienteJob > 0
+                    ? <div style={{ fontSize:11, color:"#f59e0b" }}>⏳ Pendiente: {fmtCOP(pendienteJob)}</div>
+                    : pagadoJob > 0 && <div style={{ fontSize:11, color:"#22c55e" }}>Completado</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // Set favicon and page title
   useEffect(() => {
