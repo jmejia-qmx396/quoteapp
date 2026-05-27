@@ -1990,14 +1990,14 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
               }).join("");
             })()}
           </tbody>
-          <tfoot>
+          <tbody>
             ${(quote.subtotalConIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">Subtotal con IVA</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotalConIva||0)}</td></tr>`:""}
             ${(!quote.subtotalConIva&&!quote.subtotalSinIva)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>`:""}
             ${(quote.totalDisc>0)?`<tr><td colspan="6" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
             ${(quote.taxAmt>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
             ${(quote.subtotalSinIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">Subtotal sin IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.subtotalSinIva||0)}</td></tr>`:""}
             <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
-          </tfoot>
+          </tbody>
         </table>
 
         ${quote.notes?`<div class="notes-box">${quote.notes}</div>`:""}
