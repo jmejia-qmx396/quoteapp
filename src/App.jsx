@@ -4925,6 +4925,9 @@ export default function App() {
       }
       setProfile(prof);
 
+      // Si es técnico, no cargar datos de la app principal
+      if (prof.role === 'technician') { setLoading(false); return; }
+
       // Quotes
       const { data: qs } = await sb.from("quotes").select("*").order("number", { ascending: false });
       if (qs) { setQuotes(qs.map(normalizeQuote)); }
@@ -5293,6 +5296,7 @@ export default function App() {
 
   // ── Render ───────────────────────────────────────────────────
   if (!user) return <><style>{css}</style><LoginView onLogin={u=>{setUser(u);loadAll(u);}} /></>;
+  if (user && profile?.role === 'technician') return <TechnicianView user={user} profile={profile} logout={logout} />;
 
   if (loading) return (
     <div style={{ minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center" }}>
