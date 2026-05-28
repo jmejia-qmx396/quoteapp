@@ -320,6 +320,7 @@ const NAV_GROUPS = [
     items: [
       { id:"clients",    label:"Clientes",      icon:"👥" },
       { id:"products",   label:"Catálogo",      icon:"📦" },
+      { id:"technicians",label:"Técnicos",      icon:"🔧" },
     ]
   },
   {
@@ -5032,6 +5033,219 @@ const TechnicianView = ({ user, profile, logout }) => {
   );
 };
 
+
+// ── Vista Admin: Técnicos ────────────────────────────────────────
+const TechniciansAdminView = ({ config }) => {
+  const [technicians, setTechnicians] = useState([]);
+  const [jobs, setJobs]               = useState([]);
+  const [payments, setPayments]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [selectedTech, setSelectedTech] = useState(null);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payForm, setPayForm] = useState({ monto:"", fecha: new Date().toISOString().split("T")[0], notas:"", job_id:"" });
+  const [saving, setSaving] = useState(false);
+
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const { data: techs } = await sb.from("profiles").select("*").eq("role","technician").order("name");
+    const { data: js }    = await sb.from("technician_jobs").select("*").order("fecha", { ascending: false });
+    const { data: ps }    = await sb.from("technician_payments").select("*").order("fecha", { ascending: false });
+    setTechnicians(techs || []);
+    setJobs(js || []);
+    setPayments(ps || []);
+    setLoading(false);
+  };
+
+  const techJobs     = t => jobs.filter(j => j.technician_id === t.id);
+  const techPayments = t => payments.filter(p => p.technician_id === t.id);
+  const techAcordado = t => techJobs(t).reduce((s,j) => s+Number(j.valor_acordado||0), 0);
+  const techPagado   = t => techPayments(t).reduce((s,p) => s+Number(p.monto||0), 0);
+  const techPendiente= t => techAcordado(t) - techPagado(t);
+
+  const handlePay = async () => {
+    if (!payForm.monto || !selectedTech) return;
+    setSaving(true);
+    await sb.from("technician_payments").insert({
+      technician_id: selectedTech.id,
+      job_id: payForm.job_id || null,
+      fecha: payForm.fecha,
+      monto: Number(payForm.monto),
+      notas: payForm.notas || null
+    });
+    setShowPayModal(false);
+    setPayForm({ monto:"", fecha: new Date().toISOString().split("T")[0], notas:"", job_id:"" });
+    setSaving(false);
+    loadData();
+  };
+
+  const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`,
+                borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
+
+  if (loading) return <div style={{padding:40,textAlign:"center",color:G.muted}}>Cargando...</div>;
+
+  return (
+    <div style={{ padding:"24px 28px", maxWidth:900 }}>
+      <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>🔧 Técnicos</h2>
+      <p style={{ color:G.muted, fontSize:13, marginBottom:24 }}>Control de trabajos y pagos a técnicos</p>
+
+      {technicians.length === 0 ? (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
+                      padding:40, textAlign:"center", color:G.muted }}>
+          No hay técnicos registrados aún.<br/>
+          <span style={{fontSize:12}}>Crea usuarios con rol "technician" en Supabase.</span>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+          {technicians.map(t => {
+            const tjobs     = techJobs(t);
+            const acordado  = techAcordado(t);
+            const pagado    = techPagado(t);
+            const pendiente = techPendiente(t);
+            const isOpen    = selectedTech?.id === t.id;
+            return (
+              <div key={t.id} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
+                {/* Header técnico */}
+                <div style={{ padding:"14px 18px", display:"flex", justifyContent:"space-between",
+                              alignItems:"center", cursor:"pointer", borderBottom: isOpen ? `1px solid ${G.border}` : "none" }}
+                     onClick={() => setSelectedTech(isOpen ? null : t)}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:36, height:36, borderRadius:"50%", background:G.accent,
+                                  color:"#fff", display:"flex", alignItems:"center",
+                                  justifyContent:"center", fontWeight:700, fontSize:14 }}>
+                      {(t.name||"T")[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight:600, fontSize:14 }}>{t.name}</div>
+                      <div style={{ color:G.muted, fontSize:11 }}>{tjobs.length} trabajo{tjobs.length!==1?"s":""}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:20 }}>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:11, color:G.muted }}>Acordado</div>
+                      <div style={{ fontWeight:700, fontSize:13 }}>{fmtCOP(acordado)}</div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:11, color:G.muted }}>Pagado</div>
+                      <div style={{ fontWeight:700, fontSize:13, color:"#22c55e" }}>{fmtCOP(pagado)}</div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:11, color:G.muted }}>Pendiente</div>
+                      <div style={{ fontWeight:700, fontSize:13, color: pendiente>0?"#f59e0b":G.muted }}>{fmtCOP(pendiente)}</div>
+                    </div>
+                    {pendiente > 0 && (
+                      <button onClick={e=>{ e.stopPropagation(); setSelectedTech(t); setShowPayModal(true); }}
+                        style={{ background:G.accent, color:"#fff", border:"none", padding:"7px 14px",
+                                 borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
+                        💸 Registrar pago
+                      </button>
+                    )}
+                    <span style={{ color:G.muted, fontSize:16 }}>{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+
+                {/* Detalle trabajos */}
+                {isOpen && (
+                  <div>
+                    {tjobs.length === 0 ? (
+                      <div style={{ padding:20, textAlign:"center", color:G.muted, fontSize:13 }}>
+                        Este técnico no tiene trabajos registrados aún.
+                      </div>
+                    ) : (
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                        <thead>
+                          <tr style={{ background:G.surface }}>
+                            {["Fecha","Descripción","Proyecto","Acordado","Pagado","Pendiente"].map(h => (
+                              <th key={h} style={{ padding:"8px 14px", textAlign:"left", color:G.muted,
+                                                   fontWeight:600, fontSize:11, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tjobs.map(j => {
+                            const pagadoJob   = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
+                            const pendienteJob= Number(j.valor_acordado||0) - pagadoJob;
+                            return (
+                              <tr key={j.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                                <td style={{ padding:"8px 14px", color:G.muted }}>{j.fecha}</td>
+                                <td style={{ padding:"8px 14px" }}>
+                                  {j.descripcion}
+                                  {j.notas && <div style={{color:G.muted,fontSize:10,fontStyle:"italic"}}>{j.notas}</div>}
+                                </td>
+                                <td style={{ padding:"8px 14px", color:G.muted }}>{j.proyecto||"—"}</td>
+                                <td style={{ padding:"8px 14px", fontWeight:600 }}>{fmtCOP(j.valor_acordado)}</td>
+                                <td style={{ padding:"8px 14px", color:"#22c55e" }}>{fmtCOP(pagadoJob)}</td>
+                                <td style={{ padding:"8px 14px", color: pendienteJob>0?"#f59e0b":G.muted }}>{fmtCOP(pendienteJob)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal pago */}
+      {showPayModal && selectedTech && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
+                      display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
+             onClick={e=>e.target===e.currentTarget&&setShowPayModal(false)}>
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12,
+                        padding:24, width:420 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:16 }}>
+              💸 Registrar pago — {selectedTech.name}
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Monto *</div>
+              <input type="number" value={payForm.monto} onChange={e=>setPayForm({...payForm,monto:e.target.value})}
+                placeholder="0" style={inp} />
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
+              <input type="date" value={payForm.fecha} onChange={e=>setPayForm({...payForm,fecha:e.target.value})} style={inp} />
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Vincular a trabajo (opcional)</div>
+              <select value={payForm.job_id} onChange={e=>setPayForm({...payForm,job_id:e.target.value})} style={inp}>
+                <option value="">— Pago general —</option>
+                {techJobs(selectedTech).map(j => (
+                  <option key={j.id} value={j.id}>{j.fecha} · {j.descripcion} · {fmtCOP(j.valor_acordado)}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas (opcional)</div>
+              <input value={payForm.notas} onChange={e=>setPayForm({...payForm,notas:e.target.value})}
+                placeholder="Observaciones" style={inp} />
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={()=>setShowPayModal(false)}
+                style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                         padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>
+                Cancelar
+              </button>
+              <button onClick={handlePay} disabled={saving||!payForm.monto}
+                style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 22px",
+                         borderRadius:7, cursor:"pointer", fontWeight:600,
+                         opacity:(saving||!payForm.monto)?0.5:1 }}>
+                {saving ? "Guardando..." : "💾 Guardar pago"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // Set favicon and page title
   useEffect(() => {
@@ -5536,6 +5750,7 @@ export default function App() {
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
+          {view==="technicians" && <TechniciansAdminView config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
