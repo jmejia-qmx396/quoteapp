@@ -5045,6 +5045,7 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
   const [showJobModal, setShowJobModal] = useState(false);
   const [showNewTech, setShowNewTech]   = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [filter, setFilter]             = useState("abierto");
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
@@ -5052,6 +5053,7 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
   const TIPOS = ["proyecto","servicio","garantia","otro"];
+  const FILTERS = [{k:"abierto",l:"Abiertos"},{k:"cerrado",l:"Cerrados"},{k:"archivado",l:"Archivados"}];
 
   useEffect(() => { loadData(); }, []);
 
@@ -5064,11 +5066,11 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
     setLoading(false);
   };
 
-  const techJobs      = t => jobs.filter(j => j.technician_id === t.id);
+  const techJobs      = (t, f) => jobs.filter(j => j.technician_id === t.id && (f ? j.status===f : true));
   const techPayments  = t => payments.filter(p => p.technician_id === t.id);
-  const techAcordado  = t => techJobs(t).reduce((s,j)=>s+Number(j.valor_acordado||0),0);
+  const techAcordado  = (t,f) => techJobs(t,f).reduce((s,j)=>s+Number(j.valor_acordado||0),0);
   const techPagado    = t => techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
-  const techPendiente = t => techAcordado(t) - techPagado(t);
+  const techPendiente = t => techJobs(t,"abierto").reduce((s,j)=>s+Number(j.valor_acordado||0),0) - techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
 
   const handlePay = async () => {
     if (!payForm.monto || !selectedTech) return;
@@ -5077,6 +5079,14 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
       technician_id: selectedTech.id, job_id: payForm.job_id||null,
       fecha: payForm.fecha, monto: Number(payForm.monto), notas: payForm.notas||null
     });
+    // Si hay job vinculado, cerrarlo
+    if (payForm.job_id) {
+      const job = jobs.find(j=>j.id===payForm.job_id);
+      const pagadoJob = payments.filter(p=>p.job_id===payForm.job_id).reduce((s,p)=>s+Number(p.monto||0),0) + Number(payForm.monto);
+      if (pagadoJob >= Number(job?.valor_acordado||0)) {
+        await sb.from("technician_jobs").update({status:"cerrado"}).eq("id",payForm.job_id);
+      }
+    }
     setShowPayModal(false);
     setPayForm({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
     setSaving(false); loadData();
@@ -5087,14 +5097,12 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
     setSaving(true);
     const proj = projects.find(p => String(p.id) === String(jobForm.project_id));
     await sb.from("technician_jobs").insert({
-      technician_id: jobForm.technician_id,
-      tipo: jobForm.tipo,
-      descripcion: jobForm.descripcion,
-      fecha: jobForm.fecha,
+      technician_id: jobForm.technician_id, tipo: jobForm.tipo,
+      descripcion: jobForm.descripcion, fecha: jobForm.fecha,
       valor_acordado: Number(jobForm.valor_acordado),
-      project_id: jobForm.project_id || null,
-      proyecto: proj ? proj.name : (jobForm.project_id||null),
-      notas: jobForm.notas||null
+      project_id: jobForm.project_id||null,
+      proyecto: proj ? proj.name : null,
+      notas: jobForm.notas||null, status: "abierto"
     });
     setShowJobModal(false);
     setJobForm({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
@@ -5107,43 +5115,65 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
     const { data, error } = await sb.auth.signUp({ email: techForm.email, password: techForm.password });
     if (error) { alert("Error: " + error.message); setSaving(false); return; }
     const uid = data.user?.id;
-    if (uid) {
-      await sb.from("profiles").upsert({ id: uid, name: techForm.name, role: "technician" });
-    }
+    if (uid) await sb.from("profiles").upsert({ id: uid, name: techForm.name, role: "technician" });
     setShowNewTech(false);
     setTechForm({ name:"", email:"", password:"" });
     setSaving(false); loadData();
   };
 
+  const updateJobStatus = async (jobId, status) => {
+    await sb.from("technician_jobs").update({status}).eq("id", jobId);
+    loadData();
+  };
+
+  const deleteJob = async (jobId) => {
+    if (!window.confirm("¿Eliminar este trabajo?")) return;
+    await sb.from("technician_payments").delete().eq("job_id", jobId);
+    await sb.from("technician_jobs").delete().eq("id", jobId);
+    loadData();
+  };
+
+  const deleteTech = async (tech) => {
+    if (!window.confirm(`¿Eliminar a ${tech.name}? Se eliminarán todos sus trabajos y pagos.`)) return;
+    await sb.from("technician_payments").delete().eq("technician_id", tech.id);
+    await sb.from("technician_jobs").delete().eq("technician_id", tech.id);
+    await sb.from("profiles").delete().eq("id", tech.id);
+    loadData();
+  };
+
+  const STATUS_COLOR = { abierto:"#f59e0b", cerrado:"#22c55e", archivado:G.muted };
+  const STATUS_LABEL = { abierto:"Abierto", cerrado:"Cerrado", archivado:"Archivado" };
+
   if (loading) return <div style={{padding:40,textAlign:"center",color:G.muted}}>Cargando...</div>;
 
   return (
-    <div style={{ padding:"24px 28px", maxWidth:960 }}>
+    <div style={{ padding:"24px 28px", maxWidth:980 }}>
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
         <div>
           <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>🔧 Técnicos</h2>
           <p style={{ color:G.muted, fontSize:13 }}>Control de trabajos y pagos</p>
         </div>
         <div style={{ display:"flex", gap:10 }}>
-          <button onClick={()=>{ setShowJobModal(true); setShowNewTech(false); }}
-            style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 16px",
+          <button onClick={()=>{ setShowJobModal(!showJobModal); setShowNewTech(false); }}
+            style={{ background:showJobModal?G.surface:G.accent, color:showJobModal?G.muted:"#fff",
+                     border:`1px solid ${G.border}`, padding:"8px 16px",
                      borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
-            + Agregar trabajo
+            {showJobModal?"✕ Cancelar":"+ Agregar trabajo"}
           </button>
-          <button onClick={()=>{ setShowNewTech(true); setShowJobModal(false); }}
+          <button onClick={()=>{ setShowNewTech(!showNewTech); setShowJobModal(false); }}
             style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`, padding:"8px 16px",
                      borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
-            + Nuevo técnico
+            {showNewTech?"✕ Cancelar":"+ Nuevo técnico"}
           </button>
         </div>
       </div>
 
-      {/* Modal nuevo técnico */}
+      {/* Form nuevo técnico */}
       {showNewTech && (
-        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:20 }}>
-          <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>👷 Nuevo técnico</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:16 }}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>👷 Nuevo técnico</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Nombre *</div>
               <input value={techForm.name} onChange={e=>setTechForm({...techForm,name:e.target.value})}
@@ -5167,31 +5197,26 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
                        opacity:(saving||!techForm.name||!techForm.email||!techForm.password)?0.5:1 }}>
               {saving?"Creando...":"💾 Crear técnico"}
             </button>
-            <button onClick={()=>setShowNewTech(false)}
-              style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
-                       padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>
-              Cancelar
-            </button>
           </div>
         </div>
       )}
 
-      {/* Modal agregar trabajo */}
+      {/* Form agregar trabajo */}
       {showJobModal && (
-        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:20 }}>
-          <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>🛠️ Agregar trabajo</div>
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:16 }}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>🛠️ Agregar trabajo</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Técnico *</div>
               <select value={jobForm.technician_id} onChange={e=>setJobForm({...jobForm,technician_id:e.target.value})} style={inp}>
-                <option value="">— Seleccionar técnico —</option>
-                {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <option value="">— Seleccionar —</option>
+                {technicians.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Tipo</div>
               <select value={jobForm.tipo} onChange={e=>setJobForm({...jobForm,tipo:e.target.value})} style={inp}>
-                {TIPOS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+                {TIPOS.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
               </select>
             </div>
           </div>
@@ -5207,7 +5232,7 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
                 placeholder="0" style={inp} />
             </div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
               <input type="date" value={jobForm.fecha} onChange={e=>setJobForm({...jobForm,fecha:e.target.value})} style={inp} />
@@ -5216,65 +5241,74 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Proyecto (opcional)</div>
               <select value={jobForm.project_id} onChange={e=>setJobForm({...jobForm,project_id:e.target.value})} style={inp}>
                 <option value="">— Sin proyecto —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name} {p.client_name?`· ${p.client_name}`:""}</option>)}
+                {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.client_name?` · ${p.client_name}`:""}</option>)}
               </select>
             </div>
             <div>
-              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas (opcional)</div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
               <input value={jobForm.notas} onChange={e=>setJobForm({...jobForm,notas:e.target.value})}
                 placeholder="Observaciones" style={inp} />
             </div>
           </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={handleSaveJob}
-              disabled={saving||!jobForm.technician_id||!jobForm.descripcion||!jobForm.valor_acordado}
-              style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 20px",
-                       borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13,
-                       opacity:(saving||!jobForm.technician_id||!jobForm.descripcion||!jobForm.valor_acordado)?0.5:1 }}>
-              {saving?"Guardando...":"💾 Guardar trabajo"}
-            </button>
-            <button onClick={()=>setShowJobModal(false)}
-              style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
-                       padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>
-              Cancelar
-            </button>
-          </div>
+          <button onClick={handleSaveJob}
+            disabled={saving||!jobForm.technician_id||!jobForm.descripcion||!jobForm.valor_acordado}
+            style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 20px",
+                     borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13,
+                     opacity:(saving||!jobForm.technician_id||!jobForm.descripcion||!jobForm.valor_acordado)?0.5:1 }}>
+            {saving?"Guardando...":"💾 Guardar trabajo"}
+          </button>
         </div>
       )}
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        {FILTERS.map(f=>(
+          <button key={f.k} onClick={()=>setFilter(f.k)}
+            style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:600,
+                     background: filter===f.k ? G.accent : G.surface,
+                     color: filter===f.k ? "#fff" : G.muted,
+                     border: `1px solid ${filter===f.k ? G.accent : G.border}` }}>
+            {f.l}
+          </button>
+        ))}
+      </div>
 
       {/* Lista técnicos */}
       {technicians.length === 0 ? (
         <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
                       padding:40, textAlign:"center", color:G.muted }}>
-          No hay técnicos aún. Usa el botón "Nuevo técnico" para agregar uno.
+          No hay técnicos aún. Usa "+ Nuevo técnico" para agregar uno.
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           {technicians.map(t => {
-            const tjobs     = techJobs(t);
-            const acordado  = techAcordado(t);
+            const tjobs     = techJobs(t, filter);
+            const allOpen   = techJobs(t,"abierto");
+            const acordado  = techAcordado(t, filter);
             const pagado    = techPagado(t);
             const pendiente = techPendiente(t);
             const isOpen    = selectedTech?.id === t.id && !showPayModal;
+            if (tjobs.length === 0 && filter !== "abierto") return null;
             return (
               <div key={t.id} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
-                <div style={{ padding:"14px 18px", display:"flex", justifyContent:"space-between",
-                              alignItems:"center", cursor:"pointer",
-                              borderBottom: isOpen ? `1px solid ${G.border}` : "none" }}
-                     onClick={() => setSelectedTech(isOpen ? null : t)}>
-                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                    <div style={{ width:36, height:36, borderRadius:"50%", background:G.accent, color:"#fff",
-                                  display:"flex", alignItems:"center", justifyContent:"center",
-                                  fontWeight:700, fontSize:14 }}>
+                {/* Header técnico */}
+                <div style={{ padding:"12px 18px", display:"flex", justifyContent:"space-between",
+                              alignItems:"center", borderBottom: isOpen?`1px solid ${G.border}`:"none" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", flex:1 }}
+                       onClick={()=>setSelectedTech(isOpen?null:t)}>
+                    <div style={{ width:34, height:34, borderRadius:"50%", background:G.accent, color:"#fff",
+                                  display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13 }}>
                       {(t.name||"T")[0].toUpperCase()}
                     </div>
                     <div>
                       <div style={{ fontWeight:600, fontSize:14 }}>{t.name}</div>
-                      <div style={{ color:G.muted, fontSize:11 }}>{tjobs.length} trabajo{tjobs.length!==1?"s":""}</div>
+                      <div style={{ color:G.muted, fontSize:11 }}>{allOpen.length} abierto{allOpen.length!==1?"s":""} · {techJobs(t,"cerrado").length} cerrado{techJobs(t,"cerrado").length!==1?"s":""}</div>
                     </div>
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-                    {[{l:"Acordado",v:fmtCOP(acordado),c:G.text},{l:"Pagado",v:fmtCOP(pagado),c:"#22c55e"},{l:"Pendiente",v:fmtCOP(pendiente),c:pendiente>0?"#f59e0b":G.muted}].map(x=>(
+                  <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                    {[{l:"Acordado",v:fmtCOP(techAcordado(t,"abierto")),c:G.text},
+                      {l:"Pagado",v:fmtCOP(pagado),c:"#22c55e"},
+                      {l:"Pendiente",v:fmtCOP(pendiente),c:pendiente>0?"#f59e0b":G.muted}].map(x=>(
                       <div key={x.l} style={{ textAlign:"right" }}>
                         <div style={{ fontSize:10, color:G.muted }}>{x.l}</div>
                         <div style={{ fontWeight:700, fontSize:13, color:x.c }}>{x.v}</div>
@@ -5282,50 +5316,93 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
                     ))}
                     {pendiente > 0 && (
                       <button onClick={e=>{ e.stopPropagation(); setSelectedTech(t); setShowPayModal(true); }}
-                        style={{ background:G.accent, color:"#fff", border:"none", padding:"7px 14px",
+                        style={{ background:G.accent, color:"#fff", border:"none", padding:"6px 12px",
                                  borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
                         💸 Pagar
                       </button>
                     )}
-                    <span style={{ color:G.muted }}>{isOpen?"▲":"▼"}</span>
+                    <button onClick={e=>{ e.stopPropagation(); deleteTech(t); }}
+                      style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                               padding:"5px 10px", borderRadius:6, cursor:"pointer", fontSize:11 }}>
+                      🗑️
+                    </button>
+                    <span onClick={()=>setSelectedTech(isOpen?null:t)}
+                      style={{ color:G.muted, cursor:"pointer" }}>{isOpen?"▲":"▼"}</span>
                   </div>
                 </div>
 
+                {/* Tabla trabajos */}
                 {isOpen && (
                   <div>
                     {tjobs.length === 0 ? (
                       <div style={{ padding:20, textAlign:"center", color:G.muted, fontSize:13 }}>
-                        Sin trabajos aún — usa "+ Agregar trabajo" arriba.
+                        No hay trabajos {filter !== "abierto" ? filter+"s" : "abiertos"} para este técnico.
                       </div>
                     ) : (
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                         <thead>
                           <tr style={{ background:G.surface }}>
-                            {["Fecha","Tipo","Descripción","Proyecto","Acordado","Pagado","Pendiente"].map(h=>(
-                              <th key={h} style={{ padding:"7px 12px", textAlign:"left", color:G.muted,
-                                                   fontWeight:600, fontSize:11, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                            {["Fecha","Tipo","Descripción","Proyecto","Acordado","Pagado","Pendiente","Estado",""].map(h=>(
+                              <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
+                                                   fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {tjobs.map(j => {
-                            const pj = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
+                            const pj   = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
                             const pend = Number(j.valor_acordado||0) - pj;
                             return (
                               <tr key={j.id} style={{ borderBottom:`1px solid ${G.border}` }}>
-                                <td style={{ padding:"7px 12px", color:G.muted, whiteSpace:"nowrap" }}>{j.fecha}</td>
-                                <td style={{ padding:"7px 12px" }}>
-                                  <span style={{ background:G.surface, borderRadius:4, padding:"2px 7px",
-                                                 fontSize:10, color:G.muted }}>{j.tipo||"servicio"}</span>
+                                <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{j.fecha}</td>
+                                <td style={{ padding:"7px 10px" }}>
+                                  <span style={{ background:G.surface, borderRadius:4, padding:"2px 6px", fontSize:10, color:G.muted }}>
+                                    {j.tipo||"servicio"}
+                                  </span>
                                 </td>
-                                <td style={{ padding:"7px 12px" }}>
+                                <td style={{ padding:"7px 10px" }}>
                                   {j.descripcion}
                                   {j.notas && <div style={{color:G.muted,fontSize:10,fontStyle:"italic"}}>{j.notas}</div>}
                                 </td>
-                                <td style={{ padding:"7px 12px", color:G.muted }}>{j.proyecto||"—"}</td>
-                                <td style={{ padding:"7px 12px", fontWeight:600 }}>{fmtCOP(j.valor_acordado)}</td>
-                                <td style={{ padding:"7px 12px", color:"#22c55e" }}>{fmtCOP(pj)}</td>
-                                <td style={{ padding:"7px 12px", color:pend>0?"#f59e0b":G.muted }}>{fmtCOP(pend)}</td>
+                                <td style={{ padding:"7px 10px", color:G.muted }}>{j.proyecto||"—"}</td>
+                                <td style={{ padding:"7px 10px", fontWeight:600 }}>{fmtCOP(j.valor_acordado)}</td>
+                                <td style={{ padding:"7px 10px", color:"#22c55e" }}>{fmtCOP(pj)}</td>
+                                <td style={{ padding:"7px 10px", color:pend>0?"#f59e0b":G.muted }}>{fmtCOP(pend)}</td>
+                                <td style={{ padding:"7px 10px" }}>
+                                  <span style={{ color:STATUS_COLOR[j.status||"abierto"], fontSize:11, fontWeight:600 }}>
+                                    {STATUS_LABEL[j.status||"abierto"]}
+                                  </span>
+                                </td>
+                                <td style={{ padding:"7px 10px" }}>
+                                  <div style={{ display:"flex", gap:6 }}>
+                                    {j.status==="abierto" && (
+                                      <button onClick={()=>updateJobStatus(j.id,"cerrado")}
+                                        style={{ background:"none", border:`1px solid #22c55e`, color:"#22c55e",
+                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                                        ✓ Cerrar
+                                      </button>
+                                    )}
+                                    {j.status==="cerrado" && (
+                                      <button onClick={()=>updateJobStatus(j.id,"abierto")}
+                                        style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
+                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                                        ↩ Reabrir
+                                      </button>
+                                    )}
+                                    {j.status!=="archivado" && (
+                                      <button onClick={()=>updateJobStatus(j.id,"archivado")}
+                                        style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
+                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                                        📦
+                                      </button>
+                                    )}
+                                    <button onClick={()=>deleteJob(j.id)}
+                                      style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                                               padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             );
                           })}
@@ -5357,16 +5434,16 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
               <input type="date" value={payForm.fecha} onChange={e=>setPayForm({...payForm,fecha:e.target.value})} style={inp} />
             </div>
             <div style={{ marginBottom:12 }}>
-              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Vincular a trabajo (opcional)</div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Vincular a trabajo (opcional — se cierra automáticamente si queda saldado)</div>
               <select value={payForm.job_id} onChange={e=>setPayForm({...payForm,job_id:e.target.value})} style={inp}>
                 <option value="">— Pago general —</option>
-                {techJobs(selectedTech).map(j=>(
+                {techJobs(selectedTech,"abierto").map(j=>(
                   <option key={j.id} value={j.id}>{j.fecha} · {j.descripcion} · {fmtCOP(j.valor_acordado)}</option>
                 ))}
               </select>
             </div>
             <div style={{ marginBottom:20 }}>
-              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas (opcional)</div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
               <input value={payForm.notas} onChange={e=>setPayForm({...payForm,notas:e.target.value})}
                 placeholder="Observaciones" style={inp} />
             </div>
