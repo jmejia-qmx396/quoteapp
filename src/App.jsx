@@ -5045,6 +5045,7 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
   const [showJobModal, setShowJobModal] = useState(false);
   const [showNewTech, setShowNewTech]   = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [editJob, setEditJob]             = useState(null);
   const [filter, setFilter]             = useState("abierto");
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
@@ -5119,6 +5120,25 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
     setShowNewTech(false);
     setTechForm({ name:"", email:"", password:"" });
     setSaving(false); loadData();
+  };
+
+  const handleEditJob = async () => {
+    if (!editJob) return;
+    setSaving(true);
+    const proj = projects.find(p => String(p.id) === String(editJob.project_id));
+    await sb.from("technician_jobs").update({
+      technician_id: editJob.technician_id,
+      tipo: editJob.tipo,
+      descripcion: editJob.descripcion,
+      fecha: editJob.fecha,
+      valor_acordado: Number(editJob.valor_acordado),
+      project_id: editJob.project_id||null,
+      proyecto: proj ? proj.name : editJob.proyecto||null,
+      notas: editJob.notas||null
+    }).eq("id", editJob.id);
+    setEditJob(null);
+    setSaving(false);
+    loadData();
   };
 
   const updateJobStatus = async (jobId, status) => {
@@ -5375,6 +5395,11 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
                                 </td>
                                 <td style={{ padding:"7px 10px" }}>
                                   <div style={{ display:"flex", gap:6 }}>
+                                    <button onClick={()=>setEditJob({...j})}
+                                        style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
+                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                                        ✏️
+                                      </button>
                                     {j.status==="abierto" && (
                                       <button onClick={()=>updateJobStatus(j.id,"cerrado")}
                                         style={{ background:"none", border:`1px solid #22c55e`, color:"#22c55e",
@@ -5414,6 +5439,72 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal editar trabajo */}
+      {editJob && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
+                      display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
+             onClick={e=>e.target===e.currentTarget&&setEditJob(null)}>
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:520 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:16 }}>✏️ Editar trabajo</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Técnico *</div>
+                <select value={editJob.technician_id} onChange={e=>setEditJob({...editJob,technician_id:e.target.value})} style={inp}>
+                  {technicians.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Tipo</div>
+                <select value={editJob.tipo||"servicio"} onChange={e=>setEditJob({...editJob,tipo:e.target.value})} style={inp}>
+                  {TIPOS.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Descripción *</div>
+                <input value={editJob.descripcion} onChange={e=>setEditJob({...editJob,descripcion:e.target.value})}
+                  placeholder="¿Qué trabajo?" style={inp} />
+              </div>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Valor acordado (COP) *</div>
+                <input type="number" value={editJob.valor_acordado} onChange={e=>setEditJob({...editJob,valor_acordado:e.target.value})}
+                  placeholder="0" style={inp} />
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:20 }}>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
+                <input type="date" value={editJob.fecha} onChange={e=>setEditJob({...editJob,fecha:e.target.value})} style={inp} />
+              </div>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Proyecto</div>
+                <select value={editJob.project_id||""} onChange={e=>setEditJob({...editJob,project_id:e.target.value})} style={inp}>
+                  <option value="">— Sin proyecto —</option>
+                  {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.client_name?` · ${p.client_name}`:""}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
+                <input value={editJob.notas||""} onChange={e=>setEditJob({...editJob,notas:e.target.value})}
+                  placeholder="Observaciones" style={inp} />
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={()=>setEditJob(null)}
+                style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                         padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={handleEditJob} disabled={saving||!editJob.descripcion||!editJob.valor_acordado}
+                style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 22px",
+                         borderRadius:7, cursor:"pointer", fontWeight:600,
+                         opacity:(saving||!editJob.descripcion||!editJob.valor_acordado)?0.5:1 }}>
+                {saving?"Guardando...":"💾 Guardar cambios"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
