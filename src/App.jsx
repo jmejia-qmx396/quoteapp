@@ -5136,19 +5136,41 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   };
 
   const handleSaveJob = async () => {
-    if (!jobForm.technician_id || !jobForm.descripcion || !jobForm.valor_acordado) return;
+    const hasMO = selectedMO && selectedMO.length > 0;
+    if (!jobForm.technician_id) return;
+    if (!hasMO && (!jobForm.descripcion || !jobForm.valor_acordado)) return;
     setSaving(true);
     const proj = projects.find(p => String(p.id) === String(jobForm.project_id));
-    await sb.from("technician_jobs").insert({
-      technician_id: jobForm.technician_id, tipo: jobForm.tipo,
-      descripcion: jobForm.descripcion, fecha: jobForm.fecha,
-      valor_acordado: Number(jobForm.valor_acordado),
-      project_id: jobForm.project_id||null,
-      proyecto: proj ? proj.name : null,
-      notas: jobForm.notas||null, status: "abierto"
-    });
+    if (hasMO) {
+      for (const mo of selectedMO) {
+        await sb.from("technician_jobs").insert({
+          technician_id: jobForm.technician_id,
+          tipo: "proyecto",
+          descripcion: mo.name,
+          fecha: jobForm.fecha,
+          valor_acordado: Number(mo.lineNet||0),
+          project_id: jobForm.project_id||null,
+          proyecto: proj ? proj.name : null,
+          notas: jobForm.notas||null,
+          status: "abierto"
+        });
+      }
+    } else {
+      await sb.from("technician_jobs").insert({
+        technician_id: jobForm.technician_id,
+        tipo: jobForm.tipo,
+        descripcion: jobForm.descripcion,
+        fecha: jobForm.fecha,
+        valor_acordado: Number(jobForm.valor_acordado),
+        project_id: jobForm.project_id||null,
+        proyecto: proj ? proj.name : null,
+        notas: jobForm.notas||null,
+        status: "abierto"
+      });
+    }
     setShowJobModal(false);
     setJobForm({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
+    setSelectedMO([]);
     setSaving(false); loadData();
   };
 
