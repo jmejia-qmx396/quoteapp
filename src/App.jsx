@@ -5054,7 +5054,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const [payTo,   setPayTo]   = useState(lom);
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
-  const [selectedMO, setSelectedMO] = useState(null);
+  const [selectedMO, setSelectedMO] = useState([]);
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
@@ -5280,26 +5280,49 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
             </div>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Proyecto (opcional)</div>
-              <select value={jobForm.project_id} onChange={e=>{ setJobForm({...jobForm,project_id:e.target.value}); setSelectedMO(null); }} style={inp}>
+              <select value={jobForm.project_id} onChange={e=>{ setJobForm({...jobForm,project_id:e.target.value,descripcion:"",valor_acordado:""}); setSelectedMO([]); }} style={inp}>
                 <option value="">— Sin proyecto —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.client_name?` · ${p.client_name}`:""}</option>)}
               </select>
               {jobForm.project_id && getMOFromProject(jobForm.project_id).length > 0 && (
                 <div style={{ marginTop:8 }}>
-                  <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>M.O. disponibles en este proyecto:</div>
-                  {getMOFromProject(jobForm.project_id).map(mo => (
-                    <div key={mo.id}
-                      onClick={()=>{ setSelectedMO(mo); setJobForm(f=>({...f, descripcion:mo.name, valor_acordado:String(mo.netCOP||mo.priceCOP||0)})); }}
-                      style={{ padding:"6px 10px", marginBottom:4, borderRadius:6, cursor:"pointer",
-                               border:`1px solid ${selectedMO?.id===mo.id ? G.accent : G.border}`,
-                               background: selectedMO?.id===mo.id ? `${G.accent}18` : G.surface,
-                               display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <span style={{ fontSize:11, color:G.text }}>{mo.name}</span>
-                      <span style={{ fontSize:11, fontWeight:600, color:G.accent }}>
-                        {new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(mo.netCOP||mo.priceCOP||0)}
+                  <div style={{ color:G.muted, fontSize:10, marginBottom:6 }}>M.O. disponibles — selecciona las que aplican:</div>
+                  {getMOFromProject(jobForm.project_id).map(mo => {
+                    const fmtC = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+                    const val = mo.lineNet || (Number(mo.qty||1) * Number(mo.netCOP||mo.priceCOP||0));
+                    const isChecked = (selectedMO||[]).some(s=>s.id===mo.id);
+                    return (
+                      <div key={mo.id}
+                        onClick={()=>{
+                          const cur = selectedMO||[];
+                          const next = isChecked ? cur.filter(s=>s.id!==mo.id) : [...cur, {...mo, lineNet: val}];
+                          setSelectedMO(next);
+                        }}
+                        style={{ padding:"7px 10px", marginBottom:4, borderRadius:6, cursor:"pointer",
+                                 border:`1px solid ${isChecked ? G.accent : G.border}`,
+                                 background: isChecked ? `${G.accent}18` : G.surface,
+                                 display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${isChecked?G.accent:G.muted}`,
+                                        background:isChecked?G.accent:"transparent", display:"flex", alignItems:"center",
+                                        justifyContent:"center", flexShrink:0 }}>
+                            {isChecked && <span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}
+                          </div>
+                          <span style={{ fontSize:11, color:G.text }}>{mo.name}{Number(mo.qty)>1?` (×${mo.qty})`:""}</span>
+                        </div>
+                        <span style={{ fontSize:11, fontWeight:600, color:G.accent }}>{fmtC(val)}</span>
+                      </div>
+                    );
+                  })}
+                  {(selectedMO||[]).length > 0 && (
+                    <div style={{ marginTop:8, padding:"6px 10px", background:G.surface, borderRadius:6,
+                                  fontSize:11, color:G.muted, display:"flex", justifyContent:"space-between" }}>
+                      <span>{(selectedMO||[]).length} M.O. seleccionada{(selectedMO||[]).length!==1?"s":""}</span>
+                      <span style={{color:G.accent, fontWeight:600}}>
+                        Total: {new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format((selectedMO||[]).reduce((s,m)=>s+Number(m.lineNet||0),0))}
                       </span>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
