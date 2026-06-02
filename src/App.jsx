@@ -5506,78 +5506,125 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                         No hay trabajos {filter !== "abierto" ? filter+"s" : "abiertos"} para este técnico.
                       </div>
                     ) : (
-                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                        <thead>
-                          <tr style={{ background:G.surface }}>
-                            {["Fecha","Tipo","Descripción","Proyecto","Acordado","Pagado","Pendiente","Estado",""].map(h=>(
-                              <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
-                                                   fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tjobs.map(j => {
-                            const pj   = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
-                            const pend = Number(j.valor_acordado||0) - pj;
-                            return (
-                              <tr key={j.id} style={{ borderBottom:`1px solid ${G.border}` }}>
-                                <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{j.fecha}</td>
-                                <td style={{ padding:"7px 10px" }}>
-                                  <span style={{ background:G.surface, borderRadius:4, padding:"2px 6px", fontSize:10, color:G.muted }}>
-                                    {j.tipo||"servicio"}
-                                  </span>
-                                </td>
-                                <td style={{ padding:"7px 10px" }}>
-                                  {j.descripcion}
-                                  {j.notas && <div style={{color:G.muted,fontSize:10,fontStyle:"italic"}}>{j.notas}</div>}
-                                </td>
-                                <td style={{ padding:"7px 10px", color:G.muted }}>{j.proyecto||"—"}</td>
-                                <td style={{ padding:"7px 10px", fontWeight:600 }}>{fmtCOP(j.valor_acordado)}</td>
-                                <td style={{ padding:"7px 10px", color:"#22c55e" }}>{fmtCOP(pj)}</td>
-                                <td style={{ padding:"7px 10px", color:pend>0?"#f59e0b":G.muted }}>{fmtCOP(pend)}</td>
-                                <td style={{ padding:"7px 10px" }}>
-                                  <span style={{ color:STATUS_COLOR[j.status||"abierto"], fontSize:11, fontWeight:600 }}>
-                                    {STATUS_LABEL[j.status||"abierto"]}
-                                  </span>
-                                </td>
-                                <td style={{ padding:"7px 10px" }}>
-                                  <div style={{ display:"flex", gap:6 }}>
-                                    <button onClick={()=>setEditJob({...j})}
-                                        style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
-                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
-                                        ✏️
-                                      </button>
-                                    {j.status==="abierto" && pend > 0 && (
-                                      <button onClick={()=>openPayJob(j)}
-                                        style={{ background:G.accent, color:"#fff", border:"none",
-                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10, fontWeight:600 }}>
-                                        💸 Pagar
-                                      </button>
-                                    )}
-                                    {j.status==="abierto" && (
-                                      <button onClick={()=>updateJobStatus(j.id,"cerrado")}
-                                        style={{ background:"none", border:`1px solid #22c55e`, color:"#22c55e",
-                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
-                                        ✓ Cerrar
-                                      </button>
-                                    )}
-                                    {j.status==="cerrado" && (
-                                      <button onClick={()=>updateJobStatus(j.id,"abierto")}
-                                        style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
-                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
-                                        ↩ Reabrir
-                                      </button>
-                                    )}
-                                    {j.status!=="archivado" && (
-                                      <button onClick={()=>updateJobStatus(j.id,"archivado")}
-                                        style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
-                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
-                                        📦
-                                      </button>
-                                    )}
-                                    <button onClick={()=>deleteJob(j.id)}
-                                      style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
-                                               padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                      {(() => {
+                        // Agrupar trabajos por proyecto
+                        const grupos = {};
+                        tjobs.forEach(j => {
+                          const key = j.project_id ? `proj_${j.project_id}` : `solo_${j.id}`;
+                          const label = j.proyecto || "Sin proyecto";
+                          if (!grupos[key]) grupos[key] = { label, jobs: [], project_id: j.project_id };
+                          grupos[key].jobs.push(j);
+                        });
+                        return Object.entries(grupos).map(([key, grupo]) => {
+                          const grupoAcordado = grupo.jobs.reduce((s,j)=>s+Number(j.valor_acordado||0),0);
+                          const grupoPagado   = grupo.jobs.reduce((s,j)=>s+payments.filter(p=>p.job_id===j.id).reduce((s2,p)=>s2+Number(p.monto||0),0),0);
+                          const grupoPendiente= grupoAcordado - grupoPagado;
+                          const tieneAbiertos = grupo.jobs.some(j=>j.status==="abierto");
+                          return (
+                            <div key={key} style={{ marginBottom:12, border:`1px solid ${G.border}`, borderRadius:8, overflow:"hidden" }}>
+                              {/* Header grupo */}
+                              <div style={{ background:G.surface, padding:"8px 14px", display:"flex",
+                                            justifyContent:"space-between", alignItems:"center",
+                                            borderBottom:`1px solid ${G.border}` }}>
+                                <div style={{ fontWeight:600, fontSize:12, color:G.accent }}>
+                                  📁 {grupo.label}
+                                </div>
+                                <div style={{ display:"flex", gap:16, alignItems:"center" }}>
+                                  <div style={{ fontSize:11, color:G.muted }}>
+                                    Acordado: <strong style={{color:G.text}}>{fmtCOP(grupoAcordado)}</strong>
+                                  </div>
+                                  <div style={{ fontSize:11, color:G.muted }}>
+                                    Pagado: <strong style={{color:"#22c55e"}}>{fmtCOP(grupoPagado)}</strong>
+                                  </div>
+                                  <div style={{ fontSize:11, color:G.muted }}>
+                                    Pendiente: <strong style={{color:grupoPendiente>0?"#f59e0b":G.muted}}>{fmtCOP(grupoPendiente)}</strong>
+                                  </div>
+                                  {tieneAbiertos && grupoPendiente > 0 && (
+                                    <button onClick={()=>openPayJob(grupo.jobs.find(j=>j.status==="abierto"))}
+                                      style={{ background:G.accent, color:"#fff", border:"none", padding:"4px 12px",
+                                               borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      💸 Pagar proyecto
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Tabla de M.O. del grupo */}
+                              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                                <thead>
+                                  <tr style={{ background:G.surface }}>
+                                    {["Fecha","Tipo","Descripción","Acordado","Pagado","Pendiente","Estado",""].map(h=>(
+                                      <th key={h} style={{ padding:"6px 10px", textAlign:"left", color:G.muted,
+                                                           fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {grupo.jobs.map(j => {
+                                    const pj   = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
+                                    const pend = Number(j.valor_acordado||0) - pj;
+                                    return (
+                                      <tr key={j.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                                        <td style={{ padding:"6px 10px", color:G.muted, whiteSpace:"nowrap" }}>{j.fecha}</td>
+                                        <td style={{ padding:"6px 10px" }}>
+                                          <span style={{ background:G.surface, borderRadius:4, padding:"2px 6px", fontSize:10, color:G.muted }}>
+                                            {j.tipo||"servicio"}
+                                          </span>
+                                        </td>
+                                        <td style={{ padding:"6px 10px" }}>
+                                          {j.descripcion}
+                                          {j.notas && <div style={{color:G.muted,fontSize:10,fontStyle:"italic"}}>{j.notas}</div>}
+                                        </td>
+                                        <td style={{ padding:"6px 10px", fontWeight:600 }}>{fmtCOP(j.valor_acordado)}</td>
+                                        <td style={{ padding:"6px 10px", color:"#22c55e" }}>{fmtCOP(pj)}</td>
+                                        <td style={{ padding:"6px 10px", color:pend>0?"#f59e0b":G.muted }}>{fmtCOP(pend)}</td>
+                                        <td style={{ padding:"6px 10px" }}>
+                                          <span style={{ color:STATUS_COLOR[j.status||"abierto"], fontSize:11, fontWeight:600 }}>
+                                            {STATUS_LABEL[j.status||"abierto"]}
+                                          </span>
+                                        </td>
+                                        <td style={{ padding:"6px 10px" }}>
+                                          <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                                            <button onClick={()=>setEditJob({...j})}
+                                              style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
+                                                       padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>✏️</button>
+                                            {j.status==="abierto" && pend > 0 && (
+                                              <button onClick={()=>openPayJob(j)}
+                                                style={{ background:G.accent, color:"#fff", border:"none",
+                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10, fontWeight:600 }}>
+                                                💸
+                                              </button>
+                                            )}
+                                            {j.status==="abierto" && (
+                                              <button onClick={()=>updateJobStatus(j.id,"cerrado")}
+                                                style={{ background:"none", border:`1px solid #22c55e`, color:"#22c55e",
+                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>✓</button>
+                                            )}
+                                            {j.status==="cerrado" && (
+                                              <button onClick={()=>updateJobStatus(j.id,"abierto")}
+                                                style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
+                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>↩</button>
+                                            )}
+                                            {j.status!=="archivado" && (
+                                              <button onClick={()=>updateJobStatus(j.id,"archivado")}
+                                                style={{ background:"none", border:`1px solid ${G.muted}`, color:G.muted,
+                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>📦</button>
+                                            )}
+                                            <button onClick={()=>deleteJob(j.id)}
+                                              style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                                                       padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>🗑️</button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        });
+                      })()}
+                      {/* dummy to close old structure */}
+                      {false && <table><tbody><tr><td>
                                       🗑️
                                     </button>
                                   </div>
