@@ -5506,7 +5506,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                         No hay trabajos {filter !== "abierto" ? filter+"s" : "abiertos"} para este técnico.
                       </div>
                     ) : (
-                      {(() => {
+                      (() => {
                         // Agrupar trabajos por proyecto
                         const grupos = {};
                         tjobs.forEach(j => {
