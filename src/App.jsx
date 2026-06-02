@@ -5530,13 +5530,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                                   <span style={{ fontSize:11, color:G.muted }}>Acordado: <strong style={{color:G.text}}>{fmtCOP(gAcordado)}</strong></span>
                                   <span style={{ fontSize:11, color:G.muted }}>Pagado: <strong style={{color:"#22c55e"}}>{fmtCOP(gPagado)}</strong></span>
                                   <span style={{ fontSize:11, color:G.muted }}>Pendiente: <strong style={{color:gPendiente>0?"#f59e0b":G.muted}}>{fmtCOP(gPendiente)}</strong></span>
-                                  {tieneAbiertos && (
-                                    <button onClick={()=>openPayJob(grupo.jobs.find(j=>j.status==="abierto"))}
-                                      style={{ background:G.accent, color:"#fff", border:"none", padding:"4px 12px",
-                                               borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
-                                      💸 Pagar
-                                    </button>
-                                  )}
+
                                 </div>
                               </div>
                               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
