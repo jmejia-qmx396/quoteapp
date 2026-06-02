@@ -5297,6 +5297,8 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                           const cur = selectedMO||[];
                           const next = isChecked ? cur.filter(s=>s.id!==mo.id) : [...cur, {...mo, lineNet: val}];
                           setSelectedMO(next);
+                          const total = next.reduce((s,m)=>s+Number(m.lineNet||0),0);
+                          setJobForm(f=>({...f, valor_acordado: String(total)}));
                         }}
                         style={{ padding:"7px 10px", marginBottom:4, borderRadius:6, cursor:"pointer",
                                  border:`1px solid ${isChecked ? G.accent : G.border}`,
