@@ -5053,6 +5053,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const [payFrom, setPayFrom] = useState(fom);
   const [payTo,   setPayTo]   = useState(lom);
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
+  const [payingJob, setPayingJob] = useState(null);
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
   const [selectedMO, setSelectedMO] = useState([]);
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
@@ -5093,6 +5094,15 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const techAcordado  = (t,f) => techJobs(t,f).reduce((s,j)=>s+Number(j.valor_acordado||0),0);
   const techPagado    = t => techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
   const techPendiente = t => techJobs(t,"abierto").reduce((s,j)=>s+Number(j.valor_acordado||0),0) - techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
+
+  const openPayJob = (job) => {
+    const pagado = payments.filter(p=>p.job_id===job.id).reduce((s,p)=>s+Number(p.monto||0),0);
+    const pendiente = Number(job.valor_acordado||0) - pagado;
+    setPayingJob(job);
+    setSelectedTech(technicians.find(t=>t.id===job.technician_id)||null);
+    setPayForm({ monto:String(pendiente), fecha:new Date().toISOString().split("T")[0], notas:"", job_id:job.id });
+    setShowPayModal(true);
+  };
 
   const handlePay = async () => {
     if (!payForm.monto || !selectedTech) return;
@@ -5444,13 +5454,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                         <div style={{ fontWeight:700, fontSize:13, color:x.c }}>{x.v}</div>
                       </div>
                     ))}
-                    {pendiente > 0 && (
-                      <button onClick={e=>{ e.stopPropagation(); setSelectedTech(t); setShowPayModal(true); }}
-                        style={{ background:G.accent, color:"#fff", border:"none", padding:"6px 12px",
-                                 borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
-                        💸 Pagar
-                      </button>
-                    )}
+
                     <button onClick={e=>{ e.stopPropagation(); deleteTech(t); }}
                       style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
                                padding:"5px 10px", borderRadius:6, cursor:"pointer", fontSize:11 }}>
@@ -5510,6 +5514,13 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                                                  padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
                                         ✏️
                                       </button>
+                                    {j.status==="abierto" && pend > 0 && (
+                                      <button onClick={()=>openPayJob(j)}
+                                        style={{ background:G.accent, color:"#fff", border:"none",
+                                                 padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10, fontWeight:600 }}>
+                                        💸 Pagar
+                                      </button>
+                                    )}
                                     {j.status==="abierto" && (
                                       <button onClick={()=>updateJobStatus(j.id,"cerrado")}
                                         style={{ background:"none", border:`1px solid #22c55e`, color:"#22c55e",
@@ -5624,7 +5635,25 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                       display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
              onClick={e=>e.target===e.currentTarget&&setShowPayModal(false)}>
           <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:440 }}>
-            <div style={{ fontWeight:700, fontSize:16, marginBottom:16 }}>💸 Registrar pago — {selectedTech.name}</div>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💸 Registrar pago</div>
+            {payingJob && (() => {
+              const pagado = payments.filter(p=>p.job_id===payingJob.id).reduce((s,p)=>s+Number(p.monto||0),0);
+              const pendiente = Number(payingJob.valor_acordado||0) - pagado;
+              return (
+                <div style={{ background:G.surface, borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+                  <div style={{ fontWeight:600, fontSize:13, marginBottom:6 }}>{payingJob.descripcion}</div>
+                  <div style={{ display:"flex", gap:20, fontSize:12 }}>
+                    <div><span style={{color:G.muted}}>Técnico: </span><strong>{selectedTech?.name}</strong></div>
+                    {payingJob.proyecto && <div><span style={{color:G.muted}}>Proyecto: </span><strong>{payingJob.proyecto}</strong></div>}
+                  </div>
+                  <div style={{ display:"flex", gap:20, fontSize:12, marginTop:6 }}>
+                    <div><span style={{color:G.muted}}>Acordado: </span><strong>{fmtCOP(payingJob.valor_acordado)}</strong></div>
+                    <div><span style={{color:G.muted}}>Pagado: </span><strong style={{color:"#22c55e"}}>{fmtCOP(pagado)}</strong></div>
+                    <div><span style={{color:G.muted}}>Pendiente: </span><strong style={{color:"#f59e0b"}}>{fmtCOP(pendiente)}</strong></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{ marginBottom:12 }}>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Monto *</div>
               <input type="number" value={payForm.monto} onChange={e=>setPayForm({...payForm,monto:e.target.value})}
@@ -5634,15 +5663,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
               <input type="date" value={payForm.fecha} onChange={e=>setPayForm({...payForm,fecha:e.target.value})} style={inp} />
             </div>
-            <div style={{ marginBottom:12 }}>
-              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Vincular a trabajo (opcional — se cierra automáticamente si queda saldado)</div>
-              <select value={payForm.job_id} onChange={e=>setPayForm({...payForm,job_id:e.target.value})} style={inp}>
-                <option value="">— Pago general —</option>
-                {techJobs(selectedTech,"abierto").map(j=>(
-                  <option key={j.id} value={j.id}>{j.fecha} · {j.descripcion} · {fmtCOP(j.valor_acordado)}</option>
-                ))}
-              </select>
-            </div>
+
             <div style={{ marginBottom:20 }}>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
               <input value={payForm.notas} onChange={e=>setPayForm({...payForm,notas:e.target.value})}
