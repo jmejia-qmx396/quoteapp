@@ -5035,7 +5035,7 @@ const TechnicianView = ({ user, profile, logout }) => {
 
 
 // ── Vista Admin: Técnicos ────────────────────────────────────────
-const TechniciansAdminView = ({ config, projects = [] }) => {
+const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuotes = [] }) => {
   const [technicians, setTechnicians]   = useState([]);
   const [jobs, setJobs]                 = useState([]);
   const [payments, setPayments]         = useState([]);
@@ -5054,11 +5054,27 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
   const [payTo,   setPayTo]   = useState(lom);
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
+  const [selectedMO, setSelectedMO] = useState(null);
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
   const TIPOS = ["proyecto","servicio","garantia","otro"];
+
+  const getMOFromProject = (projectId) => {
+    if (!projectId) return [];
+    const pqIds = projectQuotes.filter(pq => String(pq.project_id) === String(projectId)).map(pq => pq.quote_id);
+    const projQuotes = quotes.filter(q => pqIds.includes(q.id));
+    const moItems = [];
+    projQuotes.forEach(q => {
+      (q.items||[]).forEach(item => {
+        if (item.sku === "M.O." || (item.name||"").toLowerCase().includes("mano de obra")) {
+          moItems.push({ ...item, quoteName: q.number });
+        }
+      });
+    });
+    return moItems;
+  };
   const FILTERS = [{k:"abierto",l:"Abiertos"},{k:"cerrado",l:"Cerrados"},{k:"archivado",l:"Archivados"}];
 
   useEffect(() => { loadData(); }, []);
@@ -5264,10 +5280,28 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
             </div>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Proyecto (opcional)</div>
-              <select value={jobForm.project_id} onChange={e=>setJobForm({...jobForm,project_id:e.target.value})} style={inp}>
+              <select value={jobForm.project_id} onChange={e=>{ setJobForm({...jobForm,project_id:e.target.value}); setSelectedMO(null); }} style={inp}>
                 <option value="">— Sin proyecto —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.client_name?` · ${p.client_name}`:""}</option>)}
               </select>
+              {jobForm.project_id && getMOFromProject(jobForm.project_id).length > 0 && (
+                <div style={{ marginTop:8 }}>
+                  <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>M.O. disponibles en este proyecto:</div>
+                  {getMOFromProject(jobForm.project_id).map(mo => (
+                    <div key={mo.id}
+                      onClick={()=>{ setSelectedMO(mo); setJobForm(f=>({...f, descripcion:mo.name, valor_acordado:String(mo.netCOP||mo.priceCOP||0)})); }}
+                      style={{ padding:"6px 10px", marginBottom:4, borderRadius:6, cursor:"pointer",
+                               border:`1px solid ${selectedMO?.id===mo.id ? G.accent : G.border}`,
+                               background: selectedMO?.id===mo.id ? `${G.accent}18` : G.surface,
+                               display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <span style={{ fontSize:11, color:G.text }}>{mo.name}</span>
+                      <span style={{ fontSize:11, fontWeight:600, color:G.accent }}>
+                        {new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(mo.netCOP||mo.priceCOP||0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
@@ -6112,7 +6146,7 @@ export default function App() {
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
-          {view==="technicians" && <TechniciansAdminView config={config} projects={projects} />}
+          {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
