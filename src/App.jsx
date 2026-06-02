@@ -5047,6 +5047,11 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
   const [saving, setSaving]             = useState(false);
   const [editJob, setEditJob]             = useState(null);
   const [filter, setFilter]             = useState("abierto");
+  const now = new Date();
+  const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
+  const [payFrom, setPayFrom] = useState(fom);
+  const [payTo,   setPayTo]   = useState(lom);
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
@@ -5279,6 +5284,52 @@ const TechniciansAdminView = ({ config, projects = [] }) => {
           </button>
         </div>
       )}
+
+      {/* Mini dashboard pagos */}
+      {(() => {
+        const paymentsInRange = payments.filter(p => p.fecha >= payFrom && p.fecha <= payTo);
+        const totalPagadoRango = paymentsInRange.reduce((s,p)=>s+Number(p.monto||0),0);
+        const pagosPorTech = technicians.map(t => ({
+          name: t.name,
+          monto: paymentsInRange.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0)
+        })).filter(x=>x.monto>0);
+        const jobsAbiertos = jobs.filter(j=>j.status==="abierto");
+        const totalPendienteGlobal = jobsAbiertos.reduce((s,j)=>s+Number(j.valor_acordado||0),0)
+          - payments.filter(p=>jobsAbiertos.map(j=>j.id).includes(p.job_id)).reduce((s,p)=>s+Number(p.monto||0),0);
+        return (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <span style={{ color:G.muted, fontSize:12 }}>Pagos del período:</span>
+              <input type="date" value={payFrom} onChange={e=>setPayFrom(e.target.value)}
+                style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                         padding:"5px 8px", color:G.text, fontSize:12 }} />
+              <span style={{ color:G.muted }}>—</span>
+              <input type="date" value={payTo} onChange={e=>setPayTo(e.target.value)}
+                style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                         padding:"5px 8px", color:G.text, fontSize:12 }} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:10 }}>
+              <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"12px 14px" }}>
+                <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>PAGADO EN PERÍODO</div>
+                <div style={{ fontWeight:700, fontSize:16, color:"#22c55e" }}>{fmtCOP(totalPagadoRango)}</div>
+                <div style={{ color:G.muted, fontSize:10, marginTop:2 }}>{paymentsInRange.length} pago{paymentsInRange.length!==1?"s":""}</div>
+              </div>
+              <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"12px 14px" }}>
+                <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>PENDIENTE TOTAL</div>
+                <div style={{ fontWeight:700, fontSize:16, color:totalPendienteGlobal>0?"#f59e0b":G.muted }}>{fmtCOP(totalPendienteGlobal)}</div>
+                <div style={{ color:G.muted, fontSize:10, marginTop:2 }}>{jobsAbiertos.length} trabajo{jobsAbiertos.length!==1?"s":""} abierto{jobsAbiertos.length!==1?"s":""}</div>
+              </div>
+              {pagosPorTech.map(x=>(
+                <div key={x.name} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"12px 14px" }}>
+                  <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>{x.name.toUpperCase()}</div>
+                  <div style={{ fontWeight:700, fontSize:15, color:"#22c55e" }}>{fmtCOP(x.monto)}</div>
+                  <div style={{ color:G.muted, fontSize:10, marginTop:2 }}>en el período</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Filtros */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
