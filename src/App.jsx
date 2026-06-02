@@ -5506,49 +5506,39 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                         No hay trabajos {filter !== "abierto" ? filter+"s" : "abiertos"} para este técnico.
                       </div>
                     ) : (
-                      (() => {
-                        // Agrupar trabajos por proyecto
-                        const grupos = {};
-                        tjobs.forEach(j => {
-                          const key = j.project_id ? `proj_${j.project_id}` : `solo_${j.id}`;
-                          const label = j.proyecto || "Sin proyecto";
-                          if (!grupos[key]) grupos[key] = { label, jobs: [], project_id: j.project_id };
-                          grupos[key].jobs.push(j);
-                        });
-                        return Object.entries(grupos).map(([key, grupo]) => {
-                          const grupoAcordado = grupo.jobs.reduce((s,j)=>s+Number(j.valor_acordado||0),0);
-                          const grupoPagado   = grupo.jobs.reduce((s,j)=>s+payments.filter(p=>p.job_id===j.id).reduce((s2,p)=>s2+Number(p.monto||0),0),0);
-                          const grupoPendiente= grupoAcordado - grupoPagado;
-                          const tieneAbiertos = grupo.jobs.some(j=>j.status==="abierto");
+                      <div>
+                        {Object.entries((() => {
+                          const g = {};
+                          tjobs.forEach(j => {
+                            const key = j.project_id ? `proj_${j.project_id}` : `solo_${j.id}`;
+                            if (!g[key]) g[key] = { label: j.proyecto||"Sin proyecto", jobs:[] };
+                            g[key].jobs.push(j);
+                          });
+                          return g;
+                        })()).map(([key, grupo]) => {
+                          const gAcordado  = grupo.jobs.reduce((s,j)=>s+Number(j.valor_acordado||0),0);
+                          const gPagado    = grupo.jobs.reduce((s,j)=>s+payments.filter(p=>p.job_id===j.id).reduce((s2,p)=>s2+Number(p.monto||0),0),0);
+                          const gPendiente = gAcordado - gPagado;
+                          const tieneAbiertos = grupo.jobs.some(j=>j.status==="abierto" && (Number(j.valor_acordado||0) - payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0)) > 0);
                           return (
-                            <div key={key} style={{ marginBottom:12, border:`1px solid ${G.border}`, borderRadius:8, overflow:"hidden" }}>
-                              {/* Header grupo */}
+                            <div key={key} style={{ marginBottom:10, border:`1px solid ${G.border}`, borderRadius:8, overflow:"hidden" }}>
                               <div style={{ background:G.surface, padding:"8px 14px", display:"flex",
                                             justifyContent:"space-between", alignItems:"center",
                                             borderBottom:`1px solid ${G.border}` }}>
-                                <div style={{ fontWeight:600, fontSize:12, color:G.accent }}>
-                                  📁 {grupo.label}
-                                </div>
-                                <div style={{ display:"flex", gap:16, alignItems:"center" }}>
-                                  <div style={{ fontSize:11, color:G.muted }}>
-                                    Acordado: <strong style={{color:G.text}}>{fmtCOP(grupoAcordado)}</strong>
-                                  </div>
-                                  <div style={{ fontSize:11, color:G.muted }}>
-                                    Pagado: <strong style={{color:"#22c55e"}}>{fmtCOP(grupoPagado)}</strong>
-                                  </div>
-                                  <div style={{ fontSize:11, color:G.muted }}>
-                                    Pendiente: <strong style={{color:grupoPendiente>0?"#f59e0b":G.muted}}>{fmtCOP(grupoPendiente)}</strong>
-                                  </div>
-                                  {tieneAbiertos && grupoPendiente > 0 && (
+                                <div style={{ fontWeight:600, fontSize:12, color:G.accent }}>📁 {grupo.label}</div>
+                                <div style={{ display:"flex", gap:14, alignItems:"center" }}>
+                                  <span style={{ fontSize:11, color:G.muted }}>Acordado: <strong style={{color:G.text}}>{fmtCOP(gAcordado)}</strong></span>
+                                  <span style={{ fontSize:11, color:G.muted }}>Pagado: <strong style={{color:"#22c55e"}}>{fmtCOP(gPagado)}</strong></span>
+                                  <span style={{ fontSize:11, color:G.muted }}>Pendiente: <strong style={{color:gPendiente>0?"#f59e0b":G.muted}}>{fmtCOP(gPendiente)}</strong></span>
+                                  {tieneAbiertos && (
                                     <button onClick={()=>openPayJob(grupo.jobs.find(j=>j.status==="abierto"))}
                                       style={{ background:G.accent, color:"#fff", border:"none", padding:"4px 12px",
                                                borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
-                                      💸 Pagar proyecto
+                                      💸 Pagar
                                     </button>
                                   )}
                                 </div>
                               </div>
-                              {/* Tabla de M.O. del grupo */}
                               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                                 <thead>
                                   <tr style={{ background:G.surface }}>
@@ -5566,9 +5556,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                                       <tr key={j.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                                         <td style={{ padding:"6px 10px", color:G.muted, whiteSpace:"nowrap" }}>{j.fecha}</td>
                                         <td style={{ padding:"6px 10px" }}>
-                                          <span style={{ background:G.surface, borderRadius:4, padding:"2px 6px", fontSize:10, color:G.muted }}>
-                                            {j.tipo||"servicio"}
-                                          </span>
+                                          <span style={{ background:G.surface, borderRadius:4, padding:"2px 6px", fontSize:10, color:G.muted }}>{j.tipo||"servicio"}</span>
                                         </td>
                                         <td style={{ padding:"6px 10px" }}>
                                           {j.descripcion}
@@ -5590,9 +5578,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                                             {j.status==="abierto" && pend > 0 && (
                                               <button onClick={()=>openPayJob(j)}
                                                 style={{ background:G.accent, color:"#fff", border:"none",
-                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10, fontWeight:600 }}>
-                                                💸
-                                              </button>
+                                                         padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10, fontWeight:600 }}>💸</button>
                                             )}
                                             {j.status==="abierto" && (
                                               <button onClick={()=>updateJobStatus(j.id,"cerrado")}
@@ -5621,19 +5607,8 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                               </table>
                             </div>
                           );
-                        });
-                      })()}
-                      {/* dummy to close old structure */}
-                      {false && <table><tbody><tr><td>
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                        })}
+                      </div>
                     )}
                   </div>
                 )}
