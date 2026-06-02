@@ -5097,11 +5097,21 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const techPendiente = t => techJobs(t,"abierto").reduce((s,j)=>s+Number(j.valor_acordado||0),0) - techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
 
   const openPayJob = (job) => {
-    const pagado = payments.filter(p=>p.job_id===job.id).reduce((s,p)=>s+Number(p.monto||0),0);
-    const pendiente = Number(job.valor_acordado||0) - pagado;
-    setPayingJob(job);
-    setSelectedTech(technicians.find(t=>t.id===job.technician_id)||null);
-    setPayForm({ monto:String(pendiente), fecha:new Date().toISOString().split("T")[0], notas:"", job_id:job.id });
+    const tech = technicians.find(t=>t.id===job.technician_id)||null;
+    // Todos los trabajos abiertos del mismo técnico y proyecto
+    const relatedJobs = jobs.filter(j =>
+      j.technician_id === job.technician_id &&
+      j.status === "abierto" &&
+      (job.project_id ? j.project_id === job.project_id : j.id === job.id)
+    );
+    const jobsWithPending = relatedJobs.map(j => {
+      const pagado = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
+      return { ...j, pagado, pendiente: Number(j.valor_acordado||0) - pagado };
+    }).filter(j => j.pendiente > 0);
+    setPayingJob({ ...job, relatedJobs: jobsWithPending, selectedJobIds: [job.id] });
+    setSelectedTech(tech);
+    const pendienteInicial = jobsWithPending.filter(j=>j.id===job.id).reduce((s,j)=>s+j.pendiente,0);
+    setPayForm({ monto:String(pendienteInicial), fecha:new Date().toISOString().split("T")[0], notas:"", job_id:job.id });
     setShowPayModal(true);
   };
 
@@ -5638,20 +5648,50 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
           <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:440 }}>
             <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💸 Registrar pago</div>
             {payingJob && (() => {
-              const pagado = payments.filter(p=>p.job_id===payingJob.id).reduce((s,p)=>s+Number(p.monto||0),0);
-              const pendiente = Number(payingJob.valor_acordado||0) - pagado;
+              const relJobs = payingJob.relatedJobs || [{...payingJob, pendiente: Number(payingJob.valor_acordado||0), pagado:0}];
+              const selectedIds = payingJob.selectedJobIds || [payingJob.id];
+              const totalSeleccionado = relJobs.filter(j=>selectedIds.includes(j.id)).reduce((s,j)=>s+j.pendiente,0);
               return (
-                <div style={{ background:G.surface, borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
-                  <div style={{ fontWeight:600, fontSize:13, marginBottom:6 }}>{payingJob.descripcion}</div>
-                  <div style={{ display:"flex", gap:20, fontSize:12 }}>
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ display:"flex", gap:16, fontSize:12, marginBottom:10 }}>
                     <div><span style={{color:G.muted}}>Técnico: </span><strong>{selectedTech?.name}</strong></div>
                     {payingJob.proyecto && <div><span style={{color:G.muted}}>Proyecto: </span><strong>{payingJob.proyecto}</strong></div>}
                   </div>
-                  <div style={{ display:"flex", gap:20, fontSize:12, marginTop:6 }}>
-                    <div><span style={{color:G.muted}}>Acordado: </span><strong>{fmtCOP(payingJob.valor_acordado)}</strong></div>
-                    <div><span style={{color:G.muted}}>Pagado: </span><strong style={{color:"#22c55e"}}>{fmtCOP(pagado)}</strong></div>
-                    <div><span style={{color:G.muted}}>Pendiente: </span><strong style={{color:"#f59e0b"}}>{fmtCOP(pendiente)}</strong></div>
-                  </div>
+                  <div style={{ color:G.muted, fontSize:11, marginBottom:6 }}>Selecciona los trabajos a pagar:</div>
+                  {relJobs.map(j => {
+                    const isChecked = selectedIds.includes(j.id);
+                    return (
+                      <div key={j.id}
+                        onClick={()=>{
+                          const next = isChecked ? selectedIds.filter(id=>id!==j.id) : [...selectedIds, j.id];
+                          const nuevoTotal = relJobs.filter(rj=>next.includes(rj.id)).reduce((s,rj)=>s+rj.pendiente,0);
+                          setPayingJob({...payingJob, selectedJobIds: next});
+                          setPayForm(f=>({...f, monto:String(nuevoTotal)}));
+                        }}
+                        style={{ padding:"8px 10px", marginBottom:4, borderRadius:6, cursor:"pointer",
+                                 border:`1px solid ${isChecked?G.accent:G.border}`,
+                                 background: isChecked?`${G.accent}18`:G.surface,
+                                 display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${isChecked?G.accent:G.muted}`,
+                                        background:isChecked?G.accent:"transparent", display:"flex", alignItems:"center",
+                                        justifyContent:"center", flexShrink:0 }}>
+                            {isChecked && <span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}
+                          </div>
+                          <span style={{ fontSize:12 }}>{j.descripcion}</span>
+                        </div>
+                        <div style={{ textAlign:"right", fontSize:11 }}>
+                          <div style={{ color:"#f59e0b", fontWeight:600 }}>{fmtCOP(j.pendiente)}</div>
+                          {j.pagado > 0 && <div style={{color:"#22c55e"}}>Pagado: {fmtCOP(j.pagado)}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {relJobs.length > 1 && (
+                    <div style={{ fontSize:11, color:G.muted, textAlign:"right", marginTop:4 }}>
+                      Total seleccionado: <strong style={{color:G.accent}}>{fmtCOP(totalSeleccionado)}</strong>
+                    </div>
+                  )}
                 </div>
               );
             })()}
