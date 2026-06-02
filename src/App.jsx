@@ -5098,20 +5098,11 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
 
   const openPayJob = (job) => {
     const tech = technicians.find(t=>t.id===job.technician_id)||null;
-    // Todos los trabajos abiertos del mismo técnico y proyecto
-    const relatedJobs = jobs.filter(j =>
-      j.technician_id === job.technician_id &&
-      j.status === "abierto" &&
-      (job.project_id ? j.project_id === job.project_id : j.id === job.id)
-    );
-    const jobsWithPending = relatedJobs.map(j => {
-      const pagado = payments.filter(p=>p.job_id===j.id).reduce((s,p)=>s+Number(p.monto||0),0);
-      return { ...j, pagado, pendiente: Number(j.valor_acordado||0) - pagado };
-    }).filter(j => j.pendiente > 0);
-    setPayingJob({ ...job, relatedJobs: jobsWithPending, selectedJobIds: [job.id] });
+    const pagado = payments.filter(p=>p.job_id===job.id).reduce((s,p)=>s+Number(p.monto||0),0);
+    const pendiente = Number(job.valor_acordado||0) - pagado;
+    setPayingJob({ ...job, relatedJobs: [{ ...job, pagado, pendiente }], selectedJobIds: [job.id] });
     setSelectedTech(tech);
-    const pendienteInicial = jobsWithPending.filter(j=>j.id===job.id).reduce((s,j)=>s+j.pendiente,0);
-    setPayForm({ monto:String(pendienteInicial), fecha:new Date().toISOString().split("T")[0], notas:"", job_id:job.id });
+    setPayForm({ monto:String(pendiente), fecha:new Date().toISOString().split("T")[0], notas:"", job_id:job.id });
     setShowPayModal(true);
   };
 
