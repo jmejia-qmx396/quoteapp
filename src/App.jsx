@@ -5828,7 +5828,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
     const paymentsInP = paymentsInRange.filter(pp=>pp.project_id===proj.id);
     const paidInRange = paymentsInP.reduce((s,pp)=>s+(pp.amount||0),0);
     return { ...proj, projQuotes, totalQuoted, totalPaid, paidInRange, paymentsInP };
-  }).filter(p => p.paidInRange > 0 || p.projQuotes.length > 0);
+  }).filter(p => p.projQuotes.length > 0);
 
   const totalIngresado = paymentsInRange.reduce((s,p)=>s+(p.amount||0),0);
   const totalCotizado  = projectsWithQuotes.reduce((s,p)=>s+(p.totalQuoted||0),0);
