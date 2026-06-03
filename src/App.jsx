@@ -5761,7 +5761,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
 
 
 // ── Vista Informes ───────────────────────────────────────────────
-const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, payments, technicians, config }) => {
+const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPayments = [], technicians = [], config }) => {
   const now = new Date();
   const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
   const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
@@ -5826,7 +5826,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, payment
   const totalCotizado  = projectsWithQuotes.reduce((s,p)=>s+(p.totalQuoted||0),0);
 
   // Pagos a técnicos en el período
-  const techPaymentsInRange = payments.filter(p => (p.fecha||"") >= dateFrom && (p.fecha||"") <= dateTo);
+  const techPaymentsInRange = techPayments.filter(p => (p.fecha||"")  >= dateFrom && (p.fecha||"") <= dateTo);
   const totalTecnicos = techPaymentsInRange.reduce((s,p)=>s+Number(p.monto||0),0);
   const techSummary = technicians.map(t => ({
     ...t,
@@ -6066,6 +6066,8 @@ export default function App() {
   const [projectPurchases, setProjectPurchases] = useState([]);
   const [projectTasks, setProjectTasks] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [techniciansList, setTechniciansList] = useState([]);
+  const [technicianPayments, setTechnicianPayments] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -6161,6 +6163,12 @@ export default function App() {
       // Templates (Kits)
       const { data: tmpl } = await sb.from("quote_templates").select("*").order("name");
       if (tmpl) setTemplates(tmpl);
+
+      // Technicians & payments for reports
+      const { data: techList } = await sb.from("profiles").select("*").eq("role","technician").order("name");
+      if (techList) setTechniciansList(techList);
+      const { data: techPays } = await sb.from("technician_payments").select("*").order("fecha",{ascending:false});
+      if (techPays) setTechnicianPayments(techPays);
 
       // Counter
       const maxQ = qs?.length ? Math.max(...qs.map(q=>q.number||1000)) : 1000;
@@ -6543,7 +6551,7 @@ export default function App() {
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
-          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} payments={payments} technicians={[]} config={config} />}
+          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
