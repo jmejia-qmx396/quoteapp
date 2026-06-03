@@ -6012,7 +6012,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                   </thead>
                   <tbody>
                     {t.pagos.map(p=>{
-                      const job = payments.find ? null : null;
+
                       return (
                         <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                           <td style={{ padding:"6px 10px", color:G.muted }}>{p.fecha}</td>
