@@ -408,7 +408,11 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
   // ── Cotizaciones ────────────────────────────────────────────────
   const latestQuotes = quotes.filter(q => q.isLatest !== false);
   const inRange = latestQuotes.filter(q => { const d = q.date||""; return d >= dateFrom && d <= dateTo; });
-  const approvedInRange  = inRange.filter(q => q.status === "Aprobada");
+  const approvedInRange  = quotes.filter(q =>
+    q.status === "Aprobada" && q.isLatest !== false &&
+    (q.approval_date||q.date||"") >= dateFrom &&
+    (q.approval_date||q.date||"") <= dateTo
+  );
   const approvedTotal    = approvedInRange.reduce((s,q) => s+(q.total||0), 0);
   const pendingInRange   = inRange.filter(q => q.status === "Pendiente" || q.status === "Enviada");
   const pendingTotal     = pendingInRange.reduce((s,q) => s+(q.total||0), 0);
@@ -5811,7 +5815,11 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   const projectIdsWithPayments = [...new Set(paymentsInRange.map(p=>p.project_id))];
 
   // Proyectos con cotizaciones aprobadas
-  const approvedQuotes = quotes.filter(q => q.status==="Aprobada" && q.isLatest!==false);
+  const approvedQuotes = quotes.filter(q =>
+    q.status === "Aprobada" && q.isLatest !== false &&
+    (q.approval_date||q.date||"") >= dateFrom &&
+    (q.approval_date||q.date||"") <= dateTo
+  );
   const projectsWithQuotes = projects.map(proj => {
     const pqIds = projectQuotes.filter(pq=>pq.project_id===proj.id).map(pq=>pq.quote_id);
     const projQuotes = approvedQuotes.filter(q=>pqIds.includes(q.id));
@@ -6181,6 +6189,10 @@ export default function App() {
   // ── CRUD: Quotes ─────────────────────────────────────────────
   const saveQuote = async (q) => {
     let savedData = null;
+    const today = new Date().toISOString().split("T")[0];
+    const approvalDate = q.status === "Aprobada"
+      ? (q.approval_date || today)
+      : (q.approval_date || null);
     const row = { number:q.number, date:q.date, valid_until:q.validUntil, profile:q.profile||'empresa',
       client_id:q.clientId||null, client_name:q.clientName, client_contact:q.clientContact,
       client_email:q.clientEmail, client_rut:q.clientRut||"", status:q.status, notes:q.notes, discount:q.discount||0,
@@ -6188,7 +6200,7 @@ export default function App() {
       tax_amt:q.taxAmt||0, total:q.total||0, total_cost:q.totalCost||0,
       profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id,
       version: q.version||1, parent_id: q.parent_id||null, is_latest: q.is_latest!==false,
-      archived: q.archived||false };
+      archived: q.archived||false, approval_date: approvalDate };
     if (q.id && typeof q.id === "number" && q.id > 1000000000) {
       const { data } = await sb.from("quotes").insert(row).select().single();
       if (data) { savedData = normalizeQuote(data); setQuotes(qs => [savedData, ...qs.filter(x=>x.id!==q.id)]); }
