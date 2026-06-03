@@ -313,6 +313,7 @@ const NAV_GROUPS = [
       { id:"projects",   label:"Proyectos",     icon:"🏗️" },
       { id:"payments",   label:"Cuentas Cobro", icon:"🧾" },
       { id:"kits",       label:"Kits",          icon:"🧩" },
+      { id:"reports",    label:"Informes",     icon:"📈" },
     ]
   },
   {
@@ -5758,6 +5759,285 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
 };
 
 
+
+// ── Vista Informes ───────────────────────────────────────────────
+const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, payments, technicians, config }) => {
+  const now = new Date();
+  const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
+  const [dateFrom, setDateFrom] = useState(fom);
+  const [dateTo,   setDateTo]   = useState(lom);
+  const [generated, setGenerated] = useState(false);
+
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+  const pc = config?.primaryColor || "#0d6e6e";
+
+  const generate = () => setGenerated(true);
+
+  const handlePrint = () => {
+    const el = document.getElementById("informe-content");
+    const w = window.open("","_blank","width=900,height=700");
+    w.document.write(`
+      <html><head><title>Informe ${dateFrom} — ${dateTo}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;color:#1e293b;padding:24px;font-size:11px}
+        h1{font-size:18px;color:${pc};margin-bottom:4px}
+        h2{font-size:13px;color:${pc};margin:20px 0 8px;padding-bottom:4px;border-bottom:2px solid ${pc}}
+        h3{font-size:11px;color:#475569;margin:12px 0 6px}
+        table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px}
+        th{background:${pc};color:#fff;padding:5px 8px;text-align:left;font-size:9px}
+        td{padding:5px 8px;border-bottom:1px solid #e2e8f0}
+        tr:nth-child(even) td{background:#f8fafc}
+        .total{font-weight:700;font-size:12px;color:${pc}}
+        .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+        .card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px}
+        .card-label{font-size:9px;color:#94a3b8;text-transform:uppercase;margin-bottom:4px}
+        .card-value{font-size:14px;font-weight:700;color:${pc}}
+        .subtitle{color:#64748b;font-size:10px;margin-bottom:16px}
+        @media print{body{padding:16px}}
+      </style></head><body>
+      ${el.innerHTML}
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); }, 500);
+  };
+
+  // ── Datos calculados ─────────────────────────────────────────
+  // Proyectos activos en el período (basado en pagos recibidos)
+  const paymentsInRange = projectPayments.filter(p => (p.date||"") >= dateFrom && (p.date||"") <= dateTo);
+  const projectIdsWithPayments = [...new Set(paymentsInRange.map(p=>p.project_id))];
+
+  // Proyectos con cotizaciones aprobadas
+  const approvedQuotes = quotes.filter(q => q.status==="Aprobada" && q.isLatest!==false);
+  const projectsWithQuotes = projects.map(proj => {
+    const pqIds = projectQuotes.filter(pq=>pq.project_id===proj.id).map(pq=>pq.quote_id);
+    const projQuotes = approvedQuotes.filter(q=>pqIds.includes(q.id));
+    const totalQuoted = projQuotes.reduce((s,q)=>s+(q.total||0),0);
+    const totalPaid = projectPayments.filter(pp=>pp.project_id===proj.id).reduce((s,pp)=>s+(pp.amount||0),0);
+    const paymentsInP = paymentsInRange.filter(pp=>pp.project_id===proj.id);
+    const paidInRange = paymentsInP.reduce((s,pp)=>s+(pp.amount||0),0);
+    return { ...proj, projQuotes, totalQuoted, totalPaid, paidInRange, paymentsInP };
+  }).filter(p => p.paidInRange > 0 || p.projQuotes.length > 0);
+
+  const totalIngresado = paymentsInRange.reduce((s,p)=>s+(p.amount||0),0);
+  const totalCotizado  = projectsWithQuotes.reduce((s,p)=>s+(p.totalQuoted||0),0);
+
+  // Pagos a técnicos en el período
+  const techPaymentsInRange = payments.filter(p => (p.fecha||"") >= dateFrom && (p.fecha||"") <= dateTo);
+  const totalTecnicos = techPaymentsInRange.reduce((s,p)=>s+Number(p.monto||0),0);
+  const techSummary = technicians.map(t => ({
+    ...t,
+    pagos: techPaymentsInRange.filter(p=>p.technician_id===t.id),
+    total: techPaymentsInRange.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0)
+  })).filter(t=>t.total>0);
+
+  return (
+    <div style={{ padding:"24px 28px", maxWidth:960 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+        <div>
+          <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>📈 Informes</h2>
+          <p style={{ color:G.muted, fontSize:13 }}>Resumen de actividad por período</p>
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setGenerated(false);}}
+            style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                     padding:"7px 10px", color:G.text, fontSize:13 }} />
+          <span style={{ color:G.muted }}>—</span>
+          <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setGenerated(false);}}
+            style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                     padding:"7px 10px", color:G.text, fontSize:13 }} />
+          <button onClick={generate}
+            style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 20px",
+                     borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+            Generar
+          </button>
+          {generated && (
+            <button onClick={handlePrint}
+              style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`, padding:"8px 20px",
+                       borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+              🖨️ Guardar PDF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!generated ? (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
+                      padding:60, textAlign:"center", color:G.muted }}>
+          Selecciona un rango de fechas y haz click en <strong>Generar</strong>
+        </div>
+      ) : (
+        <div id="informe-content">
+          {/* Título informe */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:pc }}>
+              {config?.companyName || "Informe"}</div>
+            <div style={{ color:G.muted, fontSize:13 }}>
+              Período: {dateFrom} — {dateTo}</div>
+          </div>
+
+          {/* Resumen ejecutivo */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:24 }}>
+            {[
+              { label:"Total ingresado", value:fmtCOP(totalIngresado), color:"#22c55e" },
+              { label:"Cotizaciones aprobadas", value:fmtCOP(totalCotizado), color:pc },
+              { label:"Pagado a técnicos", value:fmtCOP(totalTecnicos), color:"#f59e0b" },
+            ].map(c=>(
+              <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`,
+                                          borderRadius:8, padding:"14px 16px" }}>
+                <div style={{ color:G.muted, fontSize:10, textTransform:"uppercase",
+                               letterSpacing:".06em", marginBottom:6 }}>{c.label}</div>
+                <div style={{ fontSize:20, fontWeight:700, color:c.color }}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Sección 1: Proyectos y cotizaciones */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:pc, marginBottom:12,
+                          paddingBottom:6, borderBottom:`2px solid ${pc}` }}>
+              1. Proyectos — Cotizaciones Aprobadas
+            </div>
+            {projectsWithQuotes.length === 0 ? (
+              <p style={{ color:G.muted, fontSize:13 }}>Sin proyectos en este período.</p>
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:G.surface }}>
+                    {["Proyecto","Cliente","Estado","Cotizado","Recibido en período","Saldo"].map(h=>(
+                      <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
+                                           fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectsWithQuotes.map(p=>(
+                    <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                      <td style={{ padding:"7px 10px", fontWeight:600 }}>{p.name}</td>
+                      <td style={{ padding:"7px 10px", color:G.muted }}>{p.client_name||"—"}</td>
+                      <td style={{ padding:"7px 10px" }}>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10,
+                                       background:`${pc}22`, color:pc }}>{p.status||"Activo"}</span>
+                      </td>
+                      <td style={{ padding:"7px 10px", fontWeight:600 }}>{fmtCOP(p.totalQuoted)}</td>
+                      <td style={{ padding:"7px 10px", color:"#22c55e", fontWeight:600 }}>{fmtCOP(p.paidInRange)}</td>
+                      <td style={{ padding:"7px 10px", color:(p.totalQuoted-p.totalPaid)>0?"#f59e0b":G.muted }}>
+                        {fmtCOP(p.totalQuoted-p.totalPaid)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop:`2px solid ${pc}` }}>
+                    <td colSpan={3} style={{ padding:"8px 10px", fontWeight:700, color:pc }}>TOTAL</td>
+                    <td style={{ padding:"8px 10px", fontWeight:700, color:pc }}>{fmtCOP(totalCotizado)}</td>
+                    <td style={{ padding:"8px 10px", fontWeight:700, color:"#22c55e" }}>{fmtCOP(totalIngresado)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+
+          {/* Sección 2: Ingresos detallados */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:pc, marginBottom:12,
+                          paddingBottom:6, borderBottom:`2px solid ${pc}` }}>
+              2. Ingresos Recibidos
+            </div>
+            {paymentsInRange.length === 0 ? (
+              <p style={{ color:G.muted, fontSize:13 }}>Sin ingresos en este período.</p>
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:G.surface }}>
+                    {["Fecha","Proyecto","Concepto","Tipo","Valor"].map(h=>(
+                      <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
+                                           fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentsInRange.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>{
+                    const proj = projects.find(pr=>pr.id===p.project_id);
+                    return (
+                      <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.date}</td>
+                        <td style={{ padding:"7px 10px" }}>{proj?.name||"—"}</td>
+                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.concept||"—"}</td>
+                        <td style={{ padding:"7px 10px" }}>
+                          <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
+                                         background:`${pc}22`, color:pc }}>{p.payment_type||"empresa"}</span>
+                        </td>
+                        <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>{fmtCOP(p.amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop:`2px solid ${pc}` }}>
+                    <td colSpan={4} style={{ padding:"8px 10px", fontWeight:700, color:pc }}>TOTAL INGRESADO</td>
+                    <td style={{ padding:"8px 10px", fontWeight:700, color:"#22c55e" }}>{fmtCOP(totalIngresado)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+
+          {/* Sección 3: Pagos a técnicos */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:pc, marginBottom:12,
+                          paddingBottom:6, borderBottom:`2px solid ${pc}` }}>
+              3. Pagos a Técnicos
+            </div>
+            {techSummary.length === 0 ? (
+              <p style={{ color:G.muted, fontSize:13 }}>Sin pagos a técnicos en este período.</p>
+            ) : techSummary.map(t=>(
+              <div key={t.id} style={{ marginBottom:16 }}>
+                <div style={{ fontWeight:600, fontSize:13, marginBottom:6, color:G.text }}>
+                  👷 {t.name} — <span style={{ color:"#22c55e" }}>{fmtCOP(t.total)}</span>
+                </div>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                  <thead>
+                    <tr style={{ background:G.surface }}>
+                      {["Fecha","Trabajo","Proyecto","Monto"].map(h=>(
+                        <th key={h} style={{ padding:"6px 10px", textAlign:"left", color:G.muted,
+                                             fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.pagos.map(p=>{
+                      const job = payments.find ? null : null;
+                      return (
+                        <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                          <td style={{ padding:"6px 10px", color:G.muted }}>{p.fecha}</td>
+                          <td style={{ padding:"6px 10px" }}>{p.notas||"—"}</td>
+                          <td style={{ padding:"6px 10px", color:G.muted }}>—</td>
+                          <td style={{ padding:"6px 10px", fontWeight:600, color:"#22c55e" }}>{fmtCOP(p.monto)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+            {techSummary.length > 0 && (
+              <div style={{ textAlign:"right", fontWeight:700, fontSize:14, color:"#f59e0b", marginTop:8 }}>
+                Total pagado a técnicos: {fmtCOP(totalTecnicos)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // Set favicon and page title
   useEffect(() => {
@@ -6263,6 +6543,7 @@ export default function App() {
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
+          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} payments={payments} technicians={[]} config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
