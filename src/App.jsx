@@ -5070,7 +5070,8 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     projQuotes.forEach(q => {
       (q.items||[]).forEach(item => {
         if (item.sku === "M.O." || (item.name||"").toLowerCase().includes("mano de obra")) {
-          const valorTecnico = Number(item.cost||item.costCOP||0) * Number(item.qty||1);
+          const costo = item.cost !== undefined && item.cost !== null ? Number(item.cost) : Number(item.costCOP||0);
+          const valorTecnico = costo * Number(item.qty||1);
           moItems.push({ ...item, lineNet: valorTecnico, quoteName: q.number });
         }
       });
