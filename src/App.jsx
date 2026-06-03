@@ -5891,8 +5891,8 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           {/* Resumen ejecutivo */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:24 }}>
             {[
-              { label:"Total ingresado", value:fmtCOP(totalIngresado), color:"#22c55e" },
               { label:"Cotizaciones aprobadas", value:fmtCOP(totalCotizado), color:pc },
+              { label:"Total ingresado", value:fmtCOP(totalIngresado), color:"#22c55e" },
               { label:"Pagado a técnicos", value:fmtCOP(totalTecnicos), color:"#f59e0b" },
             ].map(c=>(
               <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`,
