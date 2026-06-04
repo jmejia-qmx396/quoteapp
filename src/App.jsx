@@ -5960,7 +5960,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             {paymentsInRange.length === 0 ? (
               <p style={{ color:G.muted, fontSize:13 }}>Sin ingresos en este período.</p>
             ) : (
-              {(() => {
+              (() => {
                 const totalEmpresa  = paymentsInRange.filter(p=>(p.payment_type||"empresa")==="empresa").reduce((s,p)=>s+(p.amount||0),0);
                 const totalPersonal = paymentsInRange.filter(p=>p.payment_type==="personal").reduce((s,p)=>s+(p.amount||0),0);
                 return (
@@ -6005,7 +6005,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                     </tfoot>
                   </table>
                 );
-              })()}
+              })()
             )}
           </div>
 
