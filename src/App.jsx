@@ -5960,39 +5960,52 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             {paymentsInRange.length === 0 ? (
               <p style={{ color:G.muted, fontSize:13 }}>Sin ingresos en este período.</p>
             ) : (
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-                <thead>
-                  <tr style={{ background:G.surface }}>
-                    {["Fecha","Proyecto","Concepto","Tipo","Valor"].map(h=>(
-                      <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
-                                           fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentsInRange.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>{
-                    const proj = projects.find(pr=>pr.id===p.project_id);
-                    return (
-                      <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
-                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.date}</td>
-                        <td style={{ padding:"7px 10px" }}>{proj?.name||"—"}</td>
-                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.concept||"—"}</td>
-                        <td style={{ padding:"7px 10px" }}>
-                          <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
-                                         background:`${pc}22`, color:pc }}>{p.payment_type||"empresa"}</span>
-                        </td>
-                        <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>{fmtCOP(p.amount)}</td>
+              {(() => {
+                const totalEmpresa  = paymentsInRange.filter(p=>(p.payment_type||"empresa")==="empresa").reduce((s,p)=>s+(p.amount||0),0);
+                const totalPersonal = paymentsInRange.filter(p=>p.payment_type==="personal").reduce((s,p)=>s+(p.amount||0),0);
+                return (
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr style={{ background:G.surface }}>
+                        {["Fecha","Proyecto","Concepto","🏢 Empresa","👤 Personal"].map(h=>(
+                          <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
+                                               fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                        ))}
                       </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop:`2px solid ${pc}` }}>
-                    <td colSpan={4} style={{ padding:"8px 10px", fontWeight:700, color:pc }}>TOTAL INGRESADO</td>
-                    <td style={{ padding:"8px 10px", fontWeight:700, color:"#22c55e" }}>{fmtCOP(totalIngresado)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                    </thead>
+                    <tbody>
+                      {paymentsInRange.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>{
+                        const proj = projects.find(pr=>pr.id===p.project_id);
+                        const isEmpresa = (p.payment_type||"empresa")==="empresa";
+                        return (
+                          <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                            <td style={{ padding:"7px 10px", color:G.muted }}>{p.date}</td>
+                            <td style={{ padding:"7px 10px" }}>{proj?.name||"—"}</td>
+                            <td style={{ padding:"7px 10px", color:G.muted }}>{p.concept||"—"}</td>
+                            <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>
+                              {isEmpresa ? fmtCOP(p.amount) : "—"}
+                            </td>
+                            <td style={{ padding:"7px 10px", fontWeight:600, color:G.accent }}>
+                              {!isEmpresa ? fmtCOP(p.amount) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop:`2px solid ${pc}` }}>
+                        <td colSpan={3} style={{ padding:"8px 10px", fontWeight:700, color:pc }}>TOTAL</td>
+                        <td style={{ padding:"8px 10px", fontWeight:700, color:"#22c55e" }}>{fmtCOP(totalEmpresa)}</td>
+                        <td style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>{fmtCOP(totalPersonal)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} style={{ padding:"6px 10px", fontWeight:700, color:pc }}>TOTAL INGRESADO</td>
+                        <td colSpan={2} style={{ padding:"6px 10px", fontWeight:700, color:"#22c55e" }}>{fmtCOP(totalEmpresa+totalPersonal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                );
+              })()}
             )}
           </div>
 
