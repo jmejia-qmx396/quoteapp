@@ -314,6 +314,7 @@ const NAV_GROUPS = [
       { id:"payments",   label:"Cuentas Cobro", icon:"🧾" },
       { id:"kits",       label:"Kits",          icon:"🧩" },
       { id:"reports",    label:"Informes",     icon:"📈" },
+      { id:"distribucion",label:"Distribución",  icon:"💰" },
     ]
   },
   {
@@ -6059,6 +6060,310 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   );
 };
 
+
+// ── Vista Distribución de Ingresos ──────────────────────────────
+const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeConfig, incomeEntries, setIncomeEntries, user }) => {
+  const now = new Date();
+  const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
+  const [dateFrom, setDateFrom] = useState(fom);
+  const [dateTo,   setDateTo]   = useState(lom);
+  const [showConfig, setShowConfig] = useState(false);
+  const [showForm, setShowForm]   = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
+  const [saving, setSaving]       = useState(false);
+  const [cfg, setCfg] = useState(incomeConfig || {
+    impuestos:7, compras_corriente:70, ganancia:5, personal:35, funcionamiento:60,
+    inversion:15, jorge:70, mama:15
+  });
+  const [form, setForm] = useState({ fecha:fom, concepto:"", monto:"", fuente:"manual" });
+
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+  const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
+
+  // Calcular distribución para un monto
+  const calcDist = (monto) => {
+    const impuestos       = monto * (cfg.impuestos/100);
+    const disponible      = monto * ((100-cfg.impuestos)/100);
+    const compras         = disponible * (cfg.compras_corriente/100);
+    const restante        = disponible * ((100-cfg.compras_corriente)/100);
+    const ganancia        = restante * (cfg.ganancia/100);
+    const personal        = restante * (cfg.personal/100);
+    const funcionamiento  = restante * (cfg.funcionamiento/100);
+    const inversion       = personal * (cfg.inversion/100);
+    const jorge           = personal * (cfg.jorge/100);
+    const mama            = personal * (cfg.mama/100);
+    return { impuestos, disponible, compras, restante, ganancia, personal, funcionamiento, inversion, jorge, mama };
+  };
+
+  // Combinar pagos de proyectos + entradas manuales en el rango
+  const projPaymentsInRange = projectPayments.filter(p => (p.date||"") >= dateFrom && (p.date||"") <= dateTo);
+  const manualInRange = incomeEntries.filter(e => (e.fecha||"") >= dateFrom && (e.fecha||"") <= dateTo && e.fuente === "manual");
+
+  // Pagos de proyectos que NO tienen entrada manual vinculada
+  const projAsEntries = projPaymentsInRange.map(p => {
+    const proj = projects.find(pr=>pr.id===p.project_id);
+    return { id:`proj_${p.id}`, fecha:p.date, concepto:p.concept||proj?.name||"Pago proyecto",
+             monto:p.amount, fuente:"proyecto", project_payment_id:p.id };
+  });
+
+  const allEntries = [...projAsEntries, ...manualInRange]
+    .sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
+
+  const totalMonto = allEntries.reduce((s,e)=>s+Number(e.monto||0),0);
+  const totDist = calcDist(totalMonto);
+
+  const saveConfig = async () => {
+    setSaving(true);
+    await sb.from("income_config").update({
+      impuestos: Number(cfg.impuestos), compras_corriente: Number(cfg.compras_corriente),
+      ganancia: Number(cfg.ganancia), personal: Number(cfg.personal),
+      funcionamiento: Number(cfg.funcionamiento), inversion: Number(cfg.inversion),
+      jorge: Number(cfg.jorge), mama: Number(cfg.mama), updated_at: new Date().toISOString()
+    }).eq("id", incomeConfig.id);
+    setIncomeConfig({...incomeConfig, ...cfg});
+    setShowConfig(false);
+    setSaving(false);
+  };
+
+  const saveEntry = async () => {
+    if (!form.monto || !form.fecha) return;
+    setSaving(true);
+    if (editEntry && editEntry.fuente === "manual") {
+      await sb.from("income_entries").update({
+        fecha: form.fecha, concepto: form.concepto, monto: Number(form.monto), fuente: form.fuente
+      }).eq("id", editEntry.id);
+      setIncomeEntries(es => es.map(e => e.id===editEntry.id ? {...e,...form,monto:Number(form.monto)} : e));
+    } else {
+      const { data } = await sb.from("income_entries").insert({
+        fecha: form.fecha, concepto: form.concepto, monto: Number(form.monto),
+        fuente: form.fuente, created_by: user.id
+      }).select().single();
+      if (data) setIncomeEntries(es => [data, ...es]);
+    }
+    setForm({ fecha:fom, concepto:"", monto:"", fuente:"manual" });
+    setEditEntry(null); setShowForm(false); setSaving(false);
+  };
+
+  const deleteEntry = async (id) => {
+    if (!window.confirm("¿Eliminar este ingreso?")) return;
+    await sb.from("income_entries").delete().eq("id", id);
+    setIncomeEntries(es => es.filter(e=>e.id!==id));
+  };
+
+  const openEdit = (entry) => {
+    setForm({ fecha:entry.fecha, concepto:entry.concepto||"", monto:String(entry.monto), fuente:entry.fuente||"manual" });
+    setEditEntry(entry);
+    setShowForm(true);
+  };
+
+  const CARDS = [
+    { label:"Total Ingresos",    value:totalMonto,          color:"#22c55e", icon:"💵" },
+    { label:"Impuestos",         value:totDist.impuestos,   color:"#ef4444", icon:"🏛️" },
+    { label:"Compras Corriente", value:totDist.compras,     color:"#f59e0b", icon:"🛒" },
+    { label:"Ganancia",          value:totDist.ganancia,    color:G.accent,  icon:"📈" },
+    { label:"Inversión",         value:totDist.inversion,   color:"#8b5cf6", icon:"💎" },
+    { label:"Jorge",             value:totDist.jorge,       color:"#3b82f6", icon:"👤" },
+    { label:"Mamá",              value:totDist.mama,        color:"#ec4899", icon:"👤" },
+    { label:"Funcionamiento",    value:totDist.funcionamiento, color:"#64748b", icon:"⚙️" },
+  ];
+
+  return (
+    <div style={{ padding:"24px 28px", maxWidth:980 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+        <div>
+          <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>💰 Distribución de Ingresos</h2>
+          <p style={{ color:G.muted, fontSize:13 }}>Destino de cada peso según las fórmulas configuradas</p>
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+            style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 }} />
+          <span style={{ color:G.muted }}>—</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+            style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 }} />
+          <button onClick={()=>{ setShowForm(!showForm); setEditEntry(null); setForm({fecha:dateFrom,concepto:"",monto:"",fuente:"manual"}); }}
+            style={{ background:showForm?G.surface:G.accent, color:showForm?G.muted:"#fff", border:`1px solid ${G.border}`,
+                     padding:"8px 16px", borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+            {showForm?"✕ Cancelar":"+ Agregar ingreso"}
+          </button>
+          <button onClick={()=>setShowConfig(!showConfig)}
+            style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
+                     padding:"8px 14px", borderRadius:7, cursor:"pointer", fontSize:13 }}>
+            ⚙️ Porcentajes
+          </button>
+        </div>
+      </div>
+
+      {/* Config porcentajes */}
+      {showConfig && (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:20 }}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>⚙️ Configurar porcentajes</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:16 }}>
+            {[
+              {key:"impuestos",        label:"Impuestos %"},
+              {key:"compras_corriente",label:"Compras Corriente %"},
+              {key:"ganancia",         label:"Ganancia %"},
+              {key:"personal",         label:"Personal %"},
+              {key:"funcionamiento",   label:"Funcionamiento %"},
+              {key:"inversion",        label:"Inversión (de Personal) %"},
+              {key:"jorge",            label:"Jorge (de Personal) %"},
+              {key:"mama",             label:"Mamá (de Personal) %"},
+            ].map(f=>(
+              <div key={f.key}>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>{f.label}</div>
+                <input type="number" value={cfg[f.key]} onChange={e=>setCfg({...cfg,[f.key]:e.target.value})}
+                  style={{...inp, width:"100%"}} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={saveConfig} disabled={saving}
+              style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 20px",
+                       borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+              {saving?"Guardando...":"💾 Guardar"}
+            </button>
+            <button onClick={()=>setShowConfig(false)}
+              style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                       padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Form agregar/editar ingreso */}
+      {showForm && (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:20, marginBottom:20 }}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>
+            {editEntry ? "✏️ Editar ingreso" : "💵 Nuevo ingreso"}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:14 }}>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha *</div>
+              <input type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} style={inp} />
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Monto (COP) *</div>
+              <input type="number" value={form.monto} onChange={e=>setForm({...form,monto:e.target.value})}
+                placeholder="0" style={inp} />
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Concepto</div>
+              <input value={form.concepto} onChange={e=>setForm({...form,concepto:e.target.value})}
+                placeholder="Descripción" style={inp} />
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fuente</div>
+              <select value={form.fuente} onChange={e=>setForm({...form,fuente:e.target.value})} style={inp}>
+                <option value="manual">Manual</option>
+                <option value="proyecto">Proyecto</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={saveEntry} disabled={saving||!form.monto}
+              style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 20px",
+                       borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:13,
+                       opacity:(saving||!form.monto)?0.5:1 }}>
+              {saving?"Guardando...":"💾 Guardar"}
+            </button>
+            <button onClick={()=>{ setShowForm(false); setEditEntry(null); }}
+              style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                       padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
+        {CARDS.map(c=>(
+          <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"14px 16px" }}>
+            <div style={{ color:G.muted, fontSize:10, textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>
+              {c.icon} {c.label}
+            </div>
+            <div style={{ fontSize:17, fontWeight:700, color:c.color }}>{fmtCOP(c.value)}</div>
+            <div style={{ color:G.muted, fontSize:10, marginTop:2 }}>
+              {totalMonto > 0 ? `${((c.value/totalMonto)*100).toFixed(1)}% del total` : "—"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabla detalle */}
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ padding:"12px 16px", borderBottom:`1px solid ${G.border}`, fontWeight:700, fontSize:13 }}>
+          Detalle de ingresos — {allEntries.length} registro{allEntries.length!==1?"s":""}
+        </div>
+        {allEntries.length === 0 ? (
+          <div style={{ padding:40, textAlign:"center", color:G.muted }}>
+            No hay ingresos en este período.
+          </div>
+        ) : (
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:G.surface }}>
+                {["Fecha","Concepto","Fuente","Monto","Impuestos","Compras","Ganancia","Inversión","Jorge","Mamá","Func.",""].map(h=>(
+                  <th key={h} style={{ padding:"7px 10px", textAlign:"left", color:G.muted,
+                                       fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allEntries.map(e => {
+                const d = calcDist(Number(e.monto||0));
+                const isManual = e.fuente === "manual";
+                return (
+                  <tr key={e.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                    <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{e.fecha}</td>
+                    <td style={{ padding:"7px 10px" }}>{e.concepto||"—"}</td>
+                    <td style={{ padding:"7px 10px" }}>
+                      <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
+                                     background:e.fuente==="proyecto"?`${G.accent}22`:`${G.surface}`,
+                                     color:e.fuente==="proyecto"?G.accent:G.muted }}>
+                        {e.fuente}
+                      </span>
+                    </td>
+                    <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>{fmtCOP(e.monto)}</td>
+                    <td style={{ padding:"7px 10px", color:"#ef4444" }}>{fmtCOP(d.impuestos)}</td>
+                    <td style={{ padding:"7px 10px", color:"#f59e0b" }}>{fmtCOP(d.compras)}</td>
+                    <td style={{ padding:"7px 10px", color:G.accent }}>{fmtCOP(d.ganancia)}</td>
+                    <td style={{ padding:"7px 10px", color:"#8b5cf6" }}>{fmtCOP(d.inversion)}</td>
+                    <td style={{ padding:"7px 10px", color:"#3b82f6" }}>{fmtCOP(d.jorge)}</td>
+                    <td style={{ padding:"7px 10px", color:"#ec4899" }}>{fmtCOP(d.mama)}</td>
+                    <td style={{ padding:"7px 10px", color:"#64748b" }}>{fmtCOP(d.funcionamiento)}</td>
+                    <td style={{ padding:"7px 10px" }}>
+                      {isManual && (
+                        <div style={{ display:"flex", gap:4 }}>
+                          <button onClick={()=>openEdit(e)}
+                            style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
+                                     padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>✏️</button>
+                          <button onClick={()=>deleteEntry(e.id)}
+                            style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                                     padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>🗑️</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop:`2px solid ${G.accent}` }}>
+                <td colSpan={3} style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>TOTAL</td>
+                {[totalMonto, totDist.impuestos, totDist.compras, totDist.ganancia,
+                  totDist.inversion, totDist.jorge, totDist.mama, totDist.funcionamiento].map((v,i)=>(
+                  <td key={i} style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>{fmtCOP(v)}</td>
+                ))}
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // Set favicon and page title
   useEffect(() => {
@@ -6089,6 +6394,8 @@ export default function App() {
   const [templates, setTemplates] = useState([]);
   const [techniciansList, setTechniciansList] = useState([]);
   const [technicianPayments, setTechnicianPayments] = useState([]);
+  const [incomeConfig, setIncomeConfig] = useState(null);
+  const [incomeEntries, setIncomeEntries] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -6190,6 +6497,12 @@ export default function App() {
       if (techList) setTechniciansList(techList);
       const { data: techPays } = await sb.from("technician_payments").select("*").order("fecha",{ascending:false});
       if (techPays) setTechnicianPayments(techPays);
+
+      // Income distribution
+      const { data: iCfg } = await sb.from("income_config").select("*").limit(1).single();
+      if (iCfg) setIncomeConfig(iCfg);
+      const { data: iEnt } = await sb.from("income_entries").select("*").order("fecha",{ascending:false});
+      if (iEnt) setIncomeEntries(iEnt);
 
       // Counter
       const maxQ = qs?.length ? Math.max(...qs.map(q=>q.number||1000)) : 1000;
@@ -6576,6 +6889,7 @@ export default function App() {
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
+          {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} user={user} />}
           {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
