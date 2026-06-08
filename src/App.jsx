@@ -4882,42 +4882,7 @@ const TechnicianView = ({ user, profile, logout }) => {
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
 
-  const DESTINOS = ["impuestos","compras","ganancia","inversion","jorge","mama","funcionamiento"];
-  const DESTINO_LABEL = { impuestos:"Impuestos", compras:"Compras Corriente", ganancia:"Ganancia",
-                          inversion:"Inversión", jorge:"Jorge", mama:"Mamá", funcionamiento:"Funcionamiento" };
-  const DESTINO_COLOR = { impuestos:"#ef4444", compras:"#f59e0b", ganancia:G.accent,
-                          inversion:"#8b5cf6", jorge:"#3b82f6", mama:"#ec4899", funcionamiento:"#64748b" };
 
-  const getEntryDists = (entryId) => incomeDistributions.filter(d=>d.income_entry_id===String(entryId));
-
-  const ensureDistributions = async (entry) => {
-    const existing = getEntryDists(entry.id);
-    const d = calcDist(Number(entry.monto||0));
-    const montos = { impuestos:d.impuestos, compras:d.compras, ganancia:d.ganancia,
-                     inversion:d.inversion, jorge:d.jorge, mama:d.mama, funcionamiento:d.funcionamiento };
-    const missing = DESTINOS.filter(dest => !existing.find(e=>e.destino===dest));
-    if (missing.length > 0) {
-      const rows = missing.map(dest => ({
-        income_entry_id: String(entry.id), destino: dest, monto: montos[dest], pagado: false
-      }));
-      const { data } = await sb.from("income_distributions").insert(rows).select();
-      if (data) setIncomeDistributions(ds => [...ds, ...data]);
-    }
-  };
-
-  const togglePagado = async (dist) => {
-    const newVal = !dist.pagado;
-    await sb.from("income_distributions").update({
-      pagado: newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null
-    }).eq("id", dist.id);
-    setIncomeDistributions(ds => ds.map(d => d.id===dist.id ? {...d, pagado:newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null} : d));
-  };
-
-  const openExpand = async (entry) => {
-    if (expandedEntry === entry.id) { setExpandedEntry(null); return; }
-    await ensureDistributions(entry);
-    setExpandedEntry(entry.id);
-  };
 
   useEffect(() => { loadData(); }, []);
 
@@ -6132,6 +6097,43 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
     const jorge           = personal * (cfg.jorge/100);
     const mama            = personal * (cfg.mama/100);
     return { impuestos, disponible, compras, restante, ganancia, personal, funcionamiento, inversion, jorge, mama };
+  };
+
+  const DESTINOS = ["impuestos","compras","ganancia","inversion","jorge","mama","funcionamiento"];
+  const DESTINO_LABEL = { impuestos:"Impuestos", compras:"Compras Corriente", ganancia:"Ganancia",
+                          inversion:"Inversión", jorge:"Jorge", mama:"Mamá", funcionamiento:"Funcionamiento" };
+  const DESTINO_COLOR = { impuestos:"#ef4444", compras:"#f59e0b", ganancia:G.accent,
+                          inversion:"#8b5cf6", jorge:"#3b82f6", mama:"#ec4899", funcionamiento:"#64748b" };
+
+  const getEntryDists = (entryId) => incomeDistributions.filter(d=>d.income_entry_id===String(entryId));
+
+  const ensureDistributions = async (entry) => {
+    const existing = getEntryDists(entry.id);
+    const d = calcDist(Number(entry.monto||0));
+    const montos = { impuestos:d.impuestos, compras:d.compras, ganancia:d.ganancia,
+                     inversion:d.inversion, jorge:d.jorge, mama:d.mama, funcionamiento:d.funcionamiento };
+    const missing = DESTINOS.filter(dest => !existing.find(e=>e.destino===dest));
+    if (missing.length > 0) {
+      const rows = missing.map(dest => ({
+        income_entry_id: String(entry.id), destino: dest, monto: montos[dest], pagado: false
+      }));
+      const { data } = await sb.from("income_distributions").insert(rows).select();
+      if (data) setIncomeDistributions(ds => [...ds, ...data]);
+    }
+  };
+
+  const togglePagado = async (dist) => {
+    const newVal = !dist.pagado;
+    await sb.from("income_distributions").update({
+      pagado: newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null
+    }).eq("id", dist.id);
+    setIncomeDistributions(ds => ds.map(d => d.id===dist.id ? {...d, pagado:newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null} : d));
+  };
+
+  const openExpand = async (entry) => {
+    if (expandedEntry === entry.id) { setExpandedEntry(null); return; }
+    await ensureDistributions(entry);
+    setExpandedEntry(entry.id);
   };
 
   // Combinar pagos de proyectos + entradas manuales en el rango
