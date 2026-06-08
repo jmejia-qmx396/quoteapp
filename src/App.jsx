@@ -6353,9 +6353,15 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
               {allEntries.map(e => {
                 const d = calcDist(Number(e.monto||0));
                 const isManual = e.fuente === "manual";
+                const entryDists = getEntryDists(e.id);
+                const pagados = entryDists.filter(x=>x.pagado).length;
+                const allPaid = pagados === DESTINOS.length && DESTINOS.length > 0 && entryDists.length > 0;
+                const somePaid = pagados > 0 && pagados < DESTINOS.length;
                 return (
                   <>
-                  <tr key={e.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                  <tr key={e.id} style={{ borderBottom:`1px solid ${G.border}`,
+                                          opacity: allPaid ? 0.6 : 1,
+                                          background: allPaid ? `${G.accent}08` : "transparent" }}>
                     <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{e.fecha}</td>
                     <td style={{ padding:"7px 10px" }}>
                       <div style={{ textDecoration: allPaid ? "line-through" : "none", color: allPaid ? G.muted : G.text }}>
