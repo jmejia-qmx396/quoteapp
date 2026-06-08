@@ -6368,7 +6368,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                         {e.concepto||"—"}
                       </div>
                       {allPaid && <div style={{ fontSize:9, color:"#22c55e", fontWeight:600 }}>✓ Todo pagado</div>}
-                      {somePaid && <div style={{ fontSize:9, color:"#f59e0b" }}>{pagados}/{totalDests} pagados</div>}
+                      {somePaid && <div style={{ fontSize:9, color:"#f59e0b" }}>{pagados}/{DESTINOS.length} pagados</div>}
                     </td>
                     <td style={{ padding:"7px 10px" }}>
                       <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
