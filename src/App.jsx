@@ -4880,7 +4880,45 @@ const TechnicianView = ({ user, profile, logout }) => {
     descripcion: "", proyecto: "", valor_acordado: "", notas: ""
   });
 
+  const [expandedEntry, setExpandedEntry] = useState(null);
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+
+  const DESTINOS = ["impuestos","compras","ganancia","inversion","jorge","mama","funcionamiento"];
+  const DESTINO_LABEL = { impuestos:"Impuestos", compras:"Compras Corriente", ganancia:"Ganancia",
+                          inversion:"Inversión", jorge:"Jorge", mama:"Mamá", funcionamiento:"Funcionamiento" };
+  const DESTINO_COLOR = { impuestos:"#ef4444", compras:"#f59e0b", ganancia:G.accent,
+                          inversion:"#8b5cf6", jorge:"#3b82f6", mama:"#ec4899", funcionamiento:"#64748b" };
+
+  const getEntryDists = (entryId) => incomeDistributions.filter(d=>d.income_entry_id===String(entryId));
+
+  const ensureDistributions = async (entry) => {
+    const existing = getEntryDists(entry.id);
+    const d = calcDist(Number(entry.monto||0));
+    const montos = { impuestos:d.impuestos, compras:d.compras, ganancia:d.ganancia,
+                     inversion:d.inversion, jorge:d.jorge, mama:d.mama, funcionamiento:d.funcionamiento };
+    const missing = DESTINOS.filter(dest => !existing.find(e=>e.destino===dest));
+    if (missing.length > 0) {
+      const rows = missing.map(dest => ({
+        income_entry_id: String(entry.id), destino: dest, monto: montos[dest], pagado: false
+      }));
+      const { data } = await sb.from("income_distributions").insert(rows).select();
+      if (data) setIncomeDistributions(ds => [...ds, ...data]);
+    }
+  };
+
+  const togglePagado = async (dist) => {
+    const newVal = !dist.pagado;
+    await sb.from("income_distributions").update({
+      pagado: newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null
+    }).eq("id", dist.id);
+    setIncomeDistributions(ds => ds.map(d => d.id===dist.id ? {...d, pagado:newVal, fecha_pago: newVal ? new Date().toISOString().split("T")[0] : null} : d));
+  };
+
+  const openExpand = async (entry) => {
+    if (expandedEntry === entry.id) { setExpandedEntry(null); return; }
+    await ensureDistributions(entry);
+    setExpandedEntry(entry.id);
+  };
 
   useEffect(() => { loadData(); }, []);
 
@@ -6062,7 +6100,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
 
 
 // ── Vista Distribución de Ingresos ──────────────────────────────
-const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeConfig, incomeEntries, setIncomeEntries, user }) => {
+const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeConfig, incomeEntries, setIncomeEntries, incomeDistributions = [], setIncomeDistributions, user }) => {
   const now = new Date();
   const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
   const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
@@ -6332,18 +6370,63 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                     <td style={{ padding:"7px 10px", color:"#ec4899" }}>{fmtCOP(d.mama)}</td>
                     <td style={{ padding:"7px 10px", color:"#64748b" }}>{fmtCOP(d.funcionamiento)}</td>
                     <td style={{ padding:"7px 10px" }}>
-                      {isManual && (
-                        <div style={{ display:"flex", gap:4 }}>
+                      <div style={{ display:"flex", gap:4 }}>
+                        <button onClick={()=>openExpand(e)}
+                          style={{ background: expandedEntry===e.id ? G.accent : "none",
+                                   border:`1px solid ${G.accent}`, color: expandedEntry===e.id ? "#fff" : G.accent,
+                                   padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>
+                          {expandedEntry===e.id ? "▲" : "✓"}
+                        </button>
+                        {isManual && (<>
                           <button onClick={()=>openEdit(e)}
                             style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
                                      padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>✏️</button>
                           <button onClick={()=>deleteEntry(e.id)}
                             style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
                                      padding:"3px 7px", borderRadius:5, cursor:"pointer", fontSize:10 }}>🗑️</button>
-                        </div>
-                      )}
+                        </>)}
+                      </div>
                     </td>
                   </tr>
+                  {expandedEntry === e.id && (
+                    <tr key={`dist_${e.id}`}>
+                      <td colSpan={12} style={{ padding:"10px 16px", background:G.surface }}>
+                        <div style={{ fontSize:11, fontWeight:600, color:G.muted, marginBottom:8 }}>
+                          Distribución — {e.concepto||e.fecha} — {fmtCOP(e.monto)}
+                        </div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                          {DESTINOS.map(dest => {
+                            const dist = getEntryDists(e.id).find(d=>d.destino===dest);
+                            if (!dist) return null;
+                            return (
+                              <div key={dest}
+                                onClick={()=>togglePagado(dist)}
+                                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px",
+                                         borderRadius:7, cursor:"pointer",
+                                         border:`1px solid ${dist.pagado ? DESTINO_COLOR[dest] : G.border}`,
+                                         background: dist.pagado ? `${DESTINO_COLOR[dest]}18` : G.card }}>
+                                <div style={{ width:16, height:16, borderRadius:4,
+                                              border:`2px solid ${dist.pagado ? DESTINO_COLOR[dest] : G.muted}`,
+                                              background: dist.pagado ? DESTINO_COLOR[dest] : "transparent",
+                                              display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                  {dist.pagado && <span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}
+                                </div>
+                                <div>
+                                  <div style={{ fontSize:11, fontWeight:600, color:DESTINO_COLOR[dest] }}>
+                                    {DESTINO_LABEL[dest]}
+                                  </div>
+                                  <div style={{ fontSize:10, color:G.muted }}>{fmtCOP(dist.monto)}</div>
+                                  {dist.pagado && dist.fecha_pago && (
+                                    <div style={{ fontSize:9, color:G.muted }}>{dist.fecha_pago}</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 );
               })}
             </tbody>
@@ -6396,6 +6479,7 @@ export default function App() {
   const [technicianPayments, setTechnicianPayments] = useState([]);
   const [incomeConfig, setIncomeConfig] = useState(null);
   const [incomeEntries, setIncomeEntries] = useState([]);
+  const [incomeDistributions, setIncomeDistributions] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
   const dataLoaded = useRef(false);
@@ -6503,6 +6587,8 @@ export default function App() {
       if (iCfg) setIncomeConfig(iCfg);
       const { data: iEnt } = await sb.from("income_entries").select("*").order("fecha",{ascending:false});
       if (iEnt) setIncomeEntries(iEnt);
+      const { data: iDist } = await sb.from("income_distributions").select("*");
+      if (iDist) setIncomeDistributions(iDist);
 
       // Counter
       const maxQ = qs?.length ? Math.max(...qs.map(q=>q.number||1000)) : 1000;
@@ -6889,7 +6975,7 @@ export default function App() {
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
-          {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} user={user} />}
+          {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} incomeDistributions={incomeDistributions} setIncomeDistributions={setIncomeDistributions} user={user} />}
           {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
