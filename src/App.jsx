@@ -6357,7 +6357,13 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                   <>
                   <tr key={e.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                     <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{e.fecha}</td>
-                    <td style={{ padding:"7px 10px" }}>{e.concepto||"—"}</td>
+                    <td style={{ padding:"7px 10px" }}>
+                      <div style={{ textDecoration: allPaid ? "line-through" : "none", color: allPaid ? G.muted : G.text }}>
+                        {e.concepto||"—"}
+                      </div>
+                      {allPaid && <div style={{ fontSize:9, color:"#22c55e", fontWeight:600 }}>✓ Todo pagado</div>}
+                      {somePaid && <div style={{ fontSize:9, color:"#f59e0b" }}>{pagados}/{totalDests} pagados</div>}
+                    </td>
                     <td style={{ padding:"7px 10px" }}>
                       <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
                                      background:e.fuente==="proyecto"?`${G.accent}22`:`${G.surface}`,
