@@ -4880,7 +4880,6 @@ const TechnicianView = ({ user, profile, logout }) => {
     descripcion: "", proyecto: "", valor_acordado: "", notas: ""
   });
 
-  const [expandedEntry, setExpandedEntry] = useState(null);
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
 
   const DESTINOS = ["impuestos","compras","ganancia","inversion","jorge","mama","funcionamiento"];
@@ -6106,6 +6105,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
   const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
   const [dateFrom, setDateFrom] = useState(fom);
   const [dateTo,   setDateTo]   = useState(lom);
+  const [expandedEntry, setExpandedEntry] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [showForm, setShowForm]   = useState(false);
   const [editEntry, setEditEntry] = useState(null);
