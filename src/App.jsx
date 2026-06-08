@@ -6351,6 +6351,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                 const d = calcDist(Number(e.monto||0));
                 const isManual = e.fuente === "manual";
                 return (
+                  <>
                   <tr key={e.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                     <td style={{ padding:"7px 10px", color:G.muted, whiteSpace:"nowrap" }}>{e.fecha}</td>
                     <td style={{ padding:"7px 10px" }}>{e.concepto||"—"}</td>
@@ -6427,6 +6428,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                       </td>
                     </tr>
                   )}
+                  </>
                 );
               })}
             </tbody>
