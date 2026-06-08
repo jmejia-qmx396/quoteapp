@@ -6337,7 +6337,8 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
             No hay ingresos en este período.
           </div>
         ) : (
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", minWidth:1200, borderCollapse:"collapse", fontSize:12 }}>
             <thead>
               <tr style={{ background:G.surface }}>
                 {["Fecha","Concepto","Fuente","Monto","Impuestos","Compras","Ganancia","Inversión","Jorge","Mamá","Func.",""].map(h=>(
@@ -6443,6 +6444,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </div>
     </div>
