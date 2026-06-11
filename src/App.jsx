@@ -2899,16 +2899,16 @@ const LoginView = ({ onLogin }) => {
 };
 
 // ── PAYMENT REQUEST MODAL ────────────────────────────────────────
-const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, clients = [] }) => {
+const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, clients = [], existingPR = null }) => {
   // Count existing payment requests for this quote to generate number
   const existing = paymentRequests.filter(p => p.quote_id === quote.id || p.quote_id === quote.parent_id);
-  const prNumber = `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`;
+  const prNumber = existingPR ? existingPR.number : `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`;
 
   // Look up client RUT from clients list
   const clientObj = clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
   const clientRut = quote.clientRut || quote.client_rut || clientObj?.rfc || "";
 
-  const [profile, setProfile] = useState(quote.profile || "empresa");
+  const [profile, setProfile] = useState(existingPR?.profile || quote.profile || "empresa");
 
   const getProfileData = (prof) => {
     if (prof === "personal" && config.personal) {
@@ -2929,7 +2929,20 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
     };
   };
 
-  const [pr, setPr] = useState({
+  const [pr, setPr] = useState(existingPR ? {
+    isNew: false,
+    quoteId: existingPR.quote_id,
+    number: existingPR.number,
+    date: existingPR.date || new Date().toISOString().split("T")[0],
+    clientName: existingPR.client_name || "",
+    clientIdNumber: existingPR.client_id_number || clientRut,
+    concept: existingPR.concept || "",
+    usePercentage: false,
+    percentage: 100,
+    amount: existingPR.amount || 0,
+    profile: existingPR.profile || "empresa",
+    ...getProfileData(existingPR.profile || "empresa"),
+  } : {
     isNew: true,
     quoteId: quote.id,
     number: prNumber,
