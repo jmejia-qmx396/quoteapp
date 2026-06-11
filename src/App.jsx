@@ -3647,9 +3647,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           // Payments split by type
           const paidEmpresa  = pps.filter(p=>(p.payment_type||"empresa")==="empresa").reduce((s,p)=>s+(p.amount||0),0);
           const paidPersonal = pps.filter(p=>p.payment_type==="personal").reduce((s,p)=>s+(p.amount||0),0);
-          // Pending per account
-          const pendienteEmpresa  = Math.max(0, totalConIva - paidEmpresa);
-          const pendientePersonal = Math.max(0, totalSinIva - paidPersonal);
+          // Si pago empresa excede saldo empresa, el exceso va a personal y viceversa
+          const excesoPagadoEmpresa  = Math.max(0, paidEmpresa  - totalConIva);
+          const excesoPagadoPersonal = Math.max(0, paidPersonal - totalSinIva);
+          const pendienteEmpresa  = Math.max(0, totalConIva - paidEmpresa  - excesoPagadoPersonal);
+          const pendientePersonal = Math.max(0, totalSinIva - paidPersonal - excesoPagadoEmpresa);
           return `
           <div style="margin-top:16px">
             <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:6px;margin-bottom:8px">
