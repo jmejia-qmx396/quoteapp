@@ -3023,9 +3023,9 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
           </div>
           <div style="text-align:right">
             <div class="vendor-box">Vendedor</div>
-            <div style="font-weight:600">${prof.vendorName||""}</div>
-            <div style="color:#64748b">${prof.vendorPhone||""}</div>
-            <div style="color:#64748b">${prof.vendorEmail||""}</div>
+            <div style="font-weight:600">${config.vendorName||""}</div>
+            <div style="color:#64748b">${config.vendorPhone||""}</div>
+            <div style="color:#64748b">${config.vendorEmail||""}</div>
             ${prof.website?`<div style="color:${pc}">${prof.website}</div>`:""}
           </div>
         </div>
@@ -3285,7 +3285,7 @@ const PrintPaymentRequest = ({ pr, config, onClose }) => {
         <div class="header">
           <div style="display:flex;align-items:center;gap:14px">
             ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:60px;object-fit:contain">` : `<div class="logo-circle">${(config.companyName||"C")[0]}</div>`}
-            <div><div class="company">${config.companyName||""}</div><div style="color:#64748b;font-size:12px">${prof.slogan||""}</div></div>
+            <div><div class="company">${config.companyName||""}</div><div style="color:#64748b;font-size:12px">${config.slogan||""}</div></div>
           </div>
           <div>
             <div class="title">Cuenta de Cobro</div>
