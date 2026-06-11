@@ -3162,6 +3162,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [modal, setModal] = useState(null);
+  const [editModal, setEditModal] = useState(null);
   const [search, setSearch] = useState("");
 
   const filt = paymentRequests.filter(p =>
@@ -3206,6 +3207,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
                     <td>
                       <div style={{ display:"flex",gap:6 }}>
                         <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
+                        <Btn size="sm" variant="outline" onClick={()=>setEditModal(p)}>✏️</Btn>
                         <Btn size="sm" variant="danger" onClick={async()=>{ const ok=await confirm("¿Eliminar cuenta de cobro?","Esta acción no se puede deshacer."); if(ok) deletePaymentRequest(p.id); }}>🗑️</Btn>
                       </div>
                     </td>
@@ -3221,6 +3223,17 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
       {confirmDialog}
       {modal && (
         <PrintPaymentRequest pr={modal} config={config} onClose={()=>setModal(null)} />
+      )}
+      {editModal && (
+        <PaymentRequestModal
+          quote={quotes.find(q=>q.id===editModal.quote_id)||{id:editModal.quote_id,clientName:editModal.client_name,clientContact:"",clientEmail:""}}
+          config={config}
+          paymentRequests={paymentRequests}
+          existingPR={editModal}
+          onSave={async(pr)=>{ await savePaymentRequest({...pr, id:editModal.id}); setEditModal(null); }}
+          onClose={()=>setEditModal(null)}
+          clients={[]}
+        />
       )}
     </div>
   );
