@@ -5811,6 +5811,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   const [invModal, setInvModal] = useState(null);
   const [invForm, setInvForm] = useState({ numero_factura:"", fecha_facturado:"", notas:"" });
   const [savingInv, setSavingInv] = useState(false);
+  const [reportTab, setReportTab] = useState("resumen");
+  const [invDateFrom, setInvDateFrom] = useState("2020-01-01");
+  const [invDateTo, setInvDateTo] = useState(lom);
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const pc = config?.primaryColor || "#0d6e6e";
@@ -5962,12 +5965,30 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   return (
     <div style={{ padding:"24px 28px", maxWidth:960 }}>
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
-        <div>
-          <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>📈 Informes</h2>
-          <p style={{ color:G.muted, fontSize:13 }}>Resumen de actividad por período</p>
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>📈 Informes</h2>
+        <p style={{ color:G.muted, fontSize:13, marginBottom:16 }}>Selecciona el informe que quieres ver</p>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={()=>setReportTab("resumen")}
+            style={{ background: reportTab==="resumen" ? G.accent : G.surface,
+                     color: reportTab==="resumen" ? "#fff" : G.muted,
+                     border:`1px solid ${reportTab==="resumen" ? G.accent : G.border}`,
+                     padding:"10px 18px", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+            📊 Resumen Financiero
+          </button>
+          <button onClick={()=>setReportTab("facturacion")}
+            style={{ background: reportTab==="facturacion" ? G.accent : G.surface,
+                     color: reportTab==="facturacion" ? "#fff" : G.muted,
+                     border:`1px solid ${reportTab==="facturacion" ? G.accent : G.border}`,
+                     padding:"10px 18px", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+            🧾 Facturación
+          </button>
         </div>
-        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+      </div>
+
+      {reportTab === "resumen" && (
+      <>
+      <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:10, marginBottom:16 }}>
           <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setGenerated(false);}}
             style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
                      padding:"7px 10px", color:G.text, fontSize:13 }} />
@@ -5987,7 +6008,6 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
               🖨️ Guardar PDF
             </button>
           )}
-        </div>
       </div>
 
       {!generated ? (
@@ -6172,15 +6192,23 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           </div>
         </div>
       )}
+      </>
+      )}
 
-      {/* ── Sección Facturación (independiente del informe generado) ── */}
-      <div style={{ marginTop:32, paddingTop:24, borderTop:`2px solid ${G.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14 }}>
+      {reportTab === "facturacion" && (
+      <div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14, flexWrap:"wrap", gap:10 }}>
           <div>
-            <h2 style={{ fontSize:18, fontWeight:700, color:G.accent, marginBottom:4 }}>🧾 Facturación</h2>
             <p style={{ color:G.muted, fontSize:13 }}>Cotizaciones aprobadas con artículos gravados (IVA) — selecciona una para facturar</p>
           </div>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <input type="date" value={invDateFrom} onChange={e=>setInvDateFrom(e.target.value)}
+              style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                       padding:"6px 10px", color:G.text, fontSize:12 }} />
+            <span style={{ color:G.muted }}>—</span>
+            <input type="date" value={invDateTo} onChange={e=>setInvDateTo(e.target.value)}
+              style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                       padding:"6px 10px", color:G.text, fontSize:12 }} />
             {[{k:"todos",l:"Todas"},{k:"pendiente",l:"Sin facturar"},{k:"facturado",l:"Facturadas"}].map(f=>(
               <button key={f.k} onClick={()=>setInvFilter(f.k)}
                 style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:600,
@@ -6194,7 +6222,10 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
         </div>
 
         {(() => {
-          const quotesWithIva = approvedQuotes.map(q => {
+          const quotesWithIva = quotes
+            .filter(q => q.status==="Aprobada" && q.isLatest!==false)
+            .filter(q => (q.approval_date||q.date||"") >= invDateFrom && (q.approval_date||q.date||"") <= invDateTo)
+            .map(q => {
             const ivaItems = (q.items||[]).filter(i => i.type!=="header" && Number(i.itemTax||i.tax||0) > 0);
             const totalIva = ivaItems.reduce((s,i)=>s + Number(i.qty||1) * Number(i.netCOP||i.priceCOP||0), 0);
             return { ...q, ivaItems, totalIva };
@@ -6307,6 +6338,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           );
         })()}
       </div>
+      )}
 
       {/* Modal marcar facturado */}
       {invModal && (
