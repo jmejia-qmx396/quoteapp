@@ -5886,6 +5886,20 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
     setSavingInv(false);
   };
 
+  const toggleArchiveInvoice = async (q) => {
+    const existing = getInvoiceStatus(q.id);
+    const archivado = !(existing?.archivado || false);
+    if (existing) {
+      await sb.from("invoice_status").update({ archivado, updated_at: new Date().toISOString() }).eq("id", existing.id);
+      setInvoiceStatus(ss => ss.map(s=>s.id===existing.id ? {...s, archivado} : s));
+    } else {
+      const { data } = await sb.from("invoice_status").insert({
+        quote_id: q.id, facturado: false, archivado, updated_at: new Date().toISOString()
+      }).select().single();
+      if (data) setInvoiceStatus(ss => [...ss, data]);
+    }
+  };
+
   const handlePrintInvoice = (q, ivaItems, totalIva) => {
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
@@ -6209,7 +6223,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             <input type="date" value={invDateTo} onChange={e=>setInvDateTo(e.target.value)}
               style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
                        padding:"6px 10px", color:G.text, fontSize:12 }} />
-            {[{k:"todos",l:"Todas"},{k:"pendiente",l:"Sin facturar"},{k:"facturado",l:"Facturadas"}].map(f=>(
+            {[{k:"todos",l:"Todas"},{k:"pendiente",l:"Sin facturar"},{k:"facturado",l:"Facturadas"},{k:"archivado",l:"Archivadas"}].map(f=>(
               <button key={f.k} onClick={()=>setInvFilter(f.k)}
                 style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:600,
                          background: invFilter===f.k ? G.accent : G.surface,
@@ -6234,6 +6248,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           const filteredInv = quotesWithIva.filter(q => {
             const st = getInvoiceStatus(q.id);
             const facturado = st?.facturado || false;
+            const archivado = st?.archivado || false;
+            if (invFilter === "archivado") return archivado;
+            if (archivado) return false; // ocultar archivadas en otros filtros
             if (invFilter === "facturado") return facturado;
             if (invFilter === "pendiente") return !facturado;
             return true;
@@ -6327,6 +6344,11 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                                      border:`1px solid ${facturado ? G.border : G.accent}`,
                                      padding:"7px 16px", borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
                             {facturado ? "✏️ Editar registro" : "✓ Marcar facturada"}
+                          </button>
+                          <button onClick={()=>toggleArchiveInvoice(q)}
+                            style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
+                                     padding:"7px 16px", borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
+                            {st?.archivado ? "↩ Desarchivar" : "📦 Archivar"}
                           </button>
                         </div>
                       </div>
