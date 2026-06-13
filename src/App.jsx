@@ -315,6 +315,7 @@ const NAV_GROUPS = [
       { id:"kits",       label:"Kits",          icon:"🧩" },
       { id:"reports",    label:"Informes",     icon:"📈" },
       { id:"distribucion",label:"Distribución",  icon:"💰" },
+      { id:"facturacion", label:"Facturación",   icon:"🧾" },
     ]
   },
   {
@@ -6496,6 +6497,260 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
   );
 };
 
+
+// ── Vista Facturación ───────────────────────────────────────────
+const FacturacionView = ({ quotes, invoiceStatus, setInvoiceStatus, user }) => {
+  const now = new Date();
+  const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
+  const [dateFrom, setDateFrom] = useState(fom);
+  const [dateTo,   setDateTo]   = useState(lom);
+  const [filterStatus, setFilterStatus] = useState("todos");
+  const [expandedQuote, setExpandedQuote] = useState(null);
+  const [invModal, setInvModal] = useState(null);
+  const [invForm, setInvForm] = useState({ numero_factura:"", fecha_facturado:"", notas:"" });
+  const [saving, setSaving] = useState(false);
+
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+  const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
+
+  const getStatus = (quoteId) => invoiceStatus.find(s=>s.quote_id===quoteId);
+
+  const quotesWithIva = quotes
+    .filter(q => q.status==="Aprobada" && q.isLatest!==false)
+    .filter(q => (q.approval_date||q.date||"") >= dateFrom && (q.approval_date||q.date||"") <= dateTo)
+    .map(q => {
+      const ivaItems = (q.items||[]).filter(i => i.type!=="header" && Number(i.itemTax||i.tax||0) > 0);
+      const totalIva = ivaItems.reduce((s,i)=>s + Number(i.qty||1) * Number(i.netCOP||i.priceCOP||0), 0);
+      return { ...q, ivaItems, totalIva };
+    })
+    .filter(q => q.ivaItems.length > 0);
+
+  const filtered = quotesWithIva.filter(q => {
+    const st = getStatus(q.id);
+    const facturado = st?.facturado || false;
+    if (filterStatus === "facturado") return facturado;
+    if (filterStatus === "pendiente") return !facturado;
+    return true;
+  });
+
+  const totalFacturar = filtered.reduce((s,q)=>s+q.totalIva,0);
+  const totalPendiente = filtered.filter(q=>!getStatus(q.id)?.facturado).reduce((s,q)=>s+q.totalIva,0);
+  const totalFacturado = filtered.filter(q=>getStatus(q.id)?.facturado).reduce((s,q)=>s+q.totalIva,0);
+
+  const openMarkInvoiced = (q) => {
+    const st = getStatus(q.id);
+    setInvForm({
+      numero_factura: st?.numero_factura || "",
+      fecha_facturado: st?.fecha_facturado || new Date().toISOString().split("T")[0],
+      notas: st?.notas || ""
+    });
+    setInvModal(q);
+  };
+
+  const saveInvoiceStatus = async (facturado) => {
+    if (!invModal) return;
+    setSaving(true);
+    const existing = getStatus(invModal.id);
+    const row = {
+      quote_id: invModal.id,
+      facturado,
+      fecha_facturado: facturado ? (invForm.fecha_facturado || new Date().toISOString().split("T")[0]) : null,
+      numero_factura: invForm.numero_factura || null,
+      notas: invForm.notas || null,
+      updated_at: new Date().toISOString()
+    };
+    if (existing) {
+      await sb.from("invoice_status").update(row).eq("id", existing.id);
+      setInvoiceStatus(ss => ss.map(s=>s.id===existing.id ? {...s, ...row} : s));
+    } else {
+      const { data } = await sb.from("invoice_status").insert(row).select().single();
+      if (data) setInvoiceStatus(ss => [...ss, data]);
+    }
+    setInvModal(null);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ padding:"24px 28px", maxWidth:980 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+        <div>
+          <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>🧾 Facturación</h2>
+          <p style={{ color:G.muted, fontSize:13 }}>Cotizaciones aprobadas con artículos gravados (IVA) para contabilidad</p>
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={inp} />
+          <span style={{ color:G.muted }}>—</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={inp} />
+        </div>
+      </div>
+
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        {[{k:"todos",l:"Todos"},{k:"pendiente",l:"Pendientes"},{k:"facturado",l:"Facturados"}].map(f=>(
+          <button key={f.k} onClick={()=>setFilterStatus(f.k)}
+            style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:600,
+                     background: filterStatus===f.k ? G.accent : G.surface,
+                     color: filterStatus===f.k ? "#fff" : G.muted,
+                     border: `1px solid ${filterStatus===f.k ? G.accent : G.border}` }}>
+            {f.l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:20 }}>
+        {[
+          { label:"Total a facturar (con IVA)", value:fmtCOP(totalFacturar), color:G.accent },
+          { label:"Pendiente de facturar", value:fmtCOP(totalPendiente), color:"#f59e0b" },
+          { label:"Ya facturado", value:fmtCOP(totalFacturado), color:"#22c55e" },
+        ].map(c=>(
+          <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"14px 16px" }}>
+            <div style={{ color:G.muted, fontSize:10, textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>{c.label}</div>
+            <div style={{ fontSize:18, fontWeight:700, color:c.color }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, padding:40, textAlign:"center", color:G.muted }}>
+          No hay cotizaciones con artículos gravados en este período.
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {filtered.map(q => {
+            const st = getStatus(q.id);
+            const facturado = st?.facturado || false;
+            const isOpen = expandedQuote === q.id;
+            return (
+              <div key={q.id} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
+                <div style={{ padding:"12px 16px", display:"flex", justifyContent:"space-between",
+                              alignItems:"center", cursor:"pointer",
+                              borderBottom: isOpen ? `1px solid ${G.border}` : "none",
+                              opacity: facturado ? 0.7 : 1 }}
+                     onClick={()=>setExpandedQuote(isOpen?null:q.id)}>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:14, textDecoration: facturado ? "line-through" : "none" }}>
+                      #{q.number} — {q.clientName}
+                    </div>
+                    <div style={{ color:G.muted, fontSize:11, marginTop:2 }}>
+                      NIT/RUT: {q.clientRut || "—"} · Aprobada: {q.approval_date||q.date}
+                      {st?.numero_factura && ` · Factura: ${st.numero_factura}`}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:11, color:G.muted }}>Total con IVA</div>
+                      <div style={{ fontWeight:700, fontSize:14, color:G.accent }}>{fmtCOP(q.totalIva)}</div>
+                    </div>
+                    <span style={{ fontSize:10, padding:"4px 10px", borderRadius:12, fontWeight:600,
+                                   background: facturado ? "rgba(34,197,94,.15)" : "rgba(245,158,11,.15)",
+                                   color: facturado ? "#22c55e" : "#f59e0b" }}>
+                      {facturado ? "✓ Facturado" : "Pendiente"}
+                    </span>
+                    <button onClick={e=>{ e.stopPropagation(); openMarkInvoiced(q); }}
+                      style={{ background: facturado ? "none" : G.accent, color: facturado ? G.muted : "#fff",
+                               border:`1px solid ${facturado ? G.border : G.accent}`,
+                               padding:"6px 12px", borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
+                      {facturado ? "✏️ Editar" : "✓ Marcar facturado"}
+                    </button>
+                    <span style={{ color:G.muted }}>{isOpen?"▲":"▼"}</span>
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr style={{ background:G.surface }}>
+                        {["Referencia","Descripción","Cant.","Precio Unit. (IVA inc.)","Subtotal"].map(h=>(
+                          <th key={h} style={{ padding:"6px 10px", textAlign:"left", color:G.muted,
+                                               fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {q.ivaItems.map(item => {
+                        const precio = Number(item.netCOP||item.priceCOP||0);
+                        const sub = precio * Number(item.qty||1);
+                        return (
+                          <tr key={item.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                            <td style={{ padding:"6px 10px" }}><code style={{color:G.accent}}>{item.sku||"—"}</code></td>
+                            <td style={{ padding:"6px 10px" }}>{item.name}</td>
+                            <td style={{ padding:"6px 10px" }}>{item.qty} {item.unit||""}</td>
+                            <td style={{ padding:"6px 10px" }}>{fmtCOP(precio)}</td>
+                            <td style={{ padding:"6px 10px", fontWeight:600 }}>{fmtCOP(sub)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop:`2px solid ${G.accent}` }}>
+                        <td colSpan={4} style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>TOTAL CON IVA</td>
+                        <td style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>{fmtCOP(q.totalIva)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+                {st?.notas && (
+                  <div style={{ padding:"8px 16px", fontSize:11, color:G.muted, fontStyle:"italic", borderTop:`1px solid ${G.border}` }}>
+                    📝 {st.notas}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {invModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
+                      display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
+             onClick={e=>e.target===e.currentTarget&&setInvModal(null)}>
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:440 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>
+              🧾 Cotización #{invModal.number} — {invModal.clientName}
+            </div>
+            <div style={{ color:G.muted, fontSize:12, marginBottom:16 }}>Total con IVA: {fmtCOP(invModal.totalIva)}</div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Número de factura</div>
+              <input value={invForm.numero_factura} onChange={e=>setInvForm({...invForm,numero_factura:e.target.value})}
+                placeholder="Ej: FE-1023" style={inp} />
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha de facturación</div>
+              <input type="date" value={invForm.fecha_facturado} onChange={e=>setInvForm({...invForm,fecha_facturado:e.target.value})} style={inp} />
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas</div>
+              <input value={invForm.notas} onChange={e=>setInvForm({...invForm,notas:e.target.value})}
+                placeholder="Observaciones" style={inp} />
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"space-between" }}>
+              <div>
+                {getStatus(invModal.id)?.facturado && (
+                  <button onClick={()=>saveInvoiceStatus(false)} disabled={saving}
+                    style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                             padding:"8px 14px", borderRadius:7, cursor:"pointer", fontSize:12 }}>
+                    ↩ Marcar pendiente
+                  </button>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={()=>setInvModal(null)}
+                  style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                           padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
+                <button onClick={()=>saveInvoiceStatus(true)} disabled={saving}
+                  style={{ background:G.accent, color:"#fff", border:"none", padding:"8px 22px",
+                           borderRadius:7, cursor:"pointer", fontWeight:600 }}>
+                  {saving?"Guardando...":"✓ Marcar facturado"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // Set favicon and page title
   useEffect(() => {
@@ -6528,6 +6783,7 @@ export default function App() {
   const [technicianPayments, setTechnicianPayments] = useState([]);
   const [incomeConfig, setIncomeConfig] = useState(null);
   const [incomeEntries, setIncomeEntries] = useState([]);
+  const [invoiceStatus, setInvoiceStatus] = useState([]);
   const [incomeDistributions, setIncomeDistributions] = useState([]);
 
   // ── Auth listener ────────────────────────────────────────────
@@ -6638,6 +6894,8 @@ export default function App() {
       if (iEnt) setIncomeEntries(iEnt);
       const { data: iDist } = await sb.from("income_distributions").select("*");
       if (iDist) setIncomeDistributions(iDist);
+      const { data: invSt } = await sb.from("invoice_status").select("*");
+      if (invSt) setInvoiceStatus(invSt);
 
       // Counter
       const maxQ = qs?.length ? Math.max(...qs.map(q=>q.number||1000)) : 1000;
@@ -7024,6 +7282,7 @@ export default function App() {
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
+          {view==="facturacion" && <FacturacionView quotes={quotes} invoiceStatus={invoiceStatus} setInvoiceStatus={setInvoiceStatus} user={user} />}
           {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} incomeDistributions={incomeDistributions} setIncomeDistributions={setIncomeDistributions} user={user} />}
           {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
