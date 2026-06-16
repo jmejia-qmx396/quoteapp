@@ -6304,7 +6304,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                           <thead>
                             <tr style={{ background:G.surface }}>
-                              {["Referencia","Descripción","Cant.","Precio Unit. (IVA inc.)","Subtotal"].map(h=>(
+                              {["Referencia","Descripción","Cant.","Precio Unit.","Subtotal","IVA %","Subtotal+IVA"].map(h=>(
                                 <th key={h} style={{ padding:"6px 10px", textAlign:"left", color:G.muted,
                                                      fontWeight:600, fontSize:10, borderBottom:`1px solid ${G.border}` }}>{h}</th>
                               ))}
@@ -6313,25 +6313,44 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                           <tbody>
                             {q.ivaItems.map(item => {
                               const precioBase = Number(item.netCOP||item.priceCOP||0);
-                              const tasaIva = Number(item.itemTax||item.tax||0)/100;
-                              const precio = precioBase * (1+tasaIva);
-                              const sub = precio * Number(item.qty||1);
+                              const tasaIva = Number(item.itemTax||item.tax||0);
+                              const subBase = precioBase * Number(item.qty||1);
+                              const ivaAmt = subBase * tasaIva / 100;
+                              const subTotal = subBase + ivaAmt;
                               return (
                                 <tr key={item.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                                   <td style={{ padding:"6px 10px" }}><code style={{color:G.accent}}>{item.sku||"—"}</code></td>
                                   <td style={{ padding:"6px 10px" }}>{item.name}</td>
                                   <td style={{ padding:"6px 10px" }}>{item.qty} {item.unit||""}</td>
-                                  <td style={{ padding:"6px 10px" }}>{fmtCOP(precio)}</td>
-                                  <td style={{ padding:"6px 10px", fontWeight:600 }}>{fmtCOP(sub)}</td>
+                                  <td style={{ padding:"6px 10px" }}>{fmtCOP(precioBase)}</td>
+                                  <td style={{ padding:"6px 10px" }}>{fmtCOP(subBase)}</td>
+                                  <td style={{ padding:"6px 10px", color:G.muted }}>{tasaIva}%</td>
+                                  <td style={{ padding:"6px 10px", fontWeight:600, color:G.accent }}>{fmtCOP(subTotal)}</td>
                                 </tr>
                               );
                             })}
                           </tbody>
                           <tfoot>
-                            <tr style={{ borderTop:`2px solid ${G.accent}` }}>
-                              <td colSpan={4} style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>TOTAL CON IVA</td>
-                              <td style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>{fmtCOP(q.totalIva)}</td>
-                            </tr>
+                            {(() => {
+                              const subTotalBase = q.ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1),0);
+                              const totalIvaAmt  = q.ivaItems.reduce((s,i)=>s+(Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1)*Number(i.itemTax||i.tax||0)/100),0);
+                              return (<>
+                                <tr style={{ borderTop:`1px solid ${G.border}` }}>
+                                  <td colSpan={4} style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>Subtotal sin IVA</td>
+                                  <td style={{ padding:"6px 10px", fontWeight:600 }}>{fmtCOP(subTotalBase)}</td>
+                                  <td></td><td></td>
+                                </tr>
+                                <tr>
+                                  <td colSpan={4} style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>IVA</td>
+                                  <td style={{ padding:"6px 10px", fontWeight:600 }}>{fmtCOP(totalIvaAmt)}</td>
+                                  <td></td><td></td>
+                                </tr>
+                                <tr style={{ borderTop:`2px solid ${G.accent}` }}>
+                                  <td colSpan={4} style={{ padding:"8px 10px", fontWeight:700, color:G.accent, textAlign:"right" }}>TOTAL CON IVA</td>
+                                  <td colSpan={3} style={{ padding:"8px 10px", fontWeight:700, color:G.accent }}>{fmtCOP(subTotalBase+totalIvaAmt)}</td>
+                                </tr>
+                              </>);
+                            })()}
                           </tfoot>
                         </table>
                         {st?.notas && (
