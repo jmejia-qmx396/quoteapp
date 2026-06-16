@@ -5927,7 +5927,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           <thead><tr><th>Referencia</th><th>Descripción</th><th>Cant.</th><th>Precio Unit. (IVA inc.)</th><th>Subtotal</th></tr></thead>
           <tbody>
             ${ivaItems.map(item => {
-              const precio = Number(item.netCOP||item.priceCOP||0);
+              const precioBase = Number(item.netCOP||item.priceCOP||0);
+              const tasaIva = Number(item.itemTax||item.tax||0)/100;
+              const precio = precioBase * (1+tasaIva);
               const sub = precio * Number(item.qty||1);
               return `<tr><td>${item.sku||"—"}</td><td>${item.name}</td><td>${item.qty} ${item.unit||""}</td><td>${fmtCOP(precio)}</td><td>${fmtCOP(sub)}</td></tr>`;
             }).join("")}
@@ -6241,7 +6243,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             .filter(q => (q.approval_date||q.date||"") >= invDateFrom && (q.approval_date||q.date||"") <= invDateTo)
             .map(q => {
             const ivaItems = (q.items||[]).filter(i => i.type!=="header" && Number(i.itemTax||i.tax||0) > 0);
-            const totalIva = ivaItems.reduce((s,i)=>s + Number(i.qty||1) * Number(i.netCOP||i.priceCOP||0), 0);
+            const totalIva = ivaItems.reduce((s,i)=>s + Number(i.lineNet||0) + Number(i.lineTax||0), 0);
             return { ...q, ivaItems, totalIva };
           }).filter(q => q.ivaItems.length > 0);
 
@@ -6310,7 +6312,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                           </thead>
                           <tbody>
                             {q.ivaItems.map(item => {
-                              const precio = Number(item.netCOP||item.priceCOP||0);
+                              const precioBase = Number(item.netCOP||item.priceCOP||0);
+                              const tasaIva = Number(item.itemTax||item.tax||0)/100;
+                              const precio = precioBase * (1+tasaIva);
                               const sub = precio * Number(item.qty||1);
                               return (
                                 <tr key={item.id} style={{ borderBottom:`1px solid ${G.border}` }}>
