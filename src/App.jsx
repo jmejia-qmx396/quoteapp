@@ -6457,7 +6457,7 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
     impuestos:7, compras_corriente:70, ganancia:5, personal:35, funcionamiento:60,
     inversion:15, jorge:70, mama:15
   });
-  const [form, setForm] = useState({ fecha:fom, concepto:"", monto:"", fuente:"manual" });
+  const [form, setForm] = useState({ fecha:fom, concepto:"", monto:"", fuente:"manual", tipo:"empresa" });
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
@@ -6549,13 +6549,13 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
     setSaving(true);
     if (editEntry && editEntry.fuente === "manual") {
       await sb.from("income_entries").update({
-        fecha: form.fecha, concepto: form.concepto, monto: Number(form.monto), fuente: form.fuente
+        fecha: form.fecha, concepto: form.concepto, monto: Number(form.monto), fuente: form.fuente, tipo: form.tipo||"empresa"
       }).eq("id", editEntry.id);
       setIncomeEntries(es => es.map(e => e.id===editEntry.id ? {...e,...form,monto:Number(form.monto)} : e));
     } else {
       const { data } = await sb.from("income_entries").insert({
         fecha: form.fecha, concepto: form.concepto, monto: Number(form.monto),
-        fuente: form.fuente, created_by: user.id
+        fuente: form.fuente, tipo: form.tipo||"empresa", created_by: user.id
       }).select().single();
       if (data) setIncomeEntries(es => [data, ...es]);
     }
@@ -6675,6 +6675,13 @@ const DistribucionView = ({ projectPayments, projects, incomeConfig, setIncomeCo
                 <option value="manual">Manual</option>
                 <option value="proyecto">Proyecto</option>
                 <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Cuenta *</div>
+              <select value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})} style={inp}>
+                <option value="empresa">🏢 Empresa</option>
+                <option value="personal">👤 Personal</option>
               </select>
             </div>
           </div>
