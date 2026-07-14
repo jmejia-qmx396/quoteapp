@@ -5423,8 +5423,10 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
         const totalPagadoRango = paymentsInRange.reduce((s,p)=>s+Number(p.monto||0),0);
         const pagosPorTech = technicians.map(t => ({
           name: t.name,
-          monto: paymentsInRange.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0)
-        })).filter(x=>x.monto>0);
+          monto: paymentsInRange.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0),
+          pendiente: jobs.filter(j=>j.technician_id===t.id&&j.status==="abierto").reduce((s,j)=>s+Number(j.valor_acordado||0),0)
+            - payments.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0)
+        })).filter(x=>x.monto>0||x.pendiente>0);
         const jobsAbiertos = jobs.filter(j=>j.status==="abierto");
         const totalPendienteGlobal = jobsAbiertos.reduce((s,j)=>s+Number(j.valor_acordado||0),0)
           - payments.filter(p=>jobsAbiertos.map(j=>j.id).includes(p.job_id)).reduce((s,p)=>s+Number(p.monto||0),0);
@@ -5453,9 +5455,15 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
               </div>
               {pagosPorTech.map(x=>(
                 <div key={x.name} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, padding:"12px 14px" }}>
-                  <div style={{ color:G.muted, fontSize:10, marginBottom:4 }}>{x.name.toUpperCase()}</div>
-                  <div style={{ fontWeight:700, fontSize:15, color:"#22c55e" }}>{fmtCOP(x.monto)}</div>
-                  <div style={{ color:G.muted, fontSize:10, marginTop:2 }}>en el período</div>
+                  <div style={{ color:G.muted, fontSize:10, marginBottom:6 }}>{x.name.toUpperCase()}</div>
+                  {x.monto>0 && <>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#22c55e" }}>{fmtCOP(x.monto)}</div>
+                    <div style={{ color:G.muted, fontSize:10, marginTop:1 }}>pagado en período</div>
+                  </>}
+                  {x.pendiente>0 && <>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#f59e0b", marginTop: x.monto>0?6:0 }}>{fmtCOP(x.pendiente)}</div>
+                    <div style={{ color:G.muted, fontSize:10, marginTop:1 }}>pendiente</div>
+                  </>}
                 </div>
               ))}
             </div>
