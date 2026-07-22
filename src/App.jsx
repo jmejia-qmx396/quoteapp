@@ -5807,7 +5807,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
 
 
 // ── Vista Informes ───────────────────────────────────────────────
-const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPayments = [], technicians = [], config, invoiceStatus = [], setInvoiceStatus, user }) => {
+const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPayments = [], technicians = [], config, invoiceStatus = [], setInvoiceStatus, user, incomeEntries = [] }) => {
   const now = new Date();
   const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
   const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
@@ -5955,6 +5955,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
 
   // ── Datos calculados ─────────────────────────────────────────
   // Proyectos activos en el período (basado en pagos recibidos)
+  const manualInRange = incomeEntries.filter(e => (e.fecha||"") >= dateFrom && (e.fecha||"") <= dateTo && e.fuente==="manual");
   const paymentsInRange = projectPayments.filter(p => (p.date||"") >= dateFrom && (p.date||"") <= dateTo);
   const projectIdsWithPayments = [...new Set(paymentsInRange.map(p=>p.project_id))];
 
@@ -5974,7 +5975,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
     return { ...proj, projQuotes, totalQuoted, totalPaid, paidInRange, paymentsInP };
   }).filter(p => p.projQuotes.length > 0);
 
-  const totalIngresado = paymentsInRange.reduce((s,p)=>s+(p.amount||0),0);
+  const totalIngresado = paymentsInRange.reduce((s,p)=>s+(p.amount||0),0) + manualInRange.reduce((s,e)=>s+Number(e.monto||0),0);
   const totalCotizado  = projectsWithQuotes.reduce((s,p)=>s+(p.totalQuoted||0),0);
 
   // Pagos a técnicos en el período
@@ -7391,7 +7392,7 @@ export default function App() {
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
           {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} incomeDistributions={incomeDistributions} setIncomeDistributions={setIncomeDistributions} user={user} />}
-          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} invoiceStatus={invoiceStatus} setInvoiceStatus={setInvoiceStatus} user={user} />}
+          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} invoiceStatus={invoiceStatus} setInvoiceStatus={setInvoiceStatus} user={user} incomeEntries={incomeEntries} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
