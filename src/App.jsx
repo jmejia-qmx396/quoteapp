@@ -6119,7 +6119,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                           paddingBottom:6, borderBottom:`2px solid ${pc}` }}>
               2. Ingresos Recibidos
             </div>
-            {paymentsInRange.length === 0 ? (
+            {(paymentsInRange.length === 0 && manualInRange.length === 0) ? (
               <p style={{ color:G.muted, fontSize:13 }}>Sin ingresos en este período.</p>
             ) : (
               (() => {
@@ -6136,7 +6136,34 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                       </tr>
                     </thead>
                     <tbody>
-                      {paymentsInRange.sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>{
+                      {[
+                      ...paymentsInRange.map(p=>({
+                        id:`pp_${p.id}`, fecha:p.date, concepto:p.concept,
+                        proyecto: projects.find(pr=>pr.id===p.project_id)?.name||"—",
+                        tipo:(p.payment_type||"empresa"), monto:p.amount
+                      })),
+                      ...manualInRange.map(e=>({
+                        id:`me_${e.id}`, fecha:e.fecha, concepto:e.concepto,
+                        proyecto:"—", tipo:(e.tipo||"manual"), monto:Number(e.monto)
+                      }))
+                    ].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")).map(p => (
+                      <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.fecha}</td>
+                        <td style={{ padding:"7px 10px" }}>{p.proyecto}</td>
+                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.concepto||"—"}</td>
+                        <td style={{ padding:"7px 10px" }}>
+                          <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
+                                         background:`${pc}22`, color:pc }}>{p.tipo}</span>
+                        </td>
+                        <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>
+                          {(p.tipo==="empresa"||p.tipo==="proyecto") ? fmtCOP(p.monto) : "—"}
+                        </td>
+                        <td style={{ padding:"7px 10px", fontWeight:600, color:G.accent }}>
+                          {(p.tipo==="personal"||p.tipo==="manual") ? fmtCOP(p.monto) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  {false && paymentsInRange.sort((a,b)=>(a.date||"")"").localeCompare(b.date||"")).map(p=>{
                         const proj = projects.find(pr=>pr.id===p.project_id);
                         const isEmpresa = (p.payment_type||"empresa")==="empresa";
                         return (
