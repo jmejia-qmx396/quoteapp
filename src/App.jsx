@@ -5955,7 +5955,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
 
   // ── Datos calculados ─────────────────────────────────────────
   // Proyectos activos en el período (basado en pagos recibidos)
-  const manualInRange = incomeEntries.filter(e => (e.fecha||"") >= dateFrom && (e.fecha||"") <= dateTo && e.fuente==="manual");
+  const manualInRange = incomeEntries.filter(e => (e.fecha||"") >= dateFrom && (e.fecha||"") <= dateTo);
   const paymentsInRange = projectPayments.filter(p => (p.date||"") >= dateFrom && (p.date||"") <= dateTo);
   const projectIdsWithPayments = [...new Set(paymentsInRange.map(p=>p.project_id))];
 
