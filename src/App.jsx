@@ -5807,7 +5807,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
 
 
 // ── Vista Informes ───────────────────────────────────────────────
-const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPayments = [], technicians = [], config, invoiceStatus = [], setInvoiceStatus, user, incomeEntries = [] }) => {
+const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPayments = [], techJobs = [], technicians = [], config, invoiceStatus = [], setInvoiceStatus, user, incomeEntries = [] }) => {
   const now = new Date();
   const fom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
   const lom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(),now.getMonth()+1,0).getDate()}`;
@@ -6202,12 +6202,12 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                   </thead>
                   <tbody>
                     {t.pagos.map(p=>{
-
+                      const job = techJobs.find(j=>j.id===p.job_id);
                       return (
                         <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
                           <td style={{ padding:"6px 10px", color:G.muted }}>{p.fecha}</td>
-                          <td style={{ padding:"6px 10px" }}>{p.notas||"—"}</td>
-                          <td style={{ padding:"6px 10px", color:G.muted }}>—</td>
+                          <td style={{ padding:"6px 10px" }}>{job?.descripcion||p.notas||"—"}</td>
+                          <td style={{ padding:"6px 10px", color:G.muted }}>{job?.proyecto||"—"}</td>
                           <td style={{ padding:"6px 10px", fontWeight:600, color:"#22c55e" }}>{fmtCOP(p.monto)}</td>
                         </tr>
                       );
@@ -6897,6 +6897,7 @@ export default function App() {
   const [templates, setTemplates] = useState([]);
   const [techniciansList, setTechniciansList] = useState([]);
   const [technicianPayments, setTechnicianPayments] = useState([]);
+  const [technicianJobs, setTechnicianJobs] = useState([]);
   const [incomeConfig, setIncomeConfig] = useState(null);
   const [incomeEntries, setIncomeEntries] = useState([]);
   const [invoiceStatus, setInvoiceStatus] = useState([]);
@@ -7002,6 +7003,8 @@ export default function App() {
       if (techList) setTechniciansList(techList);
       const { data: techPays } = await sb.from("technician_payments").select("*").order("fecha",{ascending:false});
       if (techPays) setTechnicianPayments(techPays);
+      const { data: techJs } = await sb.from("technician_jobs").select("*").order("fecha",{ascending:false});
+      if (techJs) setTechnicianJobs(techJs);
 
       // Income distribution
       const { data: iCfg } = await sb.from("income_config").select("*").limit(1).single();
@@ -7399,7 +7402,7 @@ export default function App() {
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
           {view==="technicians" && <TechniciansAdminView config={config} projects={projects} quotes={quotes} projectQuotes={projectQuotes} />}
           {view==="distribucion" && <DistribucionView projectPayments={projectPayments} projects={projects} incomeConfig={incomeConfig} setIncomeConfig={setIncomeConfig} incomeEntries={incomeEntries} setIncomeEntries={setIncomeEntries} incomeDistributions={incomeDistributions} setIncomeDistributions={setIncomeDistributions} user={user} />}
-          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} technicians={techniciansList} config={config} invoiceStatus={invoiceStatus} setInvoiceStatus={setInvoiceStatus} user={user} incomeEntries={incomeEntries} />}
+          {view==="reports" && <ReportsView quotes={quotes} projects={projects} projectPayments={projectPayments} projectQuotes={projectQuotes} techPayments={technicianPayments} techJobs={technicianJobs} technicians={techniciansList} config={config} invoiceStatus={invoiceStatus} setInvoiceStatus={setInvoiceStatus} user={user} incomeEntries={incomeEntries} />}
           {view==="kits"     && <KitsView templates={templates} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} updateTemplate={updateTemplate} products={products} />}
           {/* Mobile spacer for fixed bottom nav */}
         </main>
