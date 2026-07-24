@@ -6123,8 +6123,19 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
               <p style={{ color:G.muted, fontSize:13 }}>Sin ingresos en este período.</p>
             ) : (
               (() => {
-                const totalEmpresa  = paymentsInRange.filter(p=>(p.payment_type||"empresa")==="empresa").reduce((s,p)=>s+(p.amount||0),0);
-                const totalPersonal = paymentsInRange.filter(p=>p.payment_type==="personal").reduce((s,p)=>s+(p.amount||0),0);
+                const allInRange = [
+                  ...paymentsInRange.map(p=>({
+                    id:`pp_${p.id}`, fecha:p.date, concepto:p.concept,
+                    proyecto: projects.find(pr=>pr.id===p.project_id)?.name||"—",
+                    tipo:(p.payment_type||"empresa"), monto:Number(p.amount||0)
+                  })),
+                  ...manualInRange.map(e=>({
+                    id:`me_${e.id}`, fecha:e.fecha, concepto:e.concepto,
+                    proyecto:"—", tipo:(e.tipo||"empresa"), monto:Number(e.monto||0)
+                  }))
+                ].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||""));
+                const totalEmpresa  = allInRange.filter(p=>p.tipo==="empresa"||p.tipo==="proyecto").reduce((s,p)=>s+p.monto,0);
+                const totalPersonal = allInRange.filter(p=>p.tipo==="personal"||p.tipo==="manual").reduce((s,p)=>s+p.monto,0);
                 return (
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                     <thead>
@@ -6136,50 +6147,19 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                      ...paymentsInRange.map(p=>({
-                        id:`pp_${p.id}`, fecha:p.date, concepto:p.concept,
-                        proyecto: projects.find(pr=>pr.id===p.project_id)?.name||"—",
-                        tipo:(p.payment_type||"empresa"), monto:p.amount
-                      })),
-                      ...manualInRange.map(e=>({
-                        id:`me_${e.id}`, fecha:e.fecha, concepto:e.concepto,
-                        proyecto:"—", tipo:(e.tipo||"manual"), monto:Number(e.monto)
-                      }))
-                    ].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")).map(p => (
-                      <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
-                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.fecha}</td>
-                        <td style={{ padding:"7px 10px" }}>{p.proyecto}</td>
-                        <td style={{ padding:"7px 10px", color:G.muted }}>{p.concepto||"—"}</td>
-                        <td style={{ padding:"7px 10px" }}>
-                          <span style={{ fontSize:10, padding:"2px 6px", borderRadius:10,
-                                         background:`${pc}22`, color:pc }}>{p.tipo}</span>
-                        </td>
-                        <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>
-                          {(p.tipo==="empresa"||p.tipo==="proyecto") ? fmtCOP(p.monto) : "—"}
-                        </td>
-                        <td style={{ padding:"7px 10px", fontWeight:600, color:G.accent }}>
-                          {(p.tipo==="personal"||p.tipo==="manual") ? fmtCOP(p.monto) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  {false && paymentsInRange.sort((a,b)=>(a.date||"")"").localeCompare(b.date||"")).map(p=>{
-                        const proj = projects.find(pr=>pr.id===p.project_id);
-                        const isEmpresa = (p.payment_type||"empresa")==="empresa";
-                        return (
-                          <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
-                            <td style={{ padding:"7px 10px", color:G.muted }}>{p.date}</td>
-                            <td style={{ padding:"7px 10px" }}>{proj?.name||"—"}</td>
-                            <td style={{ padding:"7px 10px", color:G.muted }}>{p.concept||"—"}</td>
-                            <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>
-                              {isEmpresa ? fmtCOP(p.amount) : "—"}
-                            </td>
-                            <td style={{ padding:"7px 10px", fontWeight:600, color:G.accent }}>
-                              {!isEmpresa ? fmtCOP(p.amount) : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {allInRange.map(p => (
+                        <tr key={p.id} style={{ borderBottom:`1px solid ${G.border}` }}>
+                          <td style={{ padding:"7px 10px", color:G.muted }}>{p.fecha}</td>
+                          <td style={{ padding:"7px 10px" }}>{p.proyecto}</td>
+                          <td style={{ padding:"7px 10px", color:G.muted }}>{p.concepto||"—"}</td>
+                          <td style={{ padding:"7px 10px", fontWeight:600, color:"#22c55e" }}>
+                            {(p.tipo==="empresa"||p.tipo==="proyecto") ? fmtCOP(p.monto) : "—"}
+                          </td>
+                          <td style={{ padding:"7px 10px", fontWeight:600, color:G.accent }}>
+                            {(p.tipo==="personal"||p.tipo==="manual") ? fmtCOP(p.monto) : "—"}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop:`2px solid ${pc}` }}>
