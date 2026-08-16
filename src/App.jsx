@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.5</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.6</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4345,9 +4345,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                   {primera && `#${item.quoteNum}`}
                                   {!f.virtual && (
                                     <button onClick={async()=>{
-                                        if (await confirm({ title:"Quitar reparto",
-                                          message:`¿Quitar la asignación de ${f.qtyAsig} ${item.unit||"und"} a ${f.supplier||"sin proveedor"}?` }))
-                                          await deletePurchaseRow(f.id);
+                                        const ok = await confirm(
+                                          "¿Quitar este reparto?",
+                                          `${f.qtyAsig||0} ${item.unit||"und"} asignadas a ${f.supplier||"sin proveedor"}`
+                                        );
+                                        if (ok) await deletePurchaseRow(f.id);
                                       }}
                                       title="Quitar este reparto"
                                       style={{ background:"none",border:"none",color:G.muted,cursor:"pointer",fontSize:12,marginLeft:6 }}>✕</button>
