@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.3</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.5</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3500,9 +3500,9 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
-                        updateProjectStatus, projectPurchases=[], togglePurchase,
+                        updateProjectStatus, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
                         projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
-                        config }) => {
+                        products=[], suppliers=[], config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [selected, setSelected] = useState(null);
   const [payModal, setPayModal] = useState(false);
@@ -3513,6 +3513,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
+  const [copiedProv, setCopiedProv] = useState(null);
+  const [showPedidos, setShowPedidos] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [taskModal, setTaskModal]   = useState(false);
   const [editTask, setEditTask]     = useState(null);
@@ -3769,11 +3771,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 const qty = Number(i.qty||1);
                 sinIva += qty * (priceCOP - disc);
               }
-              // Por comprar: items no chuleados
-              const purch = (projectPurchases||[]).find(pp=>pp.project_id===p.id&&pp.quote_id===q.id&&pp.item_id===String(i.id));
-              if (!purch?.purchased) {
-                totalPorComprar += Number(i.costCOP||i.cost||0) * Number(i.qty||1);
-              }
+              // Por comprar: cantidad aún NO comprada (puede estar repartida entre proveedores)
+              const qtyT = Number(i.qty||1);
+              const compradaQty = (projectPurchases||[])
+                .filter(pp=>pp.project_id===p.id&&pp.quote_id===q.id&&pp.item_id===String(i.id)&&pp.purchased)
+                .reduce((s2,pp)=>s2+(pp.qty===null||pp.qty===undefined?qtyT:Number(pp.qty)),0);
+              totalPorComprar += Number(i.costCOP||i.cost||0) * Math.max(0, qtyT - compradaQty);
             });
             const conIva = total - sinIva;
             totalConIvaTotal  += conIva;
@@ -4001,17 +4004,156 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </div>
 
             {activeTab==="compras" && (() => {
-              // Get all product items from all quotes in project
+              // Cada ítem de cotización puede repartirse entre varios proveedores.
+              // asignaciones = filas de project_purchases; resto = cantidad aún sin asignar.
               const allItems = [];
               getProjQuotes(proj.id).forEach(q => {
                 (q.items||[]).filter(i=>i.type!=="header"&&i.name).forEach(item => {
-                  const purch = projectPurchases.find(p=>p.project_id===proj.id&&p.quote_id===q.id&&p.item_id===String(item.id));
-                  allItems.push({ ...item, quoteId:q.id, quoteNum:q.number, purchased:purch?.purchased||false,
-                                  purchaseDate:purch?.purchase_date||"", purchaseSupplier:purch?.supplier||"", purchaseDbId:purch?.id });
+                  const qtyTotal = Number(item.qty||1);
+                  const filas = projectPurchases
+                    .filter(p=>p.project_id===proj.id&&p.quote_id===q.id&&p.item_id===String(item.id))
+                    .sort((a,b)=>(a.id||0)-(b.id||0));
+                  // qty NULL en BD = línea completa (compatibilidad con registros previos)
+                  const asignaciones = filas.map(f => ({ ...f, qtyAsig: f.qty===null||f.qty===undefined ? qtyTotal : Number(f.qty) }));
+                  const asignado = asignaciones.reduce((s,a)=>s+Number(a.qtyAsig||0),0);
+                  const resto = Math.max(0, qtyTotal - asignado);
+                  // Sugerencia de proveedor desde el catálogo (match por SKU)
+                  const prod = item.sku ? products.find(p => (p.sku||"").trim().toLowerCase() === String(item.sku).trim().toLowerCase()) : null;
+                  const sugerido = prod?.supplierMain || "";
+                  const compradaQty = asignaciones.filter(a=>a.purchased).reduce((s,a)=>s+Number(a.qtyAsig||0),0);
+                  allItems.push({ ...item, quoteId:q.id, quoteNum:q.number, qtyTotal,
+                                  asignaciones, asignado, resto, compradaQty,
+                                  supplierSugerido: sugerido,
+                                  fullyPurchased: qtyTotal>0 && compradaQty >= qtyTotal,
+                                  sobreAsignado: asignado > qtyTotal });
                 });
               });
-              const totalCosto = allItems.reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.qty||1)),0);
-              const comprado   = allItems.filter(i=>i.purchased).reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.qty||1)),0);
+
+              // Agrupar lo PENDIENTE por proveedor. Cada asignación no comprada aporta su cantidad;
+              // el resto sin asignar cae en "Sin proveedor" (o en el sugerido del catálogo).
+              const grupos = {};
+              const push = (prov, it, qty) => {
+                const k = (prov||"").trim() || "— Sin proveedor —";
+                if (!grupos[k]) grupos[k] = [];
+                grupos[k].push({ ...it, qty });
+              };
+              allItems.forEach(it => {
+                it.asignaciones.filter(a=>!a.purchased && Number(a.qtyAsig)>0)
+                  .forEach(a => push(a.supplier, it, Number(a.qtyAsig)));
+                if (it.resto > 0) push(it.supplierSugerido, it, it.resto);
+              });
+              const pendientesItems = Object.values(grupos).flat();
+              const gruposOrden = Object.keys(grupos).sort((a,b)=>{
+                if (a.startsWith("—")) return 1;
+                if (b.startsWith("—")) return -1;
+                return a.localeCompare(b);
+              });
+
+              // Consolida ítems repetidos (misma referencia y unidad) sumando cantidades.
+              // Aplica SOLO al pedido: la tabla de compras se mantiene línea por línea.
+              const consolidar = (items) => {
+                const mapa = new Map();
+                items.forEach(it => {
+                  const ref = (it.sku||"").trim().toLowerCase();
+                  const key = `${ref || (it.name||"").trim().toLowerCase()}||${(it.unit||"").trim().toLowerCase()}`;
+                  const prev = mapa.get(key);
+                  if (prev) {
+                    prev.qty += Number(it.qty||0);
+                    prev.lineas += 1;
+                    if (!prev.zonas.includes(it.quoteNum)) prev.zonas.push(it.quoteNum);
+                  } else {
+                    mapa.set(key, { sku:it.sku, name:it.name, unit:it.unit,
+                                    qty:Number(it.qty||0), lineas:1, zonas:[it.quoteNum] });
+                  }
+                });
+                return [...mapa.values()].sort((a,b)=>(a.sku||a.name||"").localeCompare(b.sku||b.name||""));
+              };
+
+              const lineasPedido = (items) => items.map(it =>
+                `${it.sku||"—"}  |  ${it.name}  |  ${it.qty} ${it.unit||""}`.trim()
+              );
+
+              const copiarWhatsapp = async (prov, items) => {
+                const cons = consolidar(items);
+                const txt = [
+                  `*Pedido — ${config?.companyName||"Casa Inteligente"}*`,
+                  `Proyecto: ${proj.name}`,
+                  `Proveedor: ${prov}`,
+                  `Fecha: ${new Date().toISOString().split("T")[0]}`,
+                  "",
+                  ...cons.map((it,i)=>`${i+1}. ${it.sku||"—"} — ${it.name} — Cant: ${it.qty} ${it.unit||""}`.trim()),
+                  "",
+                  `Total referencias: ${cons.length}`
+                ].join("\n");
+                try {
+                  await navigator.clipboard.writeText(txt);
+                  setCopiedProv(prov);
+                  setTimeout(()=>setCopiedProv(null), 2000);
+                } catch { window.prompt("Copia el texto:", txt); }
+              };
+
+              const imprimirPedido = (prov, items) => {
+                const cons = consolidar(items);
+                const hayFusion = cons.some(c=>c.lineas>1);
+                const pc = config?.primaryColor || G.accent;
+                const w = window.open("","_blank","width=800,height=600");
+                if (!w) { alert("Permite las ventanas emergentes para generar el pedido."); return; }
+                w.document.write(`
+                  <html><head><title>Pedido — ${prov}</title>
+                  <style>
+                    *{box-sizing:border-box;margin:0;padding:0}
+                    body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;font-size:12px}
+                    h1{font-size:18px;color:${pc};margin-bottom:4px}
+                    .sub{color:#64748b;font-size:11px;margin-bottom:16px}
+                    .info{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:16px;font-size:12px}
+                    .info div{margin-bottom:3px}
+                    .info strong{color:#1e293b}
+                    table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11px}
+                    th{background:${pc};color:#fff;padding:7px 10px;text-align:left;font-size:10px}
+                    td{padding:7px 10px;border-bottom:1px solid #e2e8f0}
+                    tr:nth-child(even) td{background:#f8fafc}
+                    .obs{margin-top:20px;border:1px solid #e2e8f0;border-radius:6px;padding:12px;min-height:70px}
+                    .obs-t{font-size:10px;color:#94a3b8;text-transform:uppercase;margin-bottom:6px}
+                    .fus{color:#94a3b8;font-size:9px;font-style:italic}
+                    .tot td{font-weight:700;border-top:2px solid ${pc};color:${pc};background:#fff}
+                    .nota{font-size:10px;color:#64748b;font-style:italic;margin-bottom:8px}
+                    @media print{body{padding:16px}}
+                  </style></head><body>
+                    <h1>Solicitud de Pedido</h1>
+                    <div class="sub">${config?.companyName||"Casa Inteligente"}${config?.nit?` — NIT ${config.nit}`:""}</div>
+                    <div class="info">
+                      <div><strong>Proveedor:</strong> ${prov}</div>
+                      <div><strong>Proyecto:</strong> ${proj.name}${proj.client_name?` — ${proj.client_name}`:""}</div>
+                      <div><strong>Fecha:</strong> ${new Date().toISOString().split("T")[0]}</div>
+                    </div>
+                    <table>
+                      <thead><tr><th style="width:40px">#</th><th style="width:150px">Referencia</th><th>Descripción</th><th style="width:90px;text-align:center">Cantidad</th></tr></thead>
+                      <tbody>
+                        ${cons.map((it,i)=>`<tr>
+                          <td>${i+1}</td>
+                          <td>${it.sku||"—"}</td>
+                          <td>${it.name}${it.lineas>1?`<span class="fus"> · consolidado de ${it.lineas} líneas</span>`:""}</td>
+                          <td style="text-align:center"><strong>${it.qty}</strong> ${it.unit||""}</td>
+                        </tr>`).join("")}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tot">
+                          <td colspan="3" style="text-align:right">Total referencias</td>
+                          <td style="text-align:center">${cons.length}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    ${hayFusion?`<div class="nota">Las cantidades están consolidadas: los ítems que aparecían repetidos en varias zonas de la cotización se sumaron en una sola línea.</div>`:""}
+                    <div class="obs"><div class="obs-t">Observaciones</div></div>
+                  </body></html>
+                `);
+                w.document.close();
+                w.focus();
+                setTimeout(()=>{ w.print(); }, 400);
+              };
+              const totalCosto = allItems.reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.qtyTotal||1)),0);
+              // Comprado se mide por cantidad efectivamente comprada, no por línea completa
+              const comprado   = allItems.reduce((s,i)=>s+(Number(i.costCOP||i.cost||0)*Number(i.compradaQty||0)),0);
               const pendiente  = totalCosto - comprado;
               const anticipos  = getProjPayments(proj.id).reduce((s,p)=>s+(p.amount||0),0);
               const disponible = anticipos - comprado;
@@ -4035,6 +4177,67 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     ))}
                   </div>
 
+                  {/* Pedidos por proveedor */}
+                  {pendientesItems.length > 0 && (
+                    <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, marginBottom:16, overflow:"hidden" }}>
+                      <div onClick={()=>setShowPedidos(v=>!v)}
+                        style={{ padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center",
+                                 cursor:"pointer", background:G.surface }}>
+                        <span style={{ fontSize:12, fontWeight:700, color:G.text }}>
+                          📦 Pedidos por proveedor
+                          <span style={{ color:G.muted, fontWeight:400, marginLeft:8 }}>
+                            {gruposOrden.length} proveedor{gruposOrden.length!==1?"es":""} · {pendientesItems.length} ítem{pendientesItems.length!==1?"s":""} pendiente{pendientesItems.length!==1?"s":""}
+                          </span>
+                        </span>
+                        <span style={{ color:G.muted, fontSize:11 }}>{showPedidos?"▲":"▼"}</span>
+                      </div>
+                      {showPedidos && (
+                        <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+                          {gruposOrden.map(prov => {
+                            const items = grupos[prov];
+                            const cons = consolidar(items);
+                            const fusionadas = items.length - cons.length;
+                            const sinProv = prov.startsWith("—");
+                            return (
+                              <div key={prov} style={{ border:`1px solid ${G.border}`, borderRadius:7, padding:"10px 12px",
+                                                       display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                                <div style={{ minWidth:200 }}>
+                                  <div style={{ fontSize:13, fontWeight:600, color:sinProv?G.muted:G.text }}>{prov}</div>
+                                  <div style={{ fontSize:11, color:G.muted, marginTop:2 }}>
+                                    {cons.length} referencia{cons.length!==1?"s":""} · {cons.reduce((s,i)=>s+Number(i.qty||0),0)} unidades
+                                    {fusionadas>0 && <span style={{ color:G.accent }}> · {fusionadas} línea{fusionadas!==1?"s":""} consolidada{fusionadas!==1?"s":""}</span>}
+                                  </div>
+                                </div>
+                                {sinProv ? (
+                                  <span style={{ fontSize:11, color:G.warn }}>Asigna proveedor abajo para generar el pedido</span>
+                                ) : (
+                                  <div style={{ display:"flex", gap:8 }}>
+                                    <button onClick={()=>imprimirPedido(prov, items)}
+                                      style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
+                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      🖨️ Imprimir pedido
+                                    </button>
+                                    <button onClick={()=>copiarWhatsapp(prov, items)}
+                                      style={{ background: copiedProv===prov ? G.success : "none",
+                                               color: copiedProv===prov ? "#fff" : G.muted,
+                                               border:`1px solid ${copiedProv===prov?G.success:G.border}`,
+                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      {copiedProv===prov ? "✓ Copiado" : "📋 Copiar WhatsApp"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <datalist id="lista-proveedores">
+                    {suppliers.map(s=><option key={s.id} value={s.name} />)}
+                  </datalist>
+
                   {/* Lista de ítems */}
                   <div style={{ overflowX:"auto" }}>
                     <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
@@ -4052,51 +4255,114 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         </tr>
                       </thead>
                       <tbody>
-                        {allItems.map((item,idx)=>{
+                        {allItems.map((item)=>{
                           const costUnit = Number(item.costCOP||item.cost||0);
-                          const costTotal = costUnit * Number(item.qty||1);
-                          const editKey = `${item.quoteId}-${item.id}`;
-                          const edit = purchaseEdit[editKey] || {};
-                          return (
-                            <tr key={editKey} style={{
-                              background: item.purchased?"rgba(16,185,129,.05)":"transparent",
-                              borderBottom:`1px solid ${G.border}`,
-                              opacity: item.purchased ? 0.75 : 1
-                            }}>
-                              <td style={{ padding:"8px 12px" }}>
-                                <input type="checkbox" checked={item.purchased}
-                                  onChange={async()=>{
-                                    const d = edit.date || item.purchaseDate || new Date().toISOString().split("T")[0];
-                                    const s = edit.supplier || item.purchaseSupplier || "";
-                                    await togglePurchase(proj.id, item.quoteId, item.id, item.purchased, d, s);
-                                  }}
-                                  style={{ width:16,height:16,cursor:"pointer",accentColor:G.success }} />
-                              </td>
-                              <td style={{ padding:"8px 12px",fontFamily:G.mono,color:G.accent,fontSize:11 }}>{item.sku||"—"}</td>
-                              <td style={{ padding:"8px 12px",fontWeight:item.purchased?400:500,
-                                           textDecoration:item.purchased?"line-through":"none",
-                                           color:item.purchased?G.muted:G.text }}>
-                                {item.name}
-                              </td>
-                              <td style={{ padding:"8px 12px",textAlign:"center",fontFamily:G.mono }}>{item.qty} {item.unit}</td>
-                              <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,color:G.muted }}>{fmt(costUnit)}</td>
-                              <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,fontWeight:600 }}>{fmt(costTotal)}</td>
-                              <td style={{ padding:"6px 8px" }}>
-                                <input value={edit.supplier!==undefined?edit.supplier:(item.purchaseSupplier||"")}
-                                  onChange={e=>setPurchaseEdit(pe=>({...pe,[editKey]:{...pe[editKey],supplier:e.target.value}}))}
-                                  onBlur={async e=>{ if(item.purchased) await togglePurchase(proj.id,item.quoteId,item.id,item.purchased,edit.date||item.purchaseDate,e.target.value); }}
-                                  placeholder="Proveedor…"
-                                  style={{ fontSize:11,padding:"3px 6px",width:"100%",minWidth:100 }} />
-                              </td>
-                              <td style={{ padding:"6px 8px" }}>
-                                <input type="date" value={edit.date!==undefined?edit.date:(item.purchaseDate||"")}
-                                  onChange={e=>setPurchaseEdit(pe=>({...pe,[editKey]:{...pe[editKey],date:e.target.value}}))}
-                                  onBlur={async e=>{ if(item.purchased) await togglePurchase(proj.id,item.quoteId,item.id,item.purchased,e.target.value,edit.supplier||item.purchaseSupplier); }}
-                                  style={{ fontSize:11,padding:"3px 6px" }} />
-                              </td>
-                              <td style={{ padding:"8px 12px",color:G.muted,fontSize:11 }}>#{item.quoteNum}</td>
-                            </tr>
-                          );
+                          const itemKey = `${item.quoteId}-${item.id}`;
+                          // Filas visibles: cada asignación guardada + una fila virtual con el resto sin asignar
+                          const filas = [
+                            ...item.asignaciones.map(a=>({ ...a, virtual:false })),
+                            ...(item.resto > 0 || item.asignaciones.length===0
+                                ? [{ id:null, virtual:true, qtyAsig:item.resto, supplier:"", purchase_date:"", purchased:false }]
+                                : [])
+                          ];
+                          return filas.map((f, fi) => {
+                            const rowKey = f.virtual ? `${itemKey}-nuevo` : `${itemKey}-${f.id}`;
+                            const edit = purchaseEdit[rowKey] || {};
+                            const qtyVal   = edit.qty      !== undefined ? edit.qty      : String(f.qtyAsig ?? "");
+                            const provVal  = edit.supplier !== undefined ? edit.supplier : (f.supplier||"");
+                            const dateVal  = edit.date     !== undefined ? edit.date     : (f.purchase_date||"");
+                            const primera  = fi === 0;
+                            const guardar = async (patch) => {
+                              const base = f.virtual
+                                ? { projectId:proj.id, quoteId:item.quoteId, itemId:item.id,
+                                    qty: qtyVal===""?item.resto:qtyVal, supplier:provVal, date:dateVal, purchased:false }
+                                : { id:f.id };
+                              const saved = await savePurchaseRow({ ...base, ...patch });
+                              if (f.virtual && saved) setPurchaseEdit(pe=>{ const n={...pe}; delete n[rowKey]; return n; });
+                            };
+                            return (
+                              <tr key={rowKey} style={{
+                                background: f.purchased?"rgba(16,185,129,.05)":"transparent",
+                                borderBottom:`1px solid ${G.border}`,
+                                opacity: f.purchased ? 0.75 : 1
+                              }}>
+                                <td style={{ padding:"8px 12px" }}>
+                                  <input type="checkbox" checked={!!f.purchased}
+                                    onChange={async()=>{
+                                      await guardar({ purchased: !f.purchased,
+                                                      date: dateVal || new Date().toISOString().split("T")[0] });
+                                    }}
+                                    style={{ width:16,height:16,cursor:"pointer",accentColor:G.success }} />
+                                </td>
+                                <td style={{ padding:"8px 12px",fontFamily:G.mono,color:primera?G.accent:"transparent",fontSize:11 }}>
+                                  {primera ? (item.sku||"—") : "↳"}
+                                </td>
+                                <td style={{ padding:"8px 12px",fontWeight:f.purchased?400:500,
+                                             textDecoration:f.purchased?"line-through":"none",
+                                             color:f.purchased?G.muted:(primera?G.text:G.muted),
+                                             paddingLeft: primera?12:28 }}>
+                                  {primera ? item.name : <span style={{fontSize:11,fontStyle:"italic"}}>reparto adicional</span>}
+                                  {primera && item.sobreAsignado && (
+                                    <span style={{ color:G.danger, fontSize:10, marginLeft:8 }}>
+                                      ⚠ asignado {item.asignado} de {item.qtyTotal}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding:"6px 8px",textAlign:"center" }}>
+                                  <input type="number" min="0" value={qtyVal}
+                                    onChange={e=>setPurchaseEdit(pe=>({...pe,[rowKey]:{...pe[rowKey],qty:e.target.value}}))}
+                                    onBlur={async e=>{ if(!f.virtual || e.target.value) await guardar({ qty:e.target.value }); }}
+                                    style={{ fontSize:11,padding:"3px 6px",width:56,textAlign:"center",
+                                             background:G.surface,color:G.text,borderRadius:4,
+                                             border:`1px solid ${item.sobreAsignado?G.danger:G.border}` }} />
+                                  <span style={{ fontSize:10,color:G.muted,marginLeft:4 }}>
+                                    {item.unit}{primera && filas.length>1 ? ` / ${item.qtyTotal}` : ""}
+                                  </span>
+                                </td>
+                                <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,color:G.muted }}>{fmt(costUnit)}</td>
+                                <td style={{ padding:"8px 12px",textAlign:"right",fontFamily:G.mono,fontWeight:600 }}>
+                                  {fmt(costUnit * Number(qtyVal||0))}
+                                </td>
+                                <td style={{ padding:"6px 8px" }}>
+                                  <input list="lista-proveedores" value={provVal}
+                                    onChange={e=>setPurchaseEdit(pe=>({...pe,[rowKey]:{...pe[rowKey],supplier:e.target.value}}))}
+                                    onBlur={async e=>{ if(!f.virtual || e.target.value) await guardar({ supplier:e.target.value }); }}
+                                    placeholder={primera ? (item.supplierSugerido || "Proveedor…") : "Proveedor…"}
+                                    title={item.supplierSugerido && !f.supplier ? `Sugerido del catálogo: ${item.supplierSugerido}` : ""}
+                                    style={{ fontSize:11,padding:"3px 6px",width:"100%",minWidth:100,
+                                             background:G.surface, color:G.text,
+                                             border:`1px solid ${(!f.supplier && item.supplierSugerido) ? G.warn : G.border}`,
+                                             borderRadius:4 }} />
+                                </td>
+                                <td style={{ padding:"6px 8px" }}>
+                                  <input type="date" value={dateVal}
+                                    onChange={e=>setPurchaseEdit(pe=>({...pe,[rowKey]:{...pe[rowKey],date:e.target.value}}))}
+                                    onBlur={async e=>{ if(!f.virtual) await guardar({ date:e.target.value }); }}
+                                    style={{ fontSize:11,padding:"3px 6px",background:G.surface,color:G.text,
+                                             border:`1px solid ${G.border}`,borderRadius:4 }} />
+                                </td>
+                                <td style={{ padding:"8px 12px",color:G.muted,fontSize:11,whiteSpace:"nowrap" }}>
+                                  {primera && `#${item.quoteNum}`}
+                                  {!f.virtual && (
+                                    <button onClick={async()=>{
+                                        if (await confirm({ title:"Quitar reparto",
+                                          message:`¿Quitar la asignación de ${f.qtyAsig} ${item.unit||"und"} a ${f.supplier||"sin proveedor"}?` }))
+                                          await deletePurchaseRow(f.id);
+                                      }}
+                                      title="Quitar este reparto"
+                                      style={{ background:"none",border:"none",color:G.muted,cursor:"pointer",fontSize:12,marginLeft:6 }}>✕</button>
+                                  )}
+                                  {primera && item.resto===0 && !item.sobreAsignado && (
+                                    <button onClick={async()=>{ await savePurchaseRow({
+                                        projectId:proj.id, quoteId:item.quoteId, itemId:item.id,
+                                        qty:0, supplier:"", date:"", purchased:false }); }}
+                                      title="Repartir entre otro proveedor"
+                                      style={{ background:"none",border:"none",color:G.accent,cursor:"pointer",fontSize:13,marginLeft:6 }}>＋</button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          });
                         })}
                         {!allItems.length && (
                           <tr><td colSpan={9} style={{ textAlign:"center",color:G.muted,padding:24 }}>
@@ -4195,10 +4461,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               const allProjQuotes = getProjQuotes(proj.id);
               const porComprar = allProjQuotes.reduce((total, q) => {
                 return total + (q.items||[]).filter(i=>i.type!=="header"&&i.name).reduce((s,i) => {
-                  const purch = (projectPurchases||[]).find(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id));
-                  if (purch?.purchased) return s;
+                  const qtyT = Number(i.qty||1);
+                  const compradaQty = (projectPurchases||[])
+                    .filter(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id)&&pp.purchased)
+                    .reduce((s2,pp)=>s2+(pp.qty===null||pp.qty===undefined?qtyT:Number(pp.qty)),0);
                   const cost = Number(i.costCOP||i.cost||0);
-                  return s + cost * Number(i.qty||1);
+                  return s + cost * Math.max(0, qtyT - compradaQty);
                 }, 0);
               }, 0);
               const superavit  = balance - porComprar;
@@ -7255,19 +7523,35 @@ export default function App() {
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
   };
 
-  const togglePurchase = async (projectId, quoteId, itemId, current, date, supplier) => {
-    const existing = projectPurchases.find(p=>p.project_id===projectId&&p.quote_id===quoteId&&p.item_id===String(itemId));
-    if (existing) {
-      await sb.from("project_purchases").update({
-        purchased:!current, purchase_date:date||null, supplier:supplier||null
-      }).eq("id", existing.id);
-      setProjectPurchases(ps=>ps.map(p=>p.id===existing.id?{...p,purchased:!current,purchase_date:date,supplier}:p));
-    } else {
-      const row = { project_id:projectId, quote_id:quoteId, item_id:String(itemId),
-                    purchased:true, purchase_date:date||null, supplier:supplier||null, created_by:user.id };
-      const { data } = await sb.from("project_purchases").insert(row).select().single();
-      if (data) setProjectPurchases(ps=>[...ps,data]);
+  // ── Compras: una fila = una ASIGNACIÓN (proveedor + cantidad) de un ítem.
+  // Un mismo ítem puede tener varias filas si se reparte entre proveedores.
+  // qty NULL = la cantidad completa de la línea de cotización.
+  const savePurchaseRow = async (row) => {
+    if (row.id) {
+      const patch = {};
+      if (row.supplier !== undefined) patch.supplier      = row.supplier || null;
+      if (row.date     !== undefined) patch.purchase_date = row.date || null;
+      if (row.qty      !== undefined) patch.qty           = row.qty === "" || row.qty === null ? null : Number(row.qty);
+      if (row.purchased!== undefined) patch.purchased     = !!row.purchased;
+      if (!Object.keys(patch).length) return null;
+      await sb.from("project_purchases").update(patch).eq("id", row.id);
+      setProjectPurchases(ps=>ps.map(p=>p.id===row.id?{...p,...patch}:p));
+      return { ...row, ...patch };
     }
+    const ins = { project_id:row.projectId, quote_id:row.quoteId, item_id:String(row.itemId),
+                  purchased: !!row.purchased,
+                  purchase_date: row.date||null,
+                  supplier: row.supplier||null,
+                  qty: (row.qty===""||row.qty===undefined||row.qty===null) ? null : Number(row.qty),
+                  created_by: user.id };
+    const { data } = await sb.from("project_purchases").insert(ins).select().single();
+    if (data) setProjectPurchases(ps=>[...ps,data]);
+    return data;
+  };
+
+  const deletePurchaseRow = async (id) => {
+    await sb.from("project_purchases").delete().eq("id", id);
+    setProjectPurchases(ps=>ps.filter(p=>p.id!==id));
   };
 
   const deleteProject = async (id) => {
@@ -7424,7 +7708,10 @@ export default function App() {
                                    deleteProject={deleteProject}
                                    updateProjectStatus={updateProjectStatus}
                                    projectPurchases={projectPurchases}
-                                   togglePurchase={togglePurchase}
+                                   savePurchaseRow={savePurchaseRow}
+                                   deletePurchaseRow={deletePurchaseRow}
+                                   products={products}
+                                   suppliers={suppliers}
                                    projectTasks={projectTasks}
                                    saveProjectTask={saveProjectTask}
                                    deleteProjectTask={deleteProjectTask}
