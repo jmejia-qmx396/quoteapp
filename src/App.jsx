@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.2</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.3</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -5909,6 +5909,19 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   };
 
   const handlePrintInvoice = (q, ivaItems, totalIva) => {
+    // Totales discriminados: base gravable vs IVA
+    const totalBase = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1), 0);
+    const totalIvaAmt = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1)*Number(i.itemTax||i.tax||0)/100, 0);
+    // Desglose por tarifa (por si hay ítems al 19% y al 5% en la misma cotización)
+    const porTarifa = {};
+    ivaItems.forEach(i => {
+      const t = Number(i.itemTax||i.tax||0);
+      const b = Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1);
+      if (!porTarifa[t]) porTarifa[t] = { base:0, iva:0 };
+      porTarifa[t].base += b;
+      porTarifa[t].iva  += b*t/100;
+    });
+    const tarifas = Object.keys(porTarifa).map(Number).sort((a,b)=>a-b);
     const w = window.open("","_blank","width=800,height=600");
     w.document.write(`
       <html><head><title>Facturar — Cotización #${q.number}</title>
@@ -5923,6 +5936,12 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
         td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
         tr:nth-child(even) td{background:#f8fafc}
         .total-row td{font-weight:700;font-size:13px;border-top:2px solid ${pc};color:${pc}}
+        .sub-row td{font-weight:600;font-size:12px;background:#f8fafc}
+        tfoot tr:nth-child(even) td{background:#f8fafc}
+        .resumen{margin-top:18px;border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#f8fafc}
+        .resumen h2{font-size:12px;color:${pc};margin-bottom:8px}
+        .resumen table{margin:0;font-size:11px}
+        .resumen th{background:#e2e8f0;color:#334155}
         @media print{body{padding:16px}}
       </style></head><body>
         <h1>Documento para Facturación — ${config?.companyName||""}</h1>
@@ -5932,20 +5951,37 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
           <div><strong>Cotización:</strong> #${q.number} &nbsp;|&nbsp; <strong>Fecha aprobación:</strong> ${q.approval_date||q.date||""}</div>
         </div>
         <table>
-          <thead><tr><th>Referencia</th><th>Descripción</th><th>Cant.</th><th>Precio Unit. (IVA inc.)</th><th>Subtotal</th></tr></thead>
+          <thead><tr><th>Referencia</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio Unit.<br><span style="font-weight:400;font-size:9px">(sin IVA)</span></th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA %</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
           <tbody>
             ${ivaItems.map(item => {
               const precioBase = Number(item.netCOP||item.priceCOP||0);
-              const tasaIva = Number(item.itemTax||item.tax||0)/100;
-              const precio = precioBase * (1+tasaIva);
-              const sub = precio * Number(item.qty||1);
-              return `<tr><td>${item.sku||"—"}</td><td>${item.name}</td><td>${item.qty} ${item.unit||""}</td><td>${fmtCOP(precio)}</td><td>${fmtCOP(sub)}</td></tr>`;
+              const tasaIva = Number(item.itemTax||item.tax||0);
+              const base = precioBase * Number(item.qty||1);
+              const iva = base * tasaIva / 100;
+              return `<tr><td>${item.sku||"—"}</td><td>${item.name}</td><td style="text-align:right">${item.qty} ${item.unit||""}</td><td style="text-align:right">${fmtCOP(precioBase)}</td><td style="text-align:right">${fmtCOP(base)}</td><td style="text-align:right">${tasaIva}%</td><td style="text-align:right">${fmtCOP(iva)}</td><td style="text-align:right">${fmtCOP(base+iva)}</td></tr>`;
             }).join("")}
           </tbody>
           <tfoot>
-            <tr class="total-row"><td colspan="4" style="text-align:right;padding:10px">TOTAL CON IVA</td><td style="padding:10px">${fmtCOP(totalIva)}</td></tr>
+            <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">Base gravable (subtotal sin IVA)</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalBase)}</td></tr>
+            <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">IVA</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalIvaAmt)}</td></tr>
+            <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px">TOTAL A FACTURAR</td><td colspan="2" style="text-align:right;padding:10px">${fmtCOP(totalBase+totalIvaAmt)}</td></tr>
           </tfoot>
         </table>
+        ${tarifas.length > 1 ? `
+        <div class="resumen">
+          <h2>Resumen por tarifa de IVA</h2>
+          <table>
+            <thead><tr><th>Tarifa</th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
+            <tbody>
+              ${tarifas.map(t=>`<tr>
+                <td>IVA ${t}%</td>
+                <td style="text-align:right">${fmtCOP(porTarifa[t].base)}</td>
+                <td style="text-align:right">${fmtCOP(porTarifa[t].iva)}</td>
+                <td style="text-align:right">${fmtCOP(porTarifa[t].base+porTarifa[t].iva)}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>` : ""}
       </body></html>
     `);
     w.document.close();
