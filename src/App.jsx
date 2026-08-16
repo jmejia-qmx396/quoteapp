@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.5.0</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.5.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4427,7 +4427,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             {(()=>{
               const baseMO = moVentaBase(proj.id);
               const pct = proj.commission_percent===null||proj.commission_percent===undefined ? 10 : Number(proj.commission_percent);
-              const comision = baseMO * (pct/100);
+              // Modo fijo: commission_fixed con valor. Modo porcentaje: NULL.
+              const fijo = proj.commission_fixed===null||proj.commission_fixed===undefined ? null : Number(proj.commission_fixed);
+              const modoFijo = fijo !== null;
+              const comision = modoFijo ? fijo : baseMO * (pct/100);
               return (
                 <Card style={{ padding:0,overflow:"hidden",marginBottom:16 }}>
                   <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
@@ -4444,15 +4447,45 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         {techniciansList.map(t=><option key={t.id} value={t.id}>{t.name||t.email}</option>)}
                       </select>
                     </div>
-                    <div style={{ width:90 }}>
-                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>%</div>
-                      <input type="number" min="0" max="100" step="0.5"
-                        value={proj.commission_percent ?? 10}
-                        onChange={e=>updateProjectCommission(proj.id,{ percent:e.target.value })}
-                        disabled={!proj.commission_technician_id}
-                        style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
-                                 borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
-                                 opacity: proj.commission_technician_id?1:.5 }} />
+                    <div style={{ width:170 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Modo</div>
+                      <div style={{ display:"flex",gap:0 }}>
+                        {[["pct","Porcentaje"],["fijo","Valor fijo"]].map(([k,l],i)=>(
+                          <button key={k}
+                            onClick={()=>updateProjectCommission(proj.id, k==="fijo"
+                              ? { fixed: Math.round(baseMO*(pct/100)) || 0 }
+                              : { fixed: null })}
+                            disabled={!proj.commission_technician_id}
+                            style={{ flex:1,padding:"7px 6px",fontSize:11,fontWeight:600,cursor:"pointer",
+                                     background:(k==="fijo")===modoFijo?G.accent:G.surface,
+                                     color:(k==="fijo")===modoFijo?"#fff":G.muted,
+                                     border:`1px solid ${(k==="fijo")===modoFijo?G.accent:G.border}`,
+                                     borderRadius:i===0?"6px 0 0 6px":"0 6px 6px 0",
+                                     opacity: proj.commission_technician_id?1:.5 }}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ width:modoFijo?140:90 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>{modoFijo?"Valor (COP)":"%"}</div>
+                      {modoFijo ? (
+                        <input type="number" min="0" step="1000"
+                          value={proj.commission_fixed ?? 0}
+                          onChange={e=>updateProjectCommission(proj.id,{ fixed:e.target.value===""?0:e.target.value })}
+                          disabled={!proj.commission_technician_id}
+                          style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
+                                   borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
+                                   opacity: proj.commission_technician_id?1:.5 }} />
+                      ) : (
+                        <input type="number" min="0" max="100" step="0.5"
+                          value={proj.commission_percent ?? 10}
+                          onChange={e=>updateProjectCommission(proj.id,{ percent:e.target.value })}
+                          disabled={!proj.commission_technician_id}
+                          style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
+                                   borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
+                                   opacity: proj.commission_technician_id?1:.5 }} />
+                      )}
                     </div>
                     <div style={{ flex:1,minWidth:150 }}>
                       <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Base M.O. (venta sin IVA)</div>
@@ -4466,7 +4499,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       </div>
                     </div>
                   </div>
-                  {proj.commission_technician_id && baseMO===0 && (
+                  {proj.commission_technician_id && baseMO===0 && !modoFijo && (
                     <div style={{ padding:"0 16px 12px",fontSize:11,color:G.warn }}>
                       ⚠ Este proyecto no tiene ítems de mano de obra en sus cotizaciones (ref. "M.O." o nombre con "mano de obra").
                     </div>
@@ -5487,12 +5520,14 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     .map(p => {
       const base = moVentaBase(p.id);
       const pct  = p.commission_percent===null||p.commission_percent===undefined ? 10 : Number(p.commission_percent);
-      const causado = base * (pct/100);
+      // Valor fijo tiene prioridad sobre el porcentaje
+      const fijo = p.commission_fixed===null||p.commission_fixed===undefined ? null : Number(p.commission_fixed);
+      const causado = fijo !== null ? fijo : base * (pct/100);
       const pagado  = payments.filter(x => x.technician_id===t.id && (x.payment_type==="comision") && String(x.project_id)===String(p.id))
                               .reduce((s,x)=>s+Number(x.monto||0),0);
-      return { project:p, base, pct, causado, pagado, saldo: causado - pagado };
+      return { project:p, base, pct, fijo, causado, pagado, saldo: causado - pagado };
     })
-    .filter(c => c.base > 0 || c.pagado > 0);
+    .filter(c => c.base > 0 || c.pagado > 0 || c.causado > 0);
   const comisionCausada = t => comisionesDe(t).reduce((s,c)=>s+c.causado,0);
   const comisionPagada  = t => payments.filter(p=>p.technician_id===t.id && p.payment_type==="comision")
                                        .reduce((s,p)=>s+Number(p.monto||0),0);
@@ -5514,7 +5549,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     setSelectedTech(tech);
     setComPaying(com);
     setPayForm({ monto:String(Math.round(com.saldo)), fecha:new Date().toISOString().split("T")[0],
-                 notas:`Comisión ${com.pct}% M.O. — ${com.project.name}`, job_id:"" });
+                 notas:`Comisión ${com.fijo!==null?"valor fijo":com.pct+"% M.O."} — ${com.project.name}`, job_id:"" });
     setShowPayModal(true);
   };
 
@@ -6024,7 +6059,9 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                           <tr key={c.project.id} style={{ borderTop:`1px solid ${G.border}` }}>
                             <td style={{ padding:"7px 12px" }}>{c.project.name}</td>
                             <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmtCOP(c.base)}</td>
-                            <td style={{ padding:"7px 12px", textAlign:"right", color:G.muted }}>{c.pct}%</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", color:G.muted }}>
+                              {c.fijo !== null ? <span style={{ fontSize:10, color:G.accent }}>fijo</span> : `${c.pct}%`}
+                            </td>
                             <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600 }}>{fmtCOP(c.causado)}</td>
                             <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, color:"#22c55e" }}>{fmtCOP(c.pagado)}</td>
                             <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600,
@@ -6245,7 +6282,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                 </div>
                 <div style={{ display:"flex", gap:16, color:G.muted, fontSize:11 }}>
                   <span>Base M.O.: <strong style={{color:G.text}}>{fmtCOP(comPaying.base)}</strong></span>
-                  <span>{comPaying.pct}%</span>
+                  <span>{comPaying.fijo !== null ? "valor fijo" : `${comPaying.pct}%`}</span>
                   <span>Causado: <strong style={{color:G.text}}>{fmtCOP(comPaying.causado)}</strong></span>
                   <span>Saldo: <strong style={{color:"#f59e0b"}}>{fmtCOP(comPaying.saldo)}</strong></span>
                 </div>
@@ -7791,6 +7828,7 @@ export default function App() {
     const row = {};
     if (patch.technicianId !== undefined) row.commission_technician_id = patch.technicianId || null;
     if (patch.percent      !== undefined) row.commission_percent = patch.percent === "" || patch.percent === null ? null : Number(patch.percent);
+    if (patch.fixed        !== undefined) row.commission_fixed   = patch.fixed === "" || patch.fixed === null ? null : Number(patch.fixed);
     if (!Object.keys(row).length) return;
     await sb.from("projects").update(row).eq("id", id);
     setProjects(ps => ps.map(p => p.id===id ? {...p, ...row} : p));
