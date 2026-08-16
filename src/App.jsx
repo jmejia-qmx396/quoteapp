@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.4.6</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.5.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3501,6 +3501,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
                         updateProjectStatus, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
+                        updateProjectCommission, techniciansList=[],
                         projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
                         products=[], suppliers=[], config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -3573,6 +3574,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
     const qids = projectQuotes.filter(pq=>pq.project_id===pid).map(pq=>pq.quote_id);
     return quotes.filter(q => qids.includes(q.id));
   };
+
+  // Base de comisión: mano de obra a PRECIO DE VENTA antes de IVA (netCOP = precio menos descuento)
+  const esMO = (item) => item.sku === "M.O." || (item.name||"").toLowerCase().includes("mano de obra");
+  const moVentaBase = (pid) => getProjQuotes(pid).reduce((tot,q)=>
+    tot + (q.items||[]).filter(i=>i.type!=="header" && esMO(i)).reduce((s,i)=>{
+      const precio = Number(i.netCOP !== undefined && i.netCOP !== null ? i.netCOP : (i.priceCOP||0));
+      return s + precio * Number(i.qty||1);
+    },0), 0);
 
   // Get payments for selected project
   const getProjPayments = (pid) => projectPayments.filter(p=>p.project_id===pid);
@@ -4413,6 +4422,58 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </tbody>
               </table>
             </Card>
+
+            {/* Comisión por mano de obra */}
+            {(()=>{
+              const baseMO = moVentaBase(proj.id);
+              const pct = proj.commission_percent===null||proj.commission_percent===undefined ? 10 : Number(proj.commission_percent);
+              const comision = baseMO * (pct/100);
+              return (
+                <Card style={{ padding:0,overflow:"hidden",marginBottom:16 }}>
+                  <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
+                    🤝 Comisión por Mano de Obra
+                  </div>
+                  <div style={{ padding:"14px 16px",display:"flex",gap:14,alignItems:"flex-end",flexWrap:"wrap" }}>
+                    <div style={{ flex:2,minWidth:180 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Técnico</div>
+                      <select value={proj.commission_technician_id||""}
+                        onChange={e=>updateProjectCommission(proj.id,{ technicianId:e.target.value })}
+                        style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
+                                 borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13 }}>
+                        <option value="">— Sin comisión —</option>
+                        {techniciansList.map(t=><option key={t.id} value={t.id}>{t.name||t.email}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ width:90 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>%</div>
+                      <input type="number" min="0" max="100" step="0.5"
+                        value={proj.commission_percent ?? 10}
+                        onChange={e=>updateProjectCommission(proj.id,{ percent:e.target.value })}
+                        disabled={!proj.commission_technician_id}
+                        style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
+                                 borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
+                                 opacity: proj.commission_technician_id?1:.5 }} />
+                    </div>
+                    <div style={{ flex:1,minWidth:150 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Base M.O. (venta sin IVA)</div>
+                      <div style={{ fontFamily:G.mono,fontSize:14,fontWeight:600,color:G.text }}>{fmt(baseMO)}</div>
+                    </div>
+                    <div style={{ flex:1,minWidth:130 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Comisión causada</div>
+                      <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,
+                                    color: proj.commission_technician_id ? G.accent : G.muted }}>
+                        {proj.commission_technician_id ? fmt(comision) : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  {proj.commission_technician_id && baseMO===0 && (
+                    <div style={{ padding:"0 16px 12px",fontSize:11,color:G.warn }}>
+                      ⚠ Este proyecto no tiene ítems de mano de obra en sus cotizaciones (ref. "M.O." o nombre con "mano de obra").
+                    </div>
+                  )}
+                </Card>
+              );
+            })()}
 
             {/* Pagos */}
             <Card style={{ padding:0,overflow:"hidden",marginBottom:16 }}>
@@ -5363,6 +5424,8 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const [payTo,   setPayTo]   = useState(lom);
   const [payForm, setPayForm]   = useState({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
   const [payingJob, setPayingJob] = useState(null);
+  const [comPaying, setComPaying] = useState(null);
+  const [showHistorial, setShowHistorial] = useState(false);
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
   const [selectedMO, setSelectedMO] = useState([]);
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
@@ -5400,10 +5463,40 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   };
 
   const techJobs      = (t, f) => jobs.filter(j => j.technician_id === t.id && (f ? j.status===f : true));
-  const techPayments  = t => payments.filter(p => p.technician_id === t.id);
+  // Pagos de MANO DE OBRA (excluye comisiones para no distorsionar el saldo de trabajos)
+  const techPayments  = t => payments.filter(p => p.technician_id === t.id && (p.payment_type||"mano_obra")!=="comision");
   const techAcordado  = (t,f) => techJobs(t,f).reduce((s,j)=>s+Number(j.valor_acordado||0),0);
   const techPagado    = t => techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
   const techPendiente = t => techJobs(t,"abierto").reduce((s,j)=>s+Number(j.valor_acordado||0),0) - techPayments(t).reduce((s,p)=>s+Number(p.monto||0),0);
+
+  // ── Comisiones ────────────────────────────────────────────────
+  // Base = mano de obra a PRECIO DE VENTA antes de IVA. Se calcula al vuelo:
+  // si cambia la cotización, la comisión se corrige sola.
+  const esMO = (item) => item.sku === "M.O." || (item.name||"").toLowerCase().includes("mano de obra");
+  const moVentaBase = (projectId) => {
+    const qids = projectQuotes.filter(pq => String(pq.project_id)===String(projectId)).map(pq=>pq.quote_id);
+    return quotes.filter(q=>qids.includes(q.id)).reduce((tot,q)=>
+      tot + (q.items||[]).filter(i=>i.type!=="header" && esMO(i)).reduce((s,i)=>{
+        const precio = Number(i.netCOP !== undefined && i.netCOP !== null ? i.netCOP : (i.priceCOP||0));
+        return s + precio * Number(i.qty||1);
+      },0), 0);
+  };
+  // Proyectos con comisión asignada a un técnico
+  const comisionesDe = (t) => projects
+    .filter(p => p.commission_technician_id === t.id)
+    .map(p => {
+      const base = moVentaBase(p.id);
+      const pct  = p.commission_percent===null||p.commission_percent===undefined ? 10 : Number(p.commission_percent);
+      const causado = base * (pct/100);
+      const pagado  = payments.filter(x => x.technician_id===t.id && (x.payment_type==="comision") && String(x.project_id)===String(p.id))
+                              .reduce((s,x)=>s+Number(x.monto||0),0);
+      return { project:p, base, pct, causado, pagado, saldo: causado - pagado };
+    })
+    .filter(c => c.base > 0 || c.pagado > 0);
+  const comisionCausada = t => comisionesDe(t).reduce((s,c)=>s+c.causado,0);
+  const comisionPagada  = t => payments.filter(p=>p.technician_id===t.id && p.payment_type==="comision")
+                                       .reduce((s,p)=>s+Number(p.monto||0),0);
+  const comisionSaldo   = t => comisionCausada(t) - comisionPagada(t);
 
   const openPayJob = (job) => {
     const tech = technicians.find(t=>t.id===job.technician_id)||null;
@@ -5415,11 +5508,34 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     setShowPayModal(true);
   };
 
+  // Pago de COMISIÓN: no va contra un job, va contra un proyecto
+  const openPayComision = (tech, com) => {
+    setPayingJob(null);
+    setSelectedTech(tech);
+    setComPaying(com);
+    setPayForm({ monto:String(Math.round(com.saldo)), fecha:new Date().toISOString().split("T")[0],
+                 notas:`Comisión ${com.pct}% M.O. — ${com.project.name}`, job_id:"" });
+    setShowPayModal(true);
+  };
+
   const handlePay = async () => {
     if (!payForm.monto || !selectedTech) return;
     setSaving(true);
+    if (comPaying) {
+      await sb.from("technician_payments").insert({
+        technician_id: selectedTech.id, job_id: null,
+        project_id: comPaying.project.id, payment_type: "comision",
+        fecha: payForm.fecha, monto: Number(payForm.monto), notas: payForm.notas||null
+      });
+      setShowPayModal(false); setComPaying(null);
+      setPayForm({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
+      setSaving(false); loadData();
+      return;
+    }
+    const job0 = payForm.job_id ? jobs.find(j=>j.id===payForm.job_id) : null;
     await sb.from("technician_payments").insert({
       technician_id: selectedTech.id, job_id: payForm.job_id||null,
+      project_id: job0?.project_id || null, payment_type: "mano_obra",
       fecha: payForm.fecha, monto: Number(payForm.monto), notas: payForm.notas||null
     });
     // Si hay job vinculado, cerrarlo
@@ -5741,6 +5857,73 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
         );
       })()}
 
+      {/* Historial mensual de pagos */}
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, marginBottom:16, overflow:"hidden" }}>
+        <div onClick={()=>setShowHistorial(v=>!v)}
+          style={{ padding:"10px 18px", display:"flex", justifyContent:"space-between", alignItems:"center",
+                   cursor:"pointer", background:G.surface }}>
+          <span style={{ fontSize:12, fontWeight:700 }}>📅 Historial mensual de pagos</span>
+          <span style={{ color:G.muted, fontSize:11 }}>{showHistorial?"▲":"▼"}</span>
+        </div>
+        {showHistorial && (()=>{
+          // Agrupa por mes según FECHA DE PAGO (coincide con el flujo de caja real)
+          const meses = {};
+          payments.forEach(p=>{
+            const m = (p.fecha||"").slice(0,7);
+            if (!m) return;
+            if (!meses[m]) meses[m] = { mo:0, com:0, n:0 };
+            if (p.payment_type === "comision") meses[m].com += Number(p.monto||0);
+            else meses[m].mo += Number(p.monto||0);
+            meses[m].n += 1;
+          });
+          const orden = Object.keys(meses).sort().reverse();
+          if (!orden.length) return (
+            <div style={{ padding:20, textAlign:"center", color:G.muted, fontSize:12 }}>Aún no hay pagos registrados.</div>
+          );
+          const nombreMes = m => {
+            const [a,mm] = m.split("-");
+            return new Date(Number(a), Number(mm)-1, 1)
+              .toLocaleDateString("es-CO",{month:"long",year:"numeric"});
+          };
+          return (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ background:G.surface }}>
+                  {["Mes","Mano de obra","Comisiones","Total","vs. mes anterior"].map((h,i)=>(
+                    <th key={h} style={{ padding:"7px 14px", color:G.muted, fontWeight:600, fontSize:10,
+                                         textAlign:i===0?"left":"right" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {orden.map((m,idx)=>{
+                  const d = meses[m];
+                  const tot = d.mo + d.com;
+                  const prev = orden[idx+1] ? meses[orden[idx+1]].mo + meses[orden[idx+1]].com : null;
+                  const dif = prev===null ? null : tot - prev;
+                  const pct = prev ? Math.round((dif/prev)*100) : null;
+                  return (
+                    <tr key={m} style={{ borderTop:`1px solid ${G.border}` }}>
+                      <td style={{ padding:"7px 14px", textTransform:"capitalize" }}>
+                        {nombreMes(m)}
+                        <span style={{ color:G.muted, fontSize:10, marginLeft:6 }}>{d.n} pago{d.n!==1?"s":""}</span>
+                      </td>
+                      <td style={{ padding:"7px 14px", textAlign:"right", fontFamily:G.mono, color:"#f59e0b" }}>{fmtCOP(d.mo)}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right", fontFamily:G.mono, color:"#a855f7" }}>{fmtCOP(d.com)}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right", fontFamily:G.mono, fontWeight:700 }}>{fmtCOP(tot)}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right", fontSize:11,
+                                   color: dif===null ? G.muted : (dif>0 ? "#ef4444" : "#22c55e") }}>
+                        {dif===null ? "—" : `${dif>0?"▲":"▼"} ${fmtCOP(Math.abs(dif))}${pct!==null?` (${Math.abs(pct)}%)`:""}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          );
+        })()}
+      </div>
+
       {/* Filtros */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
         {FILTERS.map(f=>(
@@ -5769,7 +5952,11 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
             const pagado    = techPagado(t);
             const pendiente = techPendiente(t);
             const isOpen    = selectedTech?.id === t.id && !showPayModal;
-            if (tjobs.length === 0 && filter !== "abierto") return null;
+            const comisiones = comisionesDe(t);
+            const comCausado = comisiones.reduce((s,c)=>s+c.causado,0);
+            const comPagado  = comisionPagada(t);
+            const comSaldo   = comCausado - comPagado;
+            if (tjobs.length === 0 && comisiones.length === 0 && filter !== "abierto") return null;
             return (
               <div key={t.id} style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflow:"hidden" }}>
                 {/* Header técnico */}
@@ -5805,6 +5992,58 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                       style={{ color:G.muted, cursor:"pointer" }}>{isOpen?"▲":"▼"}</span>
                   </div>
                 </div>
+
+                {/* Comisiones por mano de obra */}
+                {isOpen && comisiones.length > 0 && (
+                  <div style={{ borderBottom:`1px solid ${G.border}`, background:"rgba(59,130,246,.04)" }}>
+                    <div style={{ padding:"10px 18px", display:"flex", justifyContent:"space-between",
+                                  alignItems:"center", flexWrap:"wrap", gap:10 }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:G.accent }}>🤝 Comisiones por mano de obra</span>
+                      <div style={{ display:"flex", gap:14 }}>
+                        {[{l:"Causado",v:comCausado,c:G.text},
+                          {l:"Pagado",v:comPagado,c:"#22c55e"},
+                          {l:"Saldo",v:comSaldo,c:comSaldo>0?"#f59e0b":G.muted}].map(x=>(
+                          <div key={x.l} style={{ textAlign:"right" }}>
+                            <div style={{ fontSize:10, color:G.muted }}>{x.l}</div>
+                            <div style={{ fontWeight:700, fontSize:13, color:x.c }}>{fmtCOP(x.v)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                      <thead>
+                        <tr style={{ background:G.surface }}>
+                          {["Proyecto","Base M.O. (venta sin IVA)","%","Causado","Pagado","Saldo",""].map((h,i)=>(
+                            <th key={h+i} style={{ padding:"6px 12px", color:G.muted, fontWeight:600, fontSize:10,
+                                                   textAlign: i===0?"left":"right" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comisiones.map(c=>(
+                          <tr key={c.project.id} style={{ borderTop:`1px solid ${G.border}` }}>
+                            <td style={{ padding:"7px 12px" }}>{c.project.name}</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmtCOP(c.base)}</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", color:G.muted }}>{c.pct}%</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600 }}>{fmtCOP(c.causado)}</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, color:"#22c55e" }}>{fmtCOP(c.pagado)}</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600,
+                                         color:c.saldo>0?"#f59e0b":G.muted }}>{fmtCOP(c.saldo)}</td>
+                            <td style={{ padding:"7px 12px", textAlign:"right" }}>
+                              {c.saldo > 0 && (
+                                <button onClick={()=>openPayComision(t, c)}
+                                  style={{ background:G.accent, color:"#fff", border:"none", padding:"4px 10px",
+                                           borderRadius:6, cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                                  Pagar
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Tabla trabajos */}
                 {isOpen && (
@@ -5990,9 +6229,28 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
       {showPayModal && selectedTech && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
                       display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
-             onClick={e=>e.target===e.currentTarget&&setShowPayModal(false)}>
+             onClick={e=>{ if(e.target===e.currentTarget){ setShowPayModal(false); setComPaying(null); } }}>
           <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:440 }}>
-            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💸 Registrar pago</div>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>
+              {comPaying ? "🤝 Pagar comisión" : "💸 Registrar pago"}
+            </div>
+            {comPaying && (
+              <div style={{ marginBottom:16, background:G.surface, border:`1px solid ${G.border}`,
+                            borderRadius:8, padding:"10px 12px", fontSize:12 }}>
+                <div style={{ marginBottom:6 }}>
+                  <span style={{color:G.muted}}>Técnico: </span><strong>{selectedTech?.name}</strong>
+                </div>
+                <div style={{ marginBottom:6 }}>
+                  <span style={{color:G.muted}}>Proyecto: </span><strong>{comPaying.project.name}</strong>
+                </div>
+                <div style={{ display:"flex", gap:16, color:G.muted, fontSize:11 }}>
+                  <span>Base M.O.: <strong style={{color:G.text}}>{fmtCOP(comPaying.base)}</strong></span>
+                  <span>{comPaying.pct}%</span>
+                  <span>Causado: <strong style={{color:G.text}}>{fmtCOP(comPaying.causado)}</strong></span>
+                  <span>Saldo: <strong style={{color:"#f59e0b"}}>{fmtCOP(comPaying.saldo)}</strong></span>
+                </div>
+              </div>
+            )}
             {payingJob && (() => {
               const relJobs = payingJob.relatedJobs || [{...payingJob, pendiente: Number(payingJob.valor_acordado||0), pagado:0}];
               const selectedIds = payingJob.selectedJobIds || [payingJob.id];
@@ -6057,7 +6315,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                 placeholder="Observaciones" style={inp} />
             </div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button onClick={()=>setShowPayModal(false)}
+              <button onClick={()=>{ setShowPayModal(false); setComPaying(null); }}
                 style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
                          padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
               <button onClick={handlePay} disabled={saving||!payForm.monto}
@@ -6287,6 +6545,10 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   // Pagos a técnicos en el período
   const techPaymentsInRange = techPayments.filter(p => (p.fecha||"")  >= dateFrom && (p.fecha||"") <= dateTo);
   const totalTecnicos = techPaymentsInRange.reduce((s,p)=>s+Number(p.monto||0),0);
+  // Separar mano de obra de comisiones (payment_type)
+  const esComision = p => p.payment_type === "comision";
+  const totalManoObra  = techPaymentsInRange.filter(p=>!esComision(p)).reduce((s,p)=>s+Number(p.monto||0),0);
+  const totalComisiones= techPaymentsInRange.filter(esComision).reduce((s,p)=>s+Number(p.monto||0),0);
   const techSummary = technicians.map(t => ({
     ...t,
     pagos: techPaymentsInRange.filter(p=>p.technician_id===t.id),
@@ -6361,7 +6623,8 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             {[
               { label:"Cotizaciones aprobadas", value:fmtCOP(totalCotizado), color:pc },
               { label:"Total ingresado", value:fmtCOP(totalIngresado), color:"#22c55e" },
-              { label:"Pagado a técnicos", value:fmtCOP(totalTecnicos), color:"#f59e0b" },
+              { label:"Mano de obra", value:fmtCOP(totalManoObra), color:"#f59e0b" },
+              { label:"Comisiones", value:fmtCOP(totalComisiones), color:"#a855f7" },
             ].map(c=>(
               <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`,
                                           borderRadius:8, padding:"14px 16px" }}>
@@ -6525,6 +6788,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
             {techSummary.length > 0 && (
               <div style={{ textAlign:"right", fontWeight:700, fontSize:14, color:"#f59e0b", marginTop:8 }}>
                 Total pagado a técnicos: {fmtCOP(totalTecnicos)}
+                <span style={{ color:G.muted, fontWeight:400, marginLeft:8 }}>
+                  (M.O. {fmtCOP(totalManoObra)} · Comisiones {fmtCOP(totalComisiones)})
+                </span>
               </div>
             )}
           </div>
@@ -7520,6 +7786,16 @@ export default function App() {
     setProjectPayments(pps => pps.filter(p => p.id!==id));
   };
 
+  // Comisión por mano de obra: técnico asignado + % editable por proyecto
+  const updateProjectCommission = async (id, patch) => {
+    const row = {};
+    if (patch.technicianId !== undefined) row.commission_technician_id = patch.technicianId || null;
+    if (patch.percent      !== undefined) row.commission_percent = patch.percent === "" || patch.percent === null ? null : Number(patch.percent);
+    if (!Object.keys(row).length) return;
+    await sb.from("projects").update(row).eq("id", id);
+    setProjects(ps => ps.map(p => p.id===id ? {...p, ...row} : p));
+  };
+
   const updateProjectStatus = async (id, status) => {
     await sb.from("projects").update({ status }).eq("id", id);
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
@@ -7711,6 +7987,8 @@ export default function App() {
                                    updateProjectStatus={updateProjectStatus}
                                    projectPurchases={projectPurchases}
                                    savePurchaseRow={savePurchaseRow}
+                                   updateProjectCommission={updateProjectCommission}
+                                   techniciansList={techniciansList}
                                    deletePurchaseRow={deletePurchaseRow}
                                    products={products}
                                    suppliers={suppliers}
