@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.5.1</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3515,6 +3515,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
   const [copiedProv, setCopiedProv] = useState(null);
+  const [detalleProv, setDetalleProv] = useState(null);
+  const [pedidoSel, setPedidoSel] = useState({});
+  const [confirmando, setConfirmando] = useState(null);
+  const [showTandas, setShowTandas] = useState(false);
   const [showPedidos, setShowPedidos] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [taskModal, setTaskModal]   = useState(false);
@@ -4038,25 +4042,35 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 });
               });
 
-              // Agrupar lo PENDIENTE por proveedor. Cada asignación no comprada aporta su cantidad;
-              // el resto sin asignar cae en "Sin proveedor" (o en el sugerido del catálogo).
-              const grupos = {};
-              const push = (prov, it, qty) => {
-                const k = (prov||"").trim() || "— Sin proveedor —";
-                if (!grupos[k]) grupos[k] = [];
-                grupos[k].push({ ...it, qty });
+              // Agrupar lo PENDIENTE por proveedor. Solo entra lo NO comprado, así lo que ya
+              // se pidió en una etapa anterior no vuelve a sumar en la siguiente.
+              // La llave se normaliza (minúsculas, sin espacios) para que "Onatech", "onatech"
+              // y "ONATECH " caigan en el mismo grupo, vengan del catálogo o escritas a mano.
+              const grupos = {};   // key normalizada -> { label, items:[] }
+              const norm = v => (v||"").trim().toLowerCase().replace(/\s+/g," ");
+              const push = (prov, it, qty, rowId) => {
+                const limpio = (prov||"").trim().replace(/\s+/g," ");
+                const k = norm(limpio) || "__sin__";
+                if (!grupos[k]) grupos[k] = { label: limpio || "— Sin proveedor —", items: [] };
+                // rowId null = cantidad aún sin fila en BD (se creará al confirmar la tanda)
+                grupos[k].items.push({ ...it, qty, rowId: rowId ?? null });
               };
+              // Solo entra lo que NO está comprado y NO se ha pedido todavía.
+              // Así una tanda ya enviada no vuelve a aparecer en la siguiente.
               allItems.forEach(it => {
-                it.asignaciones.filter(a=>!a.purchased && Number(a.qtyAsig)>0)
-                  .forEach(a => push(a.supplier, it, Number(a.qtyAsig)));
-                if (it.resto > 0) push(it.supplierSugerido, it, it.resto);
+                it.asignaciones.filter(a=>!a.purchased && !a.ordered_at && Number(a.qtyAsig)>0)
+                  .forEach(a => push(a.supplier, it, Number(a.qtyAsig), a.id));
+                if (it.resto > 0) push(it.supplierSugerido, it, it.resto, null);
               });
-              const pendientesItems = Object.values(grupos).flat();
+              const pendientesItems = Object.values(grupos).flatMap(g=>g.items);
               const gruposOrden = Object.keys(grupos).sort((a,b)=>{
-                if (a.startsWith("—")) return 1;
-                if (b.startsWith("—")) return -1;
-                return a.localeCompare(b);
+                if (a === "__sin__") return 1;
+                if (b === "__sin__") return -1;
+                return grupos[a].label.localeCompare(grupos[b].label);
               });
+              // Costo de un conjunto de líneas (solo visual, nunca se imprime)
+              const costoDe = items => items.reduce((s,i)=>
+                s + Number(i.costCOP||i.cost||0) * Number(i.qty||0), 0);
 
               // Consolida ítems repetidos (misma referencia y unidad) sumando cantidades.
               // Aplica SOLO al pedido: la tabla de compras se mantiene línea por línea.
@@ -4066,24 +4080,92 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   const ref = (it.sku||"").trim().toLowerCase();
                   const key = `${ref || (it.name||"").trim().toLowerCase()}||${(it.unit||"").trim().toLowerCase()}`;
                   const prev = mapa.get(key);
+                  const cu = Number(it.costCOP||it.cost||0);
                   if (prev) {
                     prev.qty += Number(it.qty||0);
+                    prev.costoTotal += cu * Number(it.qty||0);
                     prev.lineas += 1;
+                    prev.partes.push(it);
                     if (!prev.zonas.includes(it.quoteNum)) prev.zonas.push(it.quoteNum);
                   } else {
-                    mapa.set(key, { sku:it.sku, name:it.name, unit:it.unit,
-                                    qty:Number(it.qty||0), lineas:1, zonas:[it.quoteNum] });
+                    mapa.set(key, { key, sku:it.sku, name:it.name, unit:it.unit, costUnit:cu,
+                                    qty:Number(it.qty||0), costoTotal: cu*Number(it.qty||0),
+                                    lineas:1, zonas:[it.quoteNum], partes:[it] });
                   }
                 });
                 return [...mapa.values()].sort((a,b)=>(a.sku||a.name||"").localeCompare(b.sku||b.name||""));
+              };
+
+              // Selección de la tanda actual: por defecto todo marcado con su cantidad pendiente
+              const selDe = (gk, c) => {
+                const v = pedidoSel[`${gk}|${c.key}`];
+                return v === undefined ? { on:true, qty:c.qty } : v;
+              };
+              const setSel = (gk, c, patch) => setPedidoSel(ps => ({
+                ...ps, [`${gk}|${c.key}`]: { ...selDe(gk,c), ...patch }
+              }));
+              const seleccionDe = (gk, cons) => cons
+                .map(c => ({ c, s: selDe(gk,c) }))
+                .filter(x => x.s.on && Number(x.s.qty) > 0)
+                .map(x => ({ ...x.c, qtyPedida: Math.min(Number(x.s.qty), x.c.qty) }));
+              const costoSeleccion = (gk, cons) =>
+                seleccionDe(gk, cons).reduce((s,c)=>s + c.costUnit * c.qtyPedida, 0);
+
+              // Confirma la tanda: marca como pedidas las filas seleccionadas.
+              // Si se pide menos de lo pendiente, parte la fila y deja el resto para después.
+              const confirmarTanda = async (gk, prov, cons) => {
+                const sel = seleccionDe(gk, cons);
+                if (!sel.length) return;
+                const ok = await confirm(
+                  `¿Confirmar pedido a ${prov}?`,
+                  `${sel.length} referencia${sel.length!==1?"s":""} por ${fmt(costoSeleccion(gk,cons))}. ` +
+                  `Quedarán marcadas como pedidas y saldrán del panel hasta que registres su llegada.`
+                );
+                if (!ok) return;
+                const cuando = new Date().toISOString();
+                const batch  = `${prov.replace(/[^A-Za-z0-9]/g,"").slice(0,6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+                setConfirmando(gk);
+                try {
+                  for (const c of sel) {
+                    let falta = c.qtyPedida;
+                    for (const parte of c.partes) {
+                      if (falta <= 0) break;
+                      const disp = Number(parte.qty||0);
+                      if (disp <= 0) continue;
+                      const usa = Math.min(disp, falta);
+                      if (parte.rowId) {
+                        if (usa < disp) {
+                          // Parte la fila: lo pedido queda marcado, el resto sigue pendiente
+                          await savePurchaseRow({ id:parte.rowId, qty:usa, orderedAt:cuando, batch });
+                          await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
+                                                  qty:disp-usa, supplier:prov, purchased:false });
+                        } else {
+                          await savePurchaseRow({ id:parte.rowId, orderedAt:cuando, batch });
+                        }
+                      } else {
+                        // Cantidad sin fila previa (venía de la sugerencia del catálogo)
+                        await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
+                                                qty:usa, supplier:prov, purchased:false,
+                                                orderedAt:cuando, batch });
+                        if (usa < disp) {
+                          await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
+                                                  qty:disp-usa, supplier:prov, purchased:false });
+                        }
+                      }
+                      falta -= usa;
+                    }
+                  }
+                  setPedidoSel({});
+                  setDetalleProv(null);
+                } finally { setConfirmando(null); }
               };
 
               const lineasPedido = (items) => items.map(it =>
                 `${it.sku||"—"}  |  ${it.name}  |  ${it.qty} ${it.unit||""}`.trim()
               );
 
-              const copiarWhatsapp = async (prov, items) => {
-                const cons = consolidar(items);
+              const copiarWhatsapp = async (prov, items, yaConsolidado) => {
+                const cons = yaConsolidado ? items : consolidar(items);
                 const txt = [
                   `*Pedido — ${config?.companyName||"Casa Inteligente"}*`,
                   `Proyecto: ${proj.name}`,
@@ -4101,8 +4183,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 } catch { window.prompt("Copia el texto:", txt); }
               };
 
-              const imprimirPedido = (prov, items) => {
-                const cons = consolidar(items);
+              const imprimirPedido = (prov, items, yaConsolidado, codigo) => {
+                if (!items.length) { alert("Selecciona al menos una referencia."); return; }
+                const cons = yaConsolidado ? items : consolidar(items);
                 const hayFusion = cons.some(c=>c.lineas>1);
                 const pc = config?.primaryColor || G.accent;
                 const w = window.open("","_blank","width=800,height=600");
@@ -4134,6 +4217,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       <div><strong>Proveedor:</strong> ${prov}</div>
                       <div><strong>Proyecto:</strong> ${proj.name}${proj.client_name?` — ${proj.client_name}`:""}</div>
                       <div><strong>Fecha:</strong> ${new Date().toISOString().split("T")[0]}</div>
+                      ${codigo?`<div><strong>Orden N°:</strong> ${codigo}</div>`:""}
                     </div>
                     <table>
                       <thead><tr><th style="width:40px">#</th><th style="width:150px">Referencia</th><th>Descripción</th><th style="width:90px;text-align:center">Cantidad</th></tr></thead>
@@ -4202,38 +4286,128 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       </div>
                       {showPedidos && (
                         <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8 }}>
-                          {gruposOrden.map(prov => {
-                            const items = grupos[prov];
-                            const cons = consolidar(items);
+                          {gruposOrden.map(key => {
+                            const grupo = grupos[key];
+                            const prov  = grupo.label;
+                            const items = grupo.items;
+                            const cons  = consolidar(items);
                             const fusionadas = items.length - cons.length;
-                            const sinProv = prov.startsWith("—");
+                            const sinProv = key === "__sin__";
+                            const costo = costoDe(items);
+                            const abierto = detalleProv === key;
                             return (
-                              <div key={prov} style={{ border:`1px solid ${G.border}`, borderRadius:7, padding:"10px 12px",
-                                                       display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                                <div style={{ minWidth:200 }}>
-                                  <div style={{ fontSize:13, fontWeight:600, color:sinProv?G.muted:G.text }}>{prov}</div>
-                                  <div style={{ fontSize:11, color:G.muted, marginTop:2 }}>
-                                    {cons.length} referencia{cons.length!==1?"s":""} · {cons.reduce((s,i)=>s+Number(i.qty||0),0)} unidades
-                                    {fusionadas>0 && <span style={{ color:G.accent }}> · {fusionadas} línea{fusionadas!==1?"s":""} consolidada{fusionadas!==1?"s":""}</span>}
+                              <div key={key} style={{ border:`1px solid ${G.border}`, borderRadius:7, overflow:"hidden" }}>
+                                <div style={{ padding:"10px 12px", display:"flex", justifyContent:"space-between",
+                                              alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                                  <div style={{ minWidth:190 }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:sinProv?G.muted:G.text }}>{prov}</div>
+                                    <div style={{ fontSize:11, color:G.muted, marginTop:2 }}>
+                                      {cons.length} referencia{cons.length!==1?"s":""} · {cons.reduce((s,i)=>s+Number(i.qty||0),0)} unidades
+                                      {fusionadas>0 && <span style={{ color:G.accent }}> · {fusionadas} consolidada{fusionadas!==1?"s":""}</span>}
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign:"right", minWidth:130 }}>
+                                    <div style={{ fontSize:10, color:G.muted }}>
+                                      {abierto ? "Costo seleccionado" : "Costo pendiente"}
+                                    </div>
+                                    <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:14, color:abierto?G.accent:G.text }}>
+                                      {fmt(abierto ? costoSeleccion(key, cons) : costo)}
+                                    </div>
+                                  </div>
+                                  <div style={{ display:"flex", gap:8 }}>
+                                    <button onClick={()=>setDetalleProv(abierto?null:key)}
+                                      style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
+                                               padding:"6px 10px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      {abierto ? "▲ Ocultar" : "▼ Ver detalle"}
+                                    </button>
+                                    {!sinProv && (<>
+                                      <button onClick={()=>imprimirPedido(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true)}
+                                        style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
+                                                 padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                        🖨️ Imprimir pedido
+                                      </button>
+                                      <button onClick={()=>copiarWhatsapp(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true)}
+                                        style={{ background: copiedProv===prov ? G.success : "none",
+                                                 color: copiedProv===prov ? "#fff" : G.muted,
+                                                 border:`1px solid ${copiedProv===prov?G.success:G.border}`,
+                                                 padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                        {copiedProv===prov ? "✓ Copiado" : "📋 Copiar WhatsApp"}
+                                      </button>
+                                    </>)}
                                   </div>
                                 </div>
-                                {sinProv ? (
-                                  <span style={{ fontSize:11, color:G.warn }}>Asigna proveedor abajo para generar el pedido</span>
-                                ) : (
-                                  <div style={{ display:"flex", gap:8 }}>
-                                    <button onClick={()=>imprimirPedido(prov, items)}
-                                      style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
-                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
-                                      🖨️ Imprimir pedido
-                                    </button>
-                                    <button onClick={()=>copiarWhatsapp(prov, items)}
-                                      style={{ background: copiedProv===prov ? G.success : "none",
-                                               color: copiedProv===prov ? "#fff" : G.muted,
-                                               border:`1px solid ${copiedProv===prov?G.success:G.border}`,
-                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
-                                      {copiedProv===prov ? "✓ Copiado" : "📋 Copiar WhatsApp"}
-                                    </button>
+                                {sinProv && (
+                                  <div style={{ padding:"0 12px 10px", fontSize:11, color:G.warn }}>
+                                    Asigna proveedor abajo para poder generar el pedido
                                   </div>
+                                )}
+                                {abierto && (
+                                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11,
+                                                  borderTop:`1px solid ${G.border}` }}>
+                                    <thead>
+                                      <tr style={{ background:G.surface }}>
+                                        {["","Referencia","Descripción","Pendiente","A pedir","Costo unit.","Subtotal"].map((h,i)=>(
+                                          <th key={i} style={{ padding:"6px 12px", color:G.muted, fontSize:10,
+                                                               fontWeight:600, textAlign:i<3?"left":"right" }}>{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {cons.map((c,i)=>{
+                                        const sel = selDe(key,c);
+                                        const pedir = Math.min(Number(sel.qty||0), c.qty);
+                                        return (
+                                          <tr key={i} style={{ borderTop:`1px solid ${G.border}`, opacity:sel.on?1:.45 }}>
+                                            <td style={{ padding:"6px 12px" }}>
+                                              <input type="checkbox" checked={!!sel.on}
+                                                onChange={()=>setSel(key,c,{ on:!sel.on })}
+                                                style={{ width:14,height:14,cursor:"pointer",accentColor:G.accent }} />
+                                            </td>
+                                            <td style={{ padding:"6px 12px", fontFamily:G.mono, color:G.accent }}>{c.sku||"—"}</td>
+                                            <td style={{ padding:"6px 12px" }}>
+                                              {c.name}
+                                              {c.lineas>1 && <span style={{ color:G.muted, fontSize:9, marginLeft:6 }}>({c.lineas} líneas)</span>}
+                                            </td>
+                                            <td style={{ padding:"6px 12px", textAlign:"right", color:G.muted }}>{c.qty} {c.unit||""}</td>
+                                            <td style={{ padding:"6px 12px", textAlign:"right" }}>
+                                              <input type="number" min="0" max={c.qty} value={sel.qty}
+                                                disabled={!sel.on}
+                                                onChange={e=>setSel(key,c,{ qty:e.target.value })}
+                                                style={{ width:60,textAlign:"center",fontSize:11,padding:"3px 4px",
+                                                         background:G.surface,color:G.text,borderRadius:4,
+                                                         border:`1px solid ${pedir<c.qty&&sel.on?G.warn:G.border}` }} />
+                                            </td>
+                                            <td style={{ padding:"6px 12px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmt(c.costUnit)}</td>
+                                            <td style={{ padding:"6px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600 }}>
+                                              {fmt(c.costUnit * (sel.on?pedir:0))}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr style={{ borderTop:`2px solid ${G.border}` }}>
+                                        <td colSpan={6} style={{ padding:"7px 12px", textAlign:"right", fontWeight:700 }}>Total de esta tanda</td>
+                                        <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:700, color:G.accent }}>
+                                          {fmt(costoSeleccion(key, cons))}
+                                        </td>
+                                      </tr>
+                                      {!sinProv && (
+                                        <tr>
+                                          <td colSpan={7} style={{ padding:"10px 12px", textAlign:"right" }}>
+                                            <button onClick={()=>confirmarTanda(key, prov, cons)}
+                                              disabled={confirmando===key || seleccionDe(key,cons).length===0}
+                                              style={{ background:G.success, color:"#fff", border:"none",
+                                                       padding:"7px 16px", borderRadius:6, fontWeight:700, fontSize:12,
+                                                       cursor: seleccionDe(key,cons).length?"pointer":"not-allowed",
+                                                       opacity: seleccionDe(key,cons).length?1:.4 }}>
+                                              {confirmando===key ? "Confirmando…" : "✓ Confirmar tanda como pedida"}
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tfoot>
+                                  </table>
                                 )}
                               </div>
                             );
@@ -4242,6 +4416,88 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       )}
                     </div>
                   )}
+
+                  {/* Historial de tandas ya pedidas */}
+                  {(()=>{
+                    const pedidas = [];
+                    allItems.forEach(it => it.asignaciones.filter(a=>a.ordered_at).forEach(a=>
+                      pedidas.push({ ...it, qty:a.qtyAsig, supplier:a.supplier, rowId:a.id,
+                                     ordered_at:a.ordered_at, batch:a.order_batch, purchased:a.purchased })));
+                    if (!pedidas.length) return null;
+                    const tandas = {};
+                    pedidas.forEach(x => {
+                      const k = x.batch || `${x.supplier}|${x.ordered_at}`;
+                      if (!tandas[k]) tandas[k] = { batch:x.batch, supplier:x.supplier, fecha:x.ordered_at, items:[] };
+                      tandas[k].items.push(x);
+                    });
+                    const orden = Object.keys(tandas).sort((a,b)=>
+                      String(tandas[b].fecha).localeCompare(String(tandas[a].fecha)));
+                    return (
+                      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:8, marginBottom:16, overflow:"hidden" }}>
+                        <div onClick={()=>setShowTandas(v=>!v)}
+                          style={{ padding:"10px 14px", display:"flex", justifyContent:"space-between",
+                                   alignItems:"center", cursor:"pointer", background:G.surface }}>
+                          <span style={{ fontSize:12, fontWeight:700, color:G.text }}>
+                            📋 Tandas pedidas
+                            <span style={{ color:G.muted, fontWeight:400, marginLeft:8 }}>
+                              {orden.length} orden{orden.length!==1?"es":""}
+                            </span>
+                          </span>
+                          <span style={{ color:G.muted, fontSize:11 }}>{showTandas?"▲":"▼"}</span>
+                        </div>
+                        {showTandas && (
+                          <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+                            {orden.map(k=>{
+                              const t = tandas[k];
+                              const cons = consolidar(t.items);
+                              const costo = cons.reduce((s,c)=>s+c.costoTotal,0);
+                              const recibidas = t.items.filter(x=>x.purchased).length;
+                              const completa = recibidas === t.items.length;
+                              return (
+                                <div key={k} style={{ border:`1px solid ${G.border}`, borderRadius:7, padding:"10px 12px",
+                                                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                                                      gap:12, flexWrap:"wrap" }}>
+                                  <div style={{ minWidth:190 }}>
+                                    <div style={{ fontSize:13, fontWeight:600 }}>
+                                      {t.supplier||"— Sin proveedor —"}
+                                      {t.batch && <span style={{ color:G.muted, fontFamily:G.mono, fontSize:10, marginLeft:8 }}>{t.batch}</span>}
+                                    </div>
+                                    <div style={{ fontSize:11, color:G.muted, marginTop:2 }}>
+                                      {String(t.fecha).split("T")[0]} · {cons.length} referencia{cons.length!==1?"s":""} ·{" "}
+                                      <span style={{ color: completa ? G.success : G.warn }}>
+                                        {completa ? "✓ recibida completa" : `${recibidas}/${t.items.length} recibidas`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign:"right", minWidth:110 }}>
+                                    <div style={{ fontSize:10, color:G.muted }}>Costo</div>
+                                    <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:14 }}>{fmt(costo)}</div>
+                                  </div>
+                                  <div style={{ display:"flex", gap:8 }}>
+                                    <button onClick={()=>imprimirPedido(t.supplier, cons, true, t.batch)}
+                                      style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
+                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      🖨️ Reimprimir
+                                    </button>
+                                    <button onClick={async()=>{
+                                        const ok = await confirm("¿Deshacer esta tanda?",
+                                          "Las referencias volverán al panel de pedidos pendientes.");
+                                        if (!ok) return;
+                                        for (const x of t.items) await savePurchaseRow({ id:x.rowId, orderedAt:null, batch:null });
+                                      }}
+                                      style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
+                                               padding:"6px 10px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      ↩ Deshacer
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <datalist id="lista-proveedores">
                     {suppliers.map(s=><option key={s.id} value={s.name} />)}
@@ -4291,7 +4547,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                             };
                             return (
                               <tr key={rowKey} style={{
-                                background: f.purchased?"rgba(16,185,129,.05)":"transparent",
+                                background: f.purchased?"rgba(16,185,129,.05)":(f.ordered_at?"rgba(245,158,11,.05)":"transparent"),
                                 borderBottom:`1px solid ${G.border}`,
                                 opacity: f.purchased ? 0.75 : 1
                               }}>
@@ -4311,6 +4567,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                              color:f.purchased?G.muted:(primera?G.text:G.muted),
                                              paddingLeft: primera?12:28 }}>
                                   {primera ? item.name : <span style={{fontSize:11,fontStyle:"italic"}}>reparto adicional</span>}
+                                  {f.ordered_at && !f.purchased && (
+                                    <span style={{ background:"rgba(245,158,11,.15)", color:G.warn, fontSize:9,
+                                                   padding:"2px 6px", borderRadius:4, marginLeft:8, whiteSpace:"nowrap" }}>
+                                      📋 Pedido {String(f.ordered_at).split("T")[0]}
+                                    </span>
+                                  )}
                                   {primera && item.sobreAsignado && (
                                     <span style={{ color:G.danger, fontSize:10, marginLeft:8 }}>
                                       ⚠ asignado {item.asignado} de {item.qtyTotal}
@@ -7849,6 +8111,8 @@ export default function App() {
       if (row.date     !== undefined) patch.purchase_date = row.date || null;
       if (row.qty      !== undefined) patch.qty           = row.qty === "" || row.qty === null ? null : Number(row.qty);
       if (row.purchased!== undefined) patch.purchased     = !!row.purchased;
+      if (row.orderedAt!== undefined) patch.ordered_at    = row.orderedAt || null;
+      if (row.batch    !== undefined) patch.order_batch   = row.batch || null;
       if (!Object.keys(patch).length) return null;
       await sb.from("project_purchases").update(patch).eq("id", row.id);
       setProjectPurchases(ps=>ps.map(p=>p.id===row.id?{...p,...patch}:p));
@@ -7859,6 +8123,7 @@ export default function App() {
                   purchase_date: row.date||null,
                   supplier: row.supplier||null,
                   qty: (row.qty===""||row.qty===undefined||row.qty===null) ? null : Number(row.qty),
+                  ordered_at: row.orderedAt||null, order_batch: row.batch||null,
                   created_by: user.id };
     const { data } = await sb.from("project_purchases").insert(ins).select().single();
     if (data) setProjectPurchases(ps=>[...ps,data]);
