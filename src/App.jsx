@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.0</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.2</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4081,6 +4081,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                   const key = `${ref || (it.name||"").trim().toLowerCase()}||${(it.unit||"").trim().toLowerCase()}`;
                   const prev = mapa.get(key);
                   const cu = Number(it.costCOP||it.cost||0);
+                  // IVA del COSTO (lo que cobra el proveedor), con la tarifa del ítem
+                  const tp = Number(it.itemTax!==undefined&&it.itemTax!==null ? it.itemTax : (it.tax!==undefined&&it.tax!==null ? it.tax : 19));
                   if (prev) {
                     prev.qty += Number(it.qty||0);
                     prev.costoTotal += cu * Number(it.qty||0);
@@ -4088,7 +4090,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     prev.partes.push(it);
                     if (!prev.zonas.includes(it.quoteNum)) prev.zonas.push(it.quoteNum);
                   } else {
-                    mapa.set(key, { key, sku:it.sku, name:it.name, unit:it.unit, costUnit:cu,
+                    mapa.set(key, { key, sku:it.sku, name:it.name, unit:it.unit, costUnit:cu, taxPct:tp,
                                     qty:Number(it.qty||0), costoTotal: cu*Number(it.qty||0),
                                     lineas:1, zonas:[it.quoteNum], partes:[it] });
                   }
@@ -4097,10 +4099,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               };
 
               // Selección de la tanda actual: por defecto todo marcado con su cantidad pendiente
+              // Arranca SIN nada seleccionado: el usuario marca lo que entra en esta tanda
               const selDe = (gk, c) => {
                 const v = pedidoSel[`${gk}|${c.key}`];
-                return v === undefined ? { on:true, qty:c.qty } : v;
+                return v === undefined ? { on:false, qty:c.qty } : v;
               };
+              const marcarTodo = (gk, cons, on) => setPedidoSel(ps => {
+                const n = { ...ps };
+                cons.forEach(c => { n[`${gk}|${c.key}`] = { on, qty: selDe(gk,c).qty }; });
+                return n;
+              });
               const setSel = (gk, c, patch) => setPedidoSel(ps => ({
                 ...ps, [`${gk}|${c.key}`]: { ...selDe(gk,c), ...patch }
               }));
@@ -4108,8 +4116,22 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 .map(c => ({ c, s: selDe(gk,c) }))
                 .filter(x => x.s.on && Number(x.s.qty) > 0)
                 .map(x => ({ ...x.c, qtyPedida: Math.min(Number(x.s.qty), x.c.qty) }));
-              const costoSeleccion = (gk, cons) =>
-                seleccionDe(gk, cons).reduce((s,c)=>s + c.costUnit * c.qtyPedida, 0);
+              const totalesSeleccion = (gk, cons) => seleccionDe(gk, cons).reduce((acc,c)=>{
+                const neto = c.costUnit * c.qtyPedida;
+                acc.neto += neto;
+                acc.iva  += neto * Number(c.taxPct||0) / 100;
+                return acc;
+              }, { neto:0, iva:0 });
+              const costoSeleccion = (gk, cons) => {
+                const t = totalesSeleccion(gk, cons);
+                return t.neto + t.iva;
+              };
+              // Totales de todo lo pendiente del grupo (sin filtrar por selección)
+              const totalesGrupo = (cons) => cons.reduce((acc,c)=>{
+                acc.neto += c.costoTotal;
+                acc.iva  += c.costoTotal * Number(c.taxPct||0) / 100;
+                return acc;
+              }, { neto:0, iva:0 });
 
               // Confirma la tanda: marca como pedidas las filas seleccionadas.
               // Si se pide menos de lo pendiente, parte la fila y deja el resto para después.
@@ -4306,14 +4328,22 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                       {fusionadas>0 && <span style={{ color:G.accent }}> · {fusionadas} consolidada{fusionadas!==1?"s":""}</span>}
                                     </div>
                                   </div>
-                                  <div style={{ textAlign:"right", minWidth:130 }}>
-                                    <div style={{ fontSize:10, color:G.muted }}>
-                                      {abierto ? "Costo seleccionado" : "Costo pendiente"}
-                                    </div>
-                                    <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:14, color:abierto?G.accent:G.text }}>
-                                      {fmt(abierto ? costoSeleccion(key, cons) : costo)}
-                                    </div>
-                                  </div>
+                                  {(()=>{
+                                    const t = abierto ? totalesSeleccion(key, cons) : totalesGrupo(cons);
+                                    return (
+                                      <div style={{ textAlign:"right", minWidth:150 }}>
+                                        <div style={{ fontSize:10, color:G.muted }}>
+                                          {abierto ? "A pagar (seleccionado)" : "A pagar (pendiente)"}
+                                        </div>
+                                        <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:15, color:abierto?G.accent:G.text }}>
+                                          {fmt(t.neto + t.iva)}
+                                        </div>
+                                        <div style={{ fontSize:10, color:G.muted, fontFamily:G.mono }}>
+                                          {fmt(t.neto)} + IVA {fmt(t.iva)}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                   <div style={{ display:"flex", gap:8 }}>
                                     <button onClick={()=>setDetalleProv(abierto?null:key)}
                                       style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
@@ -4346,9 +4376,16 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                                   borderTop:`1px solid ${G.border}` }}>
                                     <thead>
                                       <tr style={{ background:G.surface }}>
-                                        {["","Referencia","Descripción","Pendiente","A pedir","Costo unit.","Subtotal"].map((h,i)=>(
-                                          <th key={i} style={{ padding:"6px 12px", color:G.muted, fontSize:10,
-                                                               fontWeight:600, textAlign:i<3?"left":"right" }}>{h}</th>
+                                        <th style={{ padding:"6px 10px", textAlign:"left" }}>
+                                          <input type="checkbox"
+                                            checked={cons.length>0 && cons.every(c=>selDe(key,c).on)}
+                                            onChange={e=>marcarTodo(key, cons, e.target.checked)}
+                                            title="Marcar / desmarcar todo"
+                                            style={{ width:14,height:14,cursor:"pointer",accentColor:G.accent }} />
+                                        </th>
+                                        {["Referencia","Descripción","Pendiente","A pedir","Costo unit.","Neto","IVA","Total"].map((h,i)=>(
+                                          <th key={i} style={{ padding:"6px 10px", color:G.muted, fontSize:10,
+                                                               fontWeight:600, textAlign:i<2?"left":"right" }}>{h}</th>
                                         ))}
                                       </tr>
                                     </thead>
@@ -4377,24 +4414,45 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                                          background:G.surface,color:G.text,borderRadius:4,
                                                          border:`1px solid ${pedir<c.qty&&sel.on?G.warn:G.border}` }} />
                                             </td>
-                                            <td style={{ padding:"6px 12px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmt(c.costUnit)}</td>
-                                            <td style={{ padding:"6px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:600 }}>
-                                              {fmt(c.costUnit * (sel.on?pedir:0))}
-                                            </td>
+                                            <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmt(c.costUnit)}</td>
+                                            {(()=>{
+                                              const neto = c.costUnit * (sel.on?pedir:0);
+                                              const iva  = neto * Number(c.taxPct||0)/100;
+                                              return (<>
+                                                <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono }}>{fmt(neto)}</td>
+                                                <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono, color:G.muted, fontSize:10 }}>
+                                                  {fmt(iva)}<span style={{ marginLeft:3 }}>({c.taxPct}%)</span>
+                                                </td>
+                                                <td style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono, fontWeight:700 }}>{fmt(neto+iva)}</td>
+                                              </>);
+                                            })()}
                                           </tr>
                                         );
                                       })}
                                     </tbody>
                                     <tfoot>
-                                      <tr style={{ borderTop:`2px solid ${G.border}` }}>
-                                        <td colSpan={6} style={{ padding:"7px 12px", textAlign:"right", fontWeight:700 }}>Total de esta tanda</td>
-                                        <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, fontWeight:700, color:G.accent }}>
-                                          {fmt(costoSeleccion(key, cons))}
-                                        </td>
-                                      </tr>
+                                      {(()=>{
+                                        const t = totalesSeleccion(key, cons);
+                                        return (<>
+                                          <tr style={{ borderTop:`2px solid ${G.border}` }}>
+                                            <td colSpan={6} style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>Costo neto</td>
+                                            <td colSpan={3} style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono }}>{fmt(t.neto)}</td>
+                                          </tr>
+                                          <tr>
+                                            <td colSpan={6} style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>IVA</td>
+                                            <td colSpan={3} style={{ padding:"6px 10px", textAlign:"right", fontFamily:G.mono }}>{fmt(t.iva)}</td>
+                                          </tr>
+                                          <tr style={{ borderTop:`1px solid ${G.border}` }}>
+                                            <td colSpan={6} style={{ padding:"8px 10px", textAlign:"right", fontWeight:700 }}>Total a pagar</td>
+                                            <td colSpan={3} style={{ padding:"8px 10px", textAlign:"right", fontFamily:G.mono, fontWeight:700, color:G.accent, fontSize:14 }}>
+                                              {fmt(t.neto + t.iva)}
+                                            </td>
+                                          </tr>
+                                        </>);
+                                      })()}
                                       {!sinProv && (
                                         <tr>
-                                          <td colSpan={7} style={{ padding:"10px 12px", textAlign:"right" }}>
+                                          <td colSpan={9} style={{ padding:"10px 12px", textAlign:"right" }}>
                                             <button onClick={()=>confirmarTanda(key, prov, cons)}
                                               disabled={confirmando===key || seleccionDe(key,cons).length===0}
                                               style={{ background:G.success, color:"#fff", border:"none",
@@ -4450,7 +4508,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                             {orden.map(k=>{
                               const t = tandas[k];
                               const cons = consolidar(t.items);
-                              const costo = cons.reduce((s,c)=>s+c.costoTotal,0);
+                              const tt = totalesGrupo(cons);
+                              const costo = tt.neto + tt.iva;
                               const recibidas = t.items.filter(x=>x.purchased).length;
                               const completa = recibidas === t.items.length;
                               return (
@@ -4470,8 +4529,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                     </div>
                                   </div>
                                   <div style={{ textAlign:"right", minWidth:110 }}>
-                                    <div style={{ fontSize:10, color:G.muted }}>Costo</div>
+                                    <div style={{ fontSize:10, color:G.muted }}>Pagado</div>
                                     <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:14 }}>{fmt(costo)}</div>
+                                    <div style={{ fontSize:10, color:G.muted, fontFamily:G.mono }}>{fmt(tt.neto)} + IVA</div>
                                   </div>
                                   <div style={{ display:"flex", gap:8 }}>
                                     <button onClick={()=>imprimirPedido(t.supplier, cons, true, t.batch)}
