@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.2</span>
+            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.3</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4099,6 +4099,17 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               };
 
               // Selección de la tanda actual: por defecto todo marcado con su cantidad pendiente
+              // Consecutivo global de pedidos: PED-0001, PED-0002…
+              // Se calcula sobre TODA la tabla de compras, no solo este proyecto.
+              const siguienteConsecutivo = () => {
+                const nums = (projectPurchases||[])
+                  .map(pp => /^PED-(\d+)$/.exec(pp.order_batch||""))
+                  .filter(Boolean)
+                  .map(m => parseInt(m[1],10));
+                const max = nums.length ? Math.max(...nums) : 0;
+                return `PED-${String(max+1).padStart(4,"0")}`;
+              };
+
               // Arranca SIN nada seleccionado: el usuario marca lo que entra en esta tanda
               const selDe = (gk, c) => {
                 const v = pedidoSel[`${gk}|${c.key}`];
@@ -4145,7 +4156,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 );
                 if (!ok) return;
                 const cuando = new Date().toISOString();
-                const batch  = `${prov.replace(/[^A-Za-z0-9]/g,"").slice(0,6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+                const batch  = siguienteConsecutivo();
                 setConfirmando(gk);
                 try {
                   for (const c of sel) {
@@ -4186,10 +4197,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 `${it.sku||"—"}  |  ${it.name}  |  ${it.qty} ${it.unit||""}`.trim()
               );
 
-              const copiarWhatsapp = async (prov, items, yaConsolidado) => {
+              const copiarWhatsapp = async (prov, items, yaConsolidado, codigo) => {
                 const cons = yaConsolidado ? items : consolidar(items);
                 const txt = [
-                  `*Pedido — ${config?.companyName||"Casa Inteligente"}*`,
+                  `*PEDIDO${codigo?" "+codigo:""}*`,
+                  `${config?.companyName||"Casa Inteligente"}`,
                   `Proyecto: ${proj.name}`,
                   `Proveedor: ${prov}`,
                   `Fecha: ${new Date().toISOString().split("T")[0]}`,
@@ -4233,13 +4245,13 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     .nota{font-size:10px;color:#64748b;font-style:italic;margin-bottom:8px}
                     @media print{body{padding:16px}}
                   </style></head><body>
-                    <h1>Solicitud de Pedido</h1>
+                    <h1>PEDIDO${codigo?` ${codigo}`:""}</h1>
                     <div class="sub">${config?.companyName||"Casa Inteligente"}${config?.nit?` — NIT ${config.nit}`:""}</div>
                     <div class="info">
                       <div><strong>Proveedor:</strong> ${prov}</div>
                       <div><strong>Proyecto:</strong> ${proj.name}${proj.client_name?` — ${proj.client_name}`:""}</div>
                       <div><strong>Fecha:</strong> ${new Date().toISOString().split("T")[0]}</div>
-                      ${codigo?`<div><strong>Orden N°:</strong> ${codigo}</div>`:""}
+                      ${codigo?`<div><strong>Pedido N°:</strong> ${codigo}</div>`:""}
                     </div>
                     <table>
                       <thead><tr><th style="width:40px">#</th><th style="width:150px">Referencia</th><th>Descripción</th><th style="width:90px;text-align:center">Cantidad</th></tr></thead>
@@ -4351,12 +4363,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                       {abierto ? "▲ Ocultar" : "▼ Ver detalle"}
                                     </button>
                                     {!sinProv && (<>
-                                      <button onClick={()=>imprimirPedido(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true)}
+                                      <button onClick={()=>imprimirPedido(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true, siguienteConsecutivo())}
                                         style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
                                                  padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
                                         🖨️ Imprimir pedido
                                       </button>
-                                      <button onClick={()=>copiarWhatsapp(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true)}
+                                      <button onClick={()=>copiarWhatsapp(prov, seleccionDe(key, cons).map(c=>({...c, qty:c.qtyPedida})), true, siguienteConsecutivo())}
                                         style={{ background: copiedProv===prov ? G.success : "none",
                                                  color: copiedProv===prov ? "#fff" : G.muted,
                                                  border:`1px solid ${copiedProv===prov?G.success:G.border}`,
