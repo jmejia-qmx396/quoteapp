@@ -91,6 +91,253 @@ const fmtCur = (n, cur) => cur === "USD" ? fmtUSD(n) : fmt(n);
 const today = () => new Date().toISOString().split("T")[0];
 const addDays = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt.toISOString().split("T")[0]; };
 
+// ── Documento para facturación (imprimir / PDF) ─────────────────
+// Helper de nivel superior para que tanto Informes → Facturación como
+// ProjectsView puedan abrir el mismo documento de facturación.
+function handlePrintInvoice(q, ivaItems, totalIva, config = {}) {
+  const pc = config?.primaryColor || "#0d6e6e";
+  const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
+  // Totales discriminados: base gravable vs IVA
+  const totalBase = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1), 0);
+  const totalIvaAmt = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1)*Number(i.itemTax||i.tax||0)/100, 0);
+  // Desglose por tarifa (por si hay ítems al 19% y al 5% en la misma cotización)
+  const porTarifa = {};
+  ivaItems.forEach(i => {
+    const t = Number(i.itemTax||i.tax||0);
+    const b = Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1);
+    if (!porTarifa[t]) porTarifa[t] = { base:0, iva:0 };
+    porTarifa[t].base += b;
+    porTarifa[t].iva  += b*t/100;
+  });
+  const tarifas = Object.keys(porTarifa).map(Number).sort((a,b)=>a-b);
+  const w = window.open("","_blank","width=800,height=600");
+  w.document.write(`
+    <html><head><title>Facturar — Cotización #${q.number}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;font-size:12px}
+      h1{font-size:18px;color:${pc};margin-bottom:14px;border-bottom:2px solid ${pc};padding-bottom:8px}
+      .info{margin-bottom:16px;font-size:12px;color:#475569}
+      .info strong{color:#1e293b}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:11px}
+      th{background:${pc};color:#fff;padding:6px 10px;text-align:left;font-size:10px}
+      td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
+      tr:nth-child(even) td{background:#f8fafc}
+      .total-row td{font-weight:700;font-size:13px;border-top:2px solid ${pc};color:${pc}}
+      .sub-row td{font-weight:600;font-size:12px;background:#f8fafc}
+      tfoot tr:nth-child(even) td{background:#f8fafc}
+      .resumen{margin-top:18px;border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#f8fafc}
+      .resumen h2{font-size:12px;color:${pc};margin-bottom:8px}
+      .resumen table{margin:0;font-size:11px}
+      .resumen th{background:#e2e8f0;color:#334155}
+      @media print{body{padding:16px}}
+    </style></head><body>
+      <h1>Documento para Facturación — ${config?.companyName||""}</h1>
+      <div class="info">
+        <div><strong>Cliente:</strong> ${q.clientName||""}</div>
+        <div><strong>NIT/RUT:</strong> ${q.clientRut||"—"}</div>
+        <div><strong>Cotización:</strong> #${q.number} &nbsp;|&nbsp; <strong>Fecha aprobación:</strong> ${q.approval_date||q.date||""}</div>
+      </div>
+      <table>
+        <thead><tr><th>Referencia</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio Unit.<br><span style="font-weight:400;font-size:9px">(sin IVA)</span></th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA %</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>
+          ${ivaItems.map(item => {
+            const precioBase = Number(item.netCOP||item.priceCOP||0);
+            const tasaIva = Number(item.itemTax||item.tax||0);
+            const base = precioBase * Number(item.qty||1);
+            const iva = base * tasaIva / 100;
+            return `<tr><td>${item.sku||"—"}</td><td>${item.name}</td><td style="text-align:right">${item.qty} ${item.unit||""}</td><td style="text-align:right">${fmtCOP(precioBase)}</td><td style="text-align:right">${fmtCOP(base)}</td><td style="text-align:right">${tasaIva}%</td><td style="text-align:right">${fmtCOP(iva)}</td><td style="text-align:right">${fmtCOP(base+iva)}</td></tr>`;
+          }).join("")}
+        </tbody>
+        <tfoot>
+          <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">Base gravable (subtotal sin IVA)</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalBase)}</td></tr>
+          <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">IVA</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalIvaAmt)}</td></tr>
+          <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px">TOTAL A FACTURAR</td><td colspan="2" style="text-align:right;padding:10px">${fmtCOP(totalBase+totalIvaAmt)}</td></tr>
+        </tfoot>
+      </table>
+      ${tarifas.length > 1 ? `
+      <div class="resumen">
+        <h2>Resumen por tarifa de IVA</h2>
+        <table>
+          <thead><tr><th>Tarifa</th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
+          <tbody>
+            ${tarifas.map(t=>`<tr>
+              <td>IVA ${t}%</td>
+              <td style="text-align:right">${fmtCOP(porTarifa[t].base)}</td>
+              <td style="text-align:right">${fmtCOP(porTarifa[t].iva)}</td>
+              <td style="text-align:right">${fmtCOP(porTarifa[t].base+porTarifa[t].iva)}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : ""}
+    </body></html>
+  `);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ w.print(); }, 400);
+}
+
+// ── Documento de cotización (imprimir / PDF) ────────────────────
+// Helper de nivel superior para que tanto QuotePreview como QuoteForm
+// puedan imprimir la cotización actual.
+function printQuoteDoc(quote, config = {}) {
+  const w = window.open("","_blank","width=900,height=700");
+  // Use personal profile if quote has profile="personal"
+  const prof = (quote.profile === "personal" && config.personal)
+    ? { ...config, ...config.personal }
+    : config;
+  const pc = prof.primaryColor || "#0d6e6e";
+  const fmtCOP = (n) => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
+  w.document.write(`
+    <html><head><title>Cotización #${quote.number}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:20px 28px;font-size:10px;line-height:1.4}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid ${pc}}
+      .logo-circle{width:38px;height:38px;border-radius:50%;background:${pc};color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+      .company-name{font-size:13px;font-weight:700;color:${pc}}
+      .badge{background:${pc}22;color:${pc};padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;display:inline-block}
+      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+      .info-box{background:#f8fafc;padding:6px 10px;border-radius:6px;border-left:2px solid ${pc}}
+      .lbl{font-size:8px;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:3px;letter-spacing:.06em}
+      table{width:100%;border-collapse:collapse;margin:8px 0;font-size:10px}
+      th{background:${pc};color:#fff;padding:5px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+      td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
+      tr:nth-child(even) td{background:#f8fafc}
+      .total-row td{font-weight:700;font-size:11px;border-top:2px solid ${pc};color:${pc};background:#fff}
+      .notes-box{background:#fffbeb;border-left:2px solid #f59e0b;padding:8px 10px;margin-top:10px;border-radius:0 6px 6px 0;white-space:pre-line;font-size:9px}
+      .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 12px;border-radius:6px;margin-top:8px;font-size:9px}
+      .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:8px}
+      code{font-family:monospace;color:${pc};font-size:9px}
+    </style></head><body>
+      <div class="header">
+        <div style="display:flex;align-items:center;gap:14px">
+          ${prof.logoUrl
+            ? `<img src="${prof.logoUrl}" alt="logo" style="height:50px;object-fit:contain">`
+            : `<div style="display:flex;align-items:center;gap:10px">
+                <div class="logo-circle">${(config.companyName||"C")[0]}</div>
+                <div>
+                  <div class="company-name">${prof.companyName||"Mi Empresa"}</div>
+                  <div style="color:#64748b;font-size:10px">${prof.slogan||""}</div>
+                  ${prof.website?`<div style="color:${pc};font-size:9px">${prof.website}</div>`:""}
+                </div>
+               </div>`}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:700;color:${pc};letter-spacing:-.02em">COTIZACIÓN</div>
+          <div style="font-size:12px;color:#475569;font-weight:600">N° ${quote.number}</div>
+          <div style="margin:2px 0"><span class="badge">${quote.status}</span></div>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="lbl">Señor(a)</div>
+          <strong style="font-size:11px">${quote.clientName}</strong>
+          <div style="color:#64748b">${quote.clientContact||""}</div>
+          <div style="color:#64748b">${quote.clientEmail||""}</div>
+        </div>
+        <div class="info-box">
+          <div class="lbl">Vendedor</div>
+          <strong>${prof.vendorName||""}</strong>
+          <div style="color:#64748b">${prof.vendorPhone||""}</div>
+          <div style="color:#64748b">${prof.vendorEmail||""}</div>
+          <div style="margin-top:8px;font-size:11px;color:#94a3b8">
+            Fecha: <strong style="color:#1e293b">${quote.date}</strong> &nbsp;|&nbsp;
+            Válida hasta: <strong style="color:#1e293b">${quote.validUntil}</strong>
+          </div>
+        </div>
+      </div>
+
+      <table>
+        <thead><tr><th style="width:36px">Img</th><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <tbody>
+          ${(()=>{
+            // compute section subtotals for PDF
+            const secMap = {};
+            let curHdr = "__root__";
+            for (const i of quote.items) {
+              if (i.type==="header") { curHdr=i.id; secMap[i.id]=0; }
+              else {
+                const p = i.priceCOP||Number(i.price);
+                const d = p*(Number(i.discount)||0)/100;
+                secMap[curHdr] = (secMap[curHdr]||0) + Number(i.qty)*(p-d);
+              }
+            }
+            return quote.items.map((it,i)=>{
+              const nextIt = quote.items[i+1];
+              const isLast = !nextIt || nextIt.type==="header";
+              if (it.type === "header") {
+                return `<tr><td colspan="5" style="background:${pc}18;color:${pc};font-weight:700;font-size:13px;padding:8px 12px;border-top:2px solid ${pc}">▸ ${it.name}</td></tr>`;
+              }
+              const priceCOP = it.priceCOP || Number(it.price);
+              const disc     = Number(it.discount)||0;
+              const discAmt  = priceCOP * disc / 100;
+              const netCOP   = priceCOP - discAmt;
+              const lineNet  = Number(it.qty) * netCOP;
+              let sectionId  = "__root__";
+              for (let k=i; k>=0; k--) { if(quote.items[k].type==="header"){sectionId=quote.items[k].id;break;} }
+              const subtotalRow = (sectionId!=="__root__" && isLast && secMap[sectionId]>0)
+                ? `<tr style="background:${pc}08"><td colspan="5" style="text-align:right;color:#64748b;font-style:italic;padding:5px 12px">Subtotal sección</td><td style="text-align:right;font-weight:700;color:${pc};padding:5px 12px">${fmtCOP(secMap[sectionId])}</td></tr>`
+                : "";
+              const imgCell = it.imageUrl
+                ? `<td style="width:36px;padding:2px"><img src="${it.imageUrl}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;border:1px solid #e2e8f0" crossorigin="anonymous"></td>`
+                : `<td style="width:36px"></td>`;
+              return `<tr>
+                ${imgCell}
+                <td><code>${it.sku||""}</code></td>
+                <td>${it.name}${disc>0?` <span style="color:#ef4444;font-size:10px">(-${disc}%)</span>`:""}</td>
+                <td style="text-align:center">${it.qty} ${it.unit||""}</td>
+                <td style="text-align:right">${fmtCOP(netCOP)}</td>
+                <td style="text-align:right;font-weight:600">${fmtCOP(lineNet)}</td>
+              </tr>${subtotalRow}`;
+            }).join("");
+          })()}
+        </tbody>
+        <tbody>
+          ${(quote.subtotalConIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">Subtotal con IVA</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotalConIva||0)}</td></tr>`:""}
+          ${(!quote.subtotalConIva&&!quote.subtotalSinIva)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>`:""}
+          ${(quote.totalDisc>0)?`<tr><td colspan="6" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
+          ${(quote.taxAmt>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
+          ${(quote.subtotalSinIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">Subtotal sin IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.subtotalSinIva||0)}</td></tr>`:""}
+          <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
+        </tbody>
+      </table>
+
+      ${quote.notes?`<div class="notes-box">${quote.notes}</div>`:""}
+
+      ${(config.bankName||config.bankAccount)?`
+      <div class="bank-box">
+        <div class="lbl" style="color:#16a34a">Datos para Consignación</div>
+        <div>Consignar a nombre de: <strong>${prof.accountHolder||config.companyName}</strong></div>
+        <div>NIT: <strong>${prof.nit||""}</strong></div>
+        <div>Cuenta ${prof.bankType} ${prof.bankName}: <strong>${prof.bankAccount}</strong></div>
+      </div>`:""}
+
+      <div class="footer">
+        <span>${prof.companyName||"QuoteApp"} · ${prof.nit||""}</span>
+        <span>Cotización válida hasta ${quote.validUntil} · Página 1 de 1</span>
+      </div>
+    </body></html>
+  `);
+  w.document.close();
+  w.focus();
+  // Wait for all images to load before printing
+  w.addEventListener("load", () => {
+    const imgs = w.document.querySelectorAll("img");
+    if (!imgs.length) { setTimeout(()=>w.print(), 300); return; }
+    let loaded = 0;
+    const tryPrint = () => { loaded++; if (loaded >= imgs.length) setTimeout(()=>w.print(), 300); };
+    imgs.forEach(img => {
+      if (img.complete) { tryPrint(); }
+      else { img.onload = tryPrint; img.onerror = tryPrint; }
+    });
+    // Fallback: print after 3 seconds regardless
+    setTimeout(()=>w.print(), 3000);
+  });
+}
+
 // ── Estilos globales ──────────────────────────────────────────────
 const G = {
   bg:       "#0d0f14",
@@ -472,7 +719,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.6.4</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.7.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -719,7 +966,7 @@ const recalc = (q) => {
 };
 
 // ── COTIZACIONES ─────────────────────────────────────────────────
-const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, createRevision, clients, products, setProducts, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject, createProject, templates=[] }) => {
+const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, createRevision, clients, products, setProducts, config, paymentRequests, savePaymentRequest, projectQuotes=[], projects=[], addQuoteToProject, createProject, templates=[], editRequest=null, onEditReturn=null }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [paymentQuote, setPaymentQuote] = useState(null);
   const [addToProjectQuote, setAddToProjectQuote] = useState(null);
@@ -732,6 +979,18 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
 
   const [modal, setModal] = useState(null);
   const [current, setCurrent] = useState(null);
+  // A qué modal volver al cerrar la vista previa (cuando se abre desde el editor)
+  const [viewReturnTo, setViewReturnTo] = useState(null);
+
+  // Snapshot de la cotización tal como quedó guardada; sirve para saber
+  // si hay cambios sin guardar sin depender del estado interno de QuoteForm.
+  const savedSnapRef = useRef("");
+  const isQuoteDirty = () => current != null && JSON.stringify(current) !== savedSnapRef.current;
+
+  // Cuando el editor se abre desde un proyecto (ProjectsView → ✏️ Abrir),
+  // al cerrarlo hay que regresar al proyecto de origen.
+  const [returnAfterClose, setReturnAfterClose] = useState(false);
+  const handledEditReqRef = useRef(null);
 
   // Auto-save draft when editing quote
   useEffect(() => {
@@ -747,14 +1006,16 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
     const handler = (e) => {
       const c = e.detail;
       const num = quoteCounter++;
-      setCurrent(recalc({
+      const q = recalc({
         id: Date.now(), number: num,
         date: today(), validUntil: addDays(today(), 30),
         clientId: c.id, clientName: c.name,
         clientContact: c.contact, clientEmail: c.email, clientRut: c.rfc||"",
         status: "Pendiente", notes: config?.defaultNotes||"",
         discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
-      }));
+      });
+      setCurrent(q);
+      savedSnapRef.current = JSON.stringify(q);
       setModal("new");
     };
     document.addEventListener("newQuoteForClient", handler);
@@ -769,24 +1030,37 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
     // Always start fresh — clear any existing draft
     clearQuoteDraft();
     const num = quoteCounter++;
-    setCurrent(recalc({
+    const q = recalc({
       id: Date.now(), number: num,
       date: today(), validUntil: addDays(today(), 30),
       clientId: null, clientName: "", clientContact: "", clientEmail: "",
       status: "Pendiente", notes: config?.defaultNotes||"",
       discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
-    }));
+    });
+    setCurrent(q);
+    savedSnapRef.current = JSON.stringify(q);
     setModal("new");
   };
 
-  const openEdit = (q) => { clearQuoteDraft(); setCurrent({ ...q }); setModal("edit"); };
-  const openView = (q) => { setCurrent({ ...q }); setModal("view"); };
+  const openEdit = (q) => { clearQuoteDraft(); const c = { ...q }; setCurrent(c); savedSnapRef.current = JSON.stringify(c); setViewReturnTo(null); setModal("edit"); };
+  const openView = (q) => { const c = { ...q }; setCurrent(c); savedSnapRef.current = JSON.stringify(c); setViewReturnTo(null); setModal("view"); };
 
   const openRevision = async (q) => {
     const newQ = await createRevision(q);
     setCurrent(newQ);
+    savedSnapRef.current = JSON.stringify(newQ);
     setModal("new");
   };
+
+  // Abrir el editor automáticamente cuando se llega desde un proyecto.
+  useEffect(() => {
+    if (!editRequest || editRequest === handledEditReqRef.current) return;
+    const q = quotes.find(x => x.id === editRequest.quoteId);
+    if (!q) return;
+    handledEditReqRef.current = editRequest;
+    openEdit(q);
+    setReturnAfterClose(true);
+  }, [editRequest, quotes]);
 
   const duplicateQuote = (q) => {
     const num = quoteCounter++;
@@ -805,6 +1079,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
       version: 1, parent_id: null, is_latest: true,
     });
     setCurrent(copy);
+    savedSnapRef.current = JSON.stringify(copy);
     setModal("new");
   };
 
@@ -816,23 +1091,73 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
       const wasApproved = quotes.find(q=>q.id===current.id)?.status === "Aprobada";
       const savedQuote = await saveQuote(current);
       // After first save, update current with real DB id so next save is an UPDATE not INSERT
+      let saved = current;
       if (savedQuote && current.id !== savedQuote.id) {
-        setCurrent(c => ({...c, id: savedQuote.id}));
+        saved = { ...current, id: savedQuote.id };
+        setCurrent(saved);
       }
+      // La cotización quedó sincronizada con la BD: ya no hay cambios sin guardar.
+      savedSnapRef.current = JSON.stringify(saved);
       if (!keepOpen) {
-        clearQuoteDraft();
-        setModal(null);
-        if (current.status === "Aprobada" && !wasApproved) {
-          const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
-          if (!alreadyInProject) {
-            setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
-            setApprovedQuoteForProject(current);
+        if (returnAfterClose) {
+          closeEditor();
+        } else {
+          clearQuoteDraft();
+          setModal(null);
+          if (current.status === "Aprobada" && !wasApproved) {
+            const alreadyInProject = projectQuotes?.find(pq=>pq.quote_id===current.id);
+            if (!alreadyInProject) {
+              setNewProjName(current.clientName + " — " + (current.date||"").substring(0,7));
+              setApprovedQuoteForProject(current);
+            }
           }
         }
       }
     } finally {
       setSaving(false);
     }
+  };
+
+  // Cierra el editor y, si se llegó desde un proyecto, vuelve a él.
+  const closeEditor = () => {
+    clearQuoteDraft();
+    setModal(null);
+    if (returnAfterClose) {
+      setReturnAfterClose(false);
+      handledEditReqRef.current = null;
+      onEditReturn?.();
+    }
+  };
+
+  // Si hay cambios sin guardar, pregunta si desea guardarlos antes de
+  // seguir con una acción del editor (vista previa, cuenta de cobro,
+  // imprimir). Nunca guarda automáticamente. Devuelve true para continuar.
+  const askSaveBeforeAction = async () => {
+    if (!isQuoteDirty()) return true;
+    const ok = await confirm(
+      "Hay cambios sin guardar en la cotización",
+      "¿Deseas guardarlos antes de continuar?"
+    );
+    if (ok) await save(true);
+    return true;
+  };
+
+  // Acciones de la barra del editor de cotizaciones
+  const editorPreview = async () => {
+    await askSaveBeforeAction();
+    setViewReturnTo(modal);
+    setModal("view");
+  };
+  const editorCreatePayment = async () => {
+    await askSaveBeforeAction();
+    setReturnAfterClose(false);
+    handledEditReqRef.current = null;
+    setModal(null);
+    setPaymentQuote(current);
+  };
+  const editorPrint = async () => {
+    await askSaveBeforeAction();
+    printQuoteDoc(current, config);
   };
 
   const remove = async (id) => {
@@ -900,8 +1225,13 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
               <th>Total</th><th>Estado</th><th>Acciones</th>
             </tr></thead>
             <tbody>
-              {filtered.map(q => (
-                <tr key={q.id} style={{ opacity: q.isLatest===false ? 0.5 : 1 }}>
+              {filtered.map(q => {
+                const rowEditable = q.status !== "Aprobada" && q.isLatest !== false;
+                return (
+                <tr key={q.id}
+                  onClick={rowEditable ? ()=>openEdit(q) : undefined}
+                  style={{ opacity: q.isLatest===false ? 0.5 : 1,
+                           cursor: rowEditable ? "pointer" : "default" }}>
                   <td>
                     <span style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>#{q.number}</span>
                     {(q.version||1) > 1 && (
@@ -922,10 +1252,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
                   <td style={{ color:G.muted }}>{q.validUntil||q.valid_until}</td>
                   <td style={{ fontWeight:700,fontFamily:G.mono }}>{fmt(q.total||0)}</td>
                   <td><StatusBadge s={q.status} /></td>
-                  <td>
+                  <td onClick={e=>e.stopPropagation()}>
                     <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                      <Btn size="sm" variant="ghost" onClick={()=>openView(q)}
-                        title="Ver cotización en detalle">Ver</Btn>
+                      {q.status === "Aprobada" && (
+                        <Btn size="sm" variant="ghost" onClick={()=>openView(q)}
+                          title="Ver cotización en detalle">Ver</Btn>
+                      )}
                       {q.isLatest!==false && <Btn size="sm" variant="outline" onClick={()=>openEdit(q)}
                         title="Editar esta cotización">Editar</Btn>}
                       {q.isLatest!==false && (
@@ -974,7 +1306,8 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {!filtered.length && (
                 <tr><td colSpan={7} style={{ textAlign:"center",color:G.muted,padding:30 }}>
                   Sin cotizaciones. Crea la primera con "+ Nueva Cotización".
@@ -994,8 +1327,9 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
       )}
       {(modal === "new" || modal === "edit") && current && (
         <QuoteForm quote={current} setQuote={setCurrent} clients={clients} products={products}
-          onSave={save} onClose={()=>{ clearQuoteDraft(); setModal(null); }} isNew={modal==="new"} config={config}
+          onSave={save} onClose={closeEditor} isNew={modal==="new"} config={config}
           templates={templates}
+          onPreview={editorPreview} onCreatePayment={editorCreatePayment} onPrint={editorPrint}
           onSaveProduct={async (p) => {
             // Check for duplicate name before inserting
             const exists = products.find(x=>x.name.toLowerCase()===p.name.toLowerCase());
@@ -1013,8 +1347,12 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
           }} />
       )}
       {modal === "view" && current && (
-        <QuotePreview quote={current} onClose={()=>setModal(null)} onEdit={()=>setModal("edit")} config={config}
-          onCreatePayment={()=>{ setModal(null); setPaymentQuote(current); }} />
+        <QuotePreview quote={current} config={config}
+          onClose={()=>{
+            if (viewReturnTo) { const back = viewReturnTo; setViewReturnTo(null); setModal(back); }
+            else setModal(null);
+          }}
+          onEdit={()=>{ setViewReturnTo(null); setModal("edit"); }} />
       )}
       {/* Modal: asignar proyecto al aprobar */}
       {approvedQuoteForProject && (
@@ -1150,7 +1488,8 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
 };
 
 // ── QUOTE FORM ───────────────────────────────────────────────────
-const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct, templates=[], saveTemplate }) => {
+const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew, config, onSaveProduct, templates=[], saveTemplate,
+                     onPreview = null, onCreatePayment = null, onPrint = null }) => {
   const [prodSearch, setProdSearch] = useState("");
   const [prodCat, setProdCat] = useState("Todos");
   const [uploading, setUploading]   = useState(null);
@@ -1757,8 +2096,12 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
           placeholder="Términos de pago, garantías, condiciones especiales…" />
       </Field>
 
-      <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14 }}>
+      <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:14,flexWrap:"wrap" }}>
         <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+        {onPreview && <Btn variant="outline" onClick={onPreview}>👁️ Vista previa</Btn>}
+        {onCreatePayment && <Btn variant="outline" onClick={onCreatePayment}
+          style={{ color:G.success,borderColor:G.success }}>🧾 Cuenta de cobro</Btn>}
+        {onPrint && <Btn variant="outline" onClick={onPrint}>🖨️ Imprimir / PDF</Btn>}
         <button onClick={async()=>{ await onSave(true); }}
           style={{ padding:"7px 18px",borderRadius:6,cursor:"pointer",fontFamily:G.font,fontSize:13,
                    fontWeight:600,border:`2px solid ${G.success}`,background:"transparent",
@@ -1881,164 +2224,8 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     </Modal>
   );
 };
-const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = null }) => {
-  const handlePrint = () => {
-    const w = window.open("","_blank","width=900,height=700");
-    // Use personal profile if quote has profile="personal"
-    const prof = (quote.profile === "personal" && config.personal)
-      ? { ...config, ...config.personal }
-      : config;
-    const pc = prof.primaryColor || "#0d6e6e";
-    const fmtCOP = (n) => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
-    w.document.write(`
-      <html><head><title>Cotización #${quote.number}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Inter',Arial,sans-serif;color:#1e293b;padding:20px 28px;font-size:10px;line-height:1.4}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid ${pc}}
-        .logo-circle{width:38px;height:38px;border-radius:50%;background:${pc};color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-        .company-name{font-size:13px;font-weight:700;color:${pc}}
-        .badge{background:${pc}22;color:${pc};padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;display:inline-block}
-        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-        .info-box{background:#f8fafc;padding:6px 10px;border-radius:6px;border-left:2px solid ${pc}}
-        .lbl{font-size:8px;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:3px;letter-spacing:.06em}
-        table{width:100%;border-collapse:collapse;margin:8px 0;font-size:10px}
-        th{background:${pc};color:#fff;padding:5px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
-        td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
-        tr:nth-child(even) td{background:#f8fafc}
-        .total-row td{font-weight:700;font-size:11px;border-top:2px solid ${pc};color:${pc};background:#fff}
-        .notes-box{background:#fffbeb;border-left:2px solid #f59e0b;padding:8px 10px;margin-top:10px;border-radius:0 6px 6px 0;white-space:pre-line;font-size:9px}
-        .bank-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 12px;border-radius:6px;margin-top:8px;font-size:9px}
-        .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;color:#94a3b8;font-size:8px}
-        code{font-family:monospace;color:${pc};font-size:9px}
-      </style></head><body>
-        <div class="header">
-          <div style="display:flex;align-items:center;gap:14px">
-            ${prof.logoUrl
-              ? `<img src="${prof.logoUrl}" alt="logo" style="height:50px;object-fit:contain">`
-              : `<div style="display:flex;align-items:center;gap:10px">
-                  <div class="logo-circle">${(config.companyName||"C")[0]}</div>
-                  <div>
-                    <div class="company-name">${prof.companyName||"Mi Empresa"}</div>
-                    <div style="color:#64748b;font-size:10px">${prof.slogan||""}</div>
-                    ${prof.website?`<div style="color:${pc};font-size:9px">${prof.website}</div>`:""}
-                  </div>
-                 </div>`}
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:16px;font-weight:700;color:${pc};letter-spacing:-.02em">COTIZACIÓN</div>
-            <div style="font-size:12px;color:#475569;font-weight:600">N° ${quote.number}</div>
-            <div style="margin:2px 0"><span class="badge">${quote.status}</span></div>
-          </div>
-        </div>
-
-        <div class="info-grid">
-          <div class="info-box">
-            <div class="lbl">Señor(a)</div>
-            <strong style="font-size:11px">${quote.clientName}</strong>
-            <div style="color:#64748b">${quote.clientContact||""}</div>
-            <div style="color:#64748b">${quote.clientEmail||""}</div>
-          </div>
-          <div class="info-box">
-            <div class="lbl">Vendedor</div>
-            <strong>${prof.vendorName||""}</strong>
-            <div style="color:#64748b">${prof.vendorPhone||""}</div>
-            <div style="color:#64748b">${prof.vendorEmail||""}</div>
-            <div style="margin-top:8px;font-size:11px;color:#94a3b8">
-              Fecha: <strong style="color:#1e293b">${quote.date}</strong> &nbsp;|&nbsp;
-              Válida hasta: <strong style="color:#1e293b">${quote.validUntil}</strong>
-            </div>
-          </div>
-        </div>
-
-        <table>
-          <thead><tr><th style="width:36px">Img</th><th>Ref.</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unitario</th><th style="text-align:right">Subtotal</th></tr></thead>
-          <tbody>
-            ${(()=>{
-              // compute section subtotals for PDF
-              const secMap = {};
-              let curHdr = "__root__";
-              for (const i of quote.items) {
-                if (i.type==="header") { curHdr=i.id; secMap[i.id]=0; }
-                else {
-                  const p = i.priceCOP||Number(i.price);
-                  const d = p*(Number(i.discount)||0)/100;
-                  secMap[curHdr] = (secMap[curHdr]||0) + Number(i.qty)*(p-d);
-                }
-              }
-              return quote.items.map((it,i)=>{
-                const nextIt = quote.items[i+1];
-                const isLast = !nextIt || nextIt.type==="header";
-                if (it.type === "header") {
-                  return `<tr><td colspan="5" style="background:${pc}18;color:${pc};font-weight:700;font-size:13px;padding:8px 12px;border-top:2px solid ${pc}">▸ ${it.name}</td></tr>`;
-                }
-                const priceCOP = it.priceCOP || Number(it.price);
-                const disc     = Number(it.discount)||0;
-                const discAmt  = priceCOP * disc / 100;
-                const netCOP   = priceCOP - discAmt;
-                const lineNet  = Number(it.qty) * netCOP;
-                let sectionId  = "__root__";
-                for (let k=i; k>=0; k--) { if(quote.items[k].type==="header"){sectionId=quote.items[k].id;break;} }
-                const subtotalRow = (sectionId!=="__root__" && isLast && secMap[sectionId]>0)
-                  ? `<tr style="background:${pc}08"><td colspan="5" style="text-align:right;color:#64748b;font-style:italic;padding:5px 12px">Subtotal sección</td><td style="text-align:right;font-weight:700;color:${pc};padding:5px 12px">${fmtCOP(secMap[sectionId])}</td></tr>`
-                  : "";
-                const imgCell = it.imageUrl
-                  ? `<td style="width:36px;padding:2px"><img src="${it.imageUrl}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;border:1px solid #e2e8f0" crossorigin="anonymous"></td>`
-                  : `<td style="width:36px"></td>`;
-                return `<tr>
-                  ${imgCell}
-                  <td><code>${it.sku||""}</code></td>
-                  <td>${it.name}${disc>0?` <span style="color:#ef4444;font-size:10px">(-${disc}%)</span>`:""}</td>
-                  <td style="text-align:center">${it.qty} ${it.unit||""}</td>
-                  <td style="text-align:right">${fmtCOP(netCOP)}</td>
-                  <td style="text-align:right;font-weight:600">${fmtCOP(lineNet)}</td>
-                </tr>${subtotalRow}`;
-              }).join("");
-            })()}
-          </tbody>
-          <tbody>
-            ${(quote.subtotalConIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">Subtotal con IVA</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotalConIva||0)}</td></tr>`:""}
-            ${(!quote.subtotalConIva&&!quote.subtotalSinIva)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:8px 12px">SubTotal</td><td style="text-align:right;padding:8px 12px">${fmtCOP(quote.subtotal||0)}</td></tr>`:""}
-            ${(quote.totalDisc>0)?`<tr><td colspan="6" style="text-align:right;color:#ef4444;padding:6px 12px">- Descuentos</td><td style="text-align:right;color:#ef4444;padding:6px 12px">-${fmtCOP(quote.totalDisc||0)}</td></tr>`:""}
-            ${(quote.taxAmt>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.taxAmt||0)}</td></tr>`:""}
-            ${(quote.subtotalSinIva>0)?`<tr><td colspan="6" style="text-align:right;color:#64748b;padding:6px 12px">Subtotal sin IVA</td><td style="text-align:right;padding:6px 12px">${fmtCOP(quote.subtotalSinIva||0)}</td></tr>`:""}
-            <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px 12px">TOTAL</td><td style="text-align:right;padding:10px 12px;font-size:15px">${fmtCOP(quote.total||0)}</td></tr>
-          </tbody>
-        </table>
-
-        ${quote.notes?`<div class="notes-box">${quote.notes}</div>`:""}
-
-        ${(config.bankName||config.bankAccount)?`
-        <div class="bank-box">
-          <div class="lbl" style="color:#16a34a">Datos para Consignación</div>
-          <div>Consignar a nombre de: <strong>${prof.accountHolder||config.companyName}</strong></div>
-          <div>NIT: <strong>${prof.nit||""}</strong></div>
-          <div>Cuenta ${prof.bankType} ${prof.bankName}: <strong>${prof.bankAccount}</strong></div>
-        </div>`:""}
-
-        <div class="footer">
-          <span>${prof.companyName||"QuoteApp"} · ${prof.nit||""}</span>
-          <span>Cotización válida hasta ${quote.validUntil} · Página 1 de 1</span>
-        </div>
-      </body></html>
-    `);
-    w.document.close();
-    w.focus();
-    // Wait for all images to load before printing
-    w.addEventListener("load", () => {
-      const imgs = w.document.querySelectorAll("img");
-      if (!imgs.length) { setTimeout(()=>w.print(), 300); return; }
-      let loaded = 0;
-      const tryPrint = () => { loaded++; if (loaded >= imgs.length) setTimeout(()=>w.print(), 300); };
-      imgs.forEach(img => {
-        if (img.complete) { tryPrint(); }
-        else { img.onload = tryPrint; img.onerror = tryPrint; }
-      });
-      // Fallback: print after 3 seconds regardless
-      setTimeout(()=>w.print(), 3000);
-    });
-  };
+const QuotePreview = ({ quote, onClose, onEdit, config = {} }) => {
+  const handlePrint = () => printQuoteDoc(quote, config);
 
   const safeItems = quote.items || [];
   const safeQuote = {...quote, items: safeItems};
@@ -2173,7 +2360,6 @@ const QuotePreview = ({ quote, onClose, onEdit, config = {}, onCreatePayment = n
       <div style={{ display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap" }}>
         <Btn variant="ghost" onClick={onClose}>Cerrar</Btn>
         <Btn variant="outline" onClick={onEdit}>✏️ Editar</Btn>
-        {onCreatePayment && <Btn variant="outline" onClick={onCreatePayment} style={{color:G.success,borderColor:G.success}}>🧾 Cuenta de Cobro</Btn>}
         <Btn variant="primary" onClick={handlePrint}>🖨️ Imprimir / PDF</Btn>
       </div>
     </Modal>
@@ -3503,9 +3689,18 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         updateProjectStatus, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
                         updateProjectCommission, techniciansList=[],
                         projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
-                        products=[], suppliers=[], config }) => {
+                        products=[], suppliers=[], config,
+                        onOpenQuoteInEditor=null, initialSelected=null, onInitialSelectedConsumed=null }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(initialSelected ?? null);
+
+  // Al volver desde el editor de una cotización, reabrir el proyecto de origen.
+  useEffect(() => {
+    if (initialSelected != null) {
+      setSelected(initialSelected);
+      onInitialSelectedConsumed?.();
+    }
+  }, [initialSelected]);
   const [payModal, setPayModal] = useState(false);
   const [addQuoteModal, setAddQuoteModal] = useState(false);
   const [newProjectModal, setNewProjectModal] = useState(false);
@@ -3577,6 +3772,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const getProjQuotes = (pid) => {
     const qids = projectQuotes.filter(pq=>pq.project_id===pid).map(pq=>pq.quote_id);
     return quotes.filter(q => qids.includes(q.id));
+  };
+
+  // Abrir el documento de facturación de una cotización (mismo helper que
+  // usa Informes → Facturación).
+  const facturarQuote = (q) => {
+    const ivaItems = (q.items||[]).filter(i => i.type!=="header" && Number(i.itemTax||i.tax||0) > 0);
+    const totalIva = ivaItems.reduce((s,i)=>s + Number(i.lineNet||0) + Number(i.lineTax||0), 0);
+    handlePrintInvoice(q, ivaItems, totalIva, config);
   };
 
   // Base de comisión: mano de obra a PRECIO DE VENTA antes de IVA (netCOP = precio menos descuento)
@@ -4728,7 +4931,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 📋 Cotizaciones
               </div>
               <table>
-                <thead><tr><th>#</th><th>Detalle</th><th>Fecha</th><th>Estado</th><th style={{textAlign:"right"}}>Total</th></tr></thead>
+                <thead><tr><th>#</th><th>Detalle</th><th>Fecha</th><th style={{textAlign:"right"}}>Total</th><th style={{textAlign:"right"}}>Acciones</th></tr></thead>
                 <tbody>
                   {getProjQuotes(proj.id).map(q=>(
                     <tr key={q.id}>
@@ -4743,15 +4946,24 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                           style={{ fontSize:12,padding:"3px 8px" }} />
                       </td>
                       <td style={{ color:G.muted,whiteSpace:"nowrap" }}>{q.date}</td>
-                      <td><StatusBadge s={q.status} /></td>
                       <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:700,whiteSpace:"nowrap" }}>{fmt(q.total||0)}</td>
+                      <td style={{ whiteSpace:"nowrap",textAlign:"right" }}>
+                        <div style={{ display:"flex",gap:6,justifyContent:"flex-end",flexWrap:"wrap" }}>
+                          <Btn size="sm" variant="outline" onClick={()=>onOpenQuoteInEditor?.(q.id, proj.id)}
+                            title="Abrir esta cotización en el editor">✏️ Abrir</Btn>
+                          <Btn size="sm" variant="outline" onClick={()=>facturarQuote(q)}
+                            title="Abrir el documento de facturación"
+                            style={{ color:G.success,borderColor:G.success }}>🧾 Facturar</Btn>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   <tr style={{ background:`rgba(59,130,246,.06)` }}>
-                    <td colSpan={4} style={{ textAlign:"right",fontWeight:700,color:G.accent }}>Total Proyecto</td>
+                    <td colSpan={3} style={{ textAlign:"right",fontWeight:700,color:G.accent }}>Total Proyecto</td>
                     <td style={{ textAlign:"right",fontFamily:G.mono,fontWeight:700,color:G.accent,fontSize:15 }}>
                       {fmt(calcTotals(proj.id).totalProject)}
                     </td>
+                    <td></td>
                   </tr>
                 </tbody>
               </table>
@@ -6807,86 +7019,9 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
     }
   };
 
-  const handlePrintInvoice = (q, ivaItems, totalIva) => {
-    // Totales discriminados: base gravable vs IVA
-    const totalBase = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1), 0);
-    const totalIvaAmt = ivaItems.reduce((s,i)=>s+Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1)*Number(i.itemTax||i.tax||0)/100, 0);
-    // Desglose por tarifa (por si hay ítems al 19% y al 5% en la misma cotización)
-    const porTarifa = {};
-    ivaItems.forEach(i => {
-      const t = Number(i.itemTax||i.tax||0);
-      const b = Number(i.netCOP||i.priceCOP||0)*Number(i.qty||1);
-      if (!porTarifa[t]) porTarifa[t] = { base:0, iva:0 };
-      porTarifa[t].base += b;
-      porTarifa[t].iva  += b*t/100;
-    });
-    const tarifas = Object.keys(porTarifa).map(Number).sort((a,b)=>a-b);
-    const w = window.open("","_blank","width=800,height=600");
-    w.document.write(`
-      <html><head><title>Facturar — Cotización #${q.number}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;font-size:12px}
-        h1{font-size:18px;color:${pc};margin-bottom:14px;border-bottom:2px solid ${pc};padding-bottom:8px}
-        .info{margin-bottom:16px;font-size:12px;color:#475569}
-        .info strong{color:#1e293b}
-        table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:11px}
-        th{background:${pc};color:#fff;padding:6px 10px;text-align:left;font-size:10px}
-        td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
-        tr:nth-child(even) td{background:#f8fafc}
-        .total-row td{font-weight:700;font-size:13px;border-top:2px solid ${pc};color:${pc}}
-        .sub-row td{font-weight:600;font-size:12px;background:#f8fafc}
-        tfoot tr:nth-child(even) td{background:#f8fafc}
-        .resumen{margin-top:18px;border:1px solid #e2e8f0;border-radius:6px;padding:12px;background:#f8fafc}
-        .resumen h2{font-size:12px;color:${pc};margin-bottom:8px}
-        .resumen table{margin:0;font-size:11px}
-        .resumen th{background:#e2e8f0;color:#334155}
-        @media print{body{padding:16px}}
-      </style></head><body>
-        <h1>Documento para Facturación — ${config?.companyName||""}</h1>
-        <div class="info">
-          <div><strong>Cliente:</strong> ${q.clientName||""}</div>
-          <div><strong>NIT/RUT:</strong> ${q.clientRut||"—"}</div>
-          <div><strong>Cotización:</strong> #${q.number} &nbsp;|&nbsp; <strong>Fecha aprobación:</strong> ${q.approval_date||q.date||""}</div>
-        </div>
-        <table>
-          <thead><tr><th>Referencia</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio Unit.<br><span style="font-weight:400;font-size:9px">(sin IVA)</span></th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA %</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
-          <tbody>
-            ${ivaItems.map(item => {
-              const precioBase = Number(item.netCOP||item.priceCOP||0);
-              const tasaIva = Number(item.itemTax||item.tax||0);
-              const base = precioBase * Number(item.qty||1);
-              const iva = base * tasaIva / 100;
-              return `<tr><td>${item.sku||"—"}</td><td>${item.name}</td><td style="text-align:right">${item.qty} ${item.unit||""}</td><td style="text-align:right">${fmtCOP(precioBase)}</td><td style="text-align:right">${fmtCOP(base)}</td><td style="text-align:right">${tasaIva}%</td><td style="text-align:right">${fmtCOP(iva)}</td><td style="text-align:right">${fmtCOP(base+iva)}</td></tr>`;
-            }).join("")}
-          </tbody>
-          <tfoot>
-            <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">Base gravable (subtotal sin IVA)</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalBase)}</td></tr>
-            <tr class="sub-row"><td colspan="6" style="text-align:right;padding:8px 10px">IVA</td><td colspan="2" style="text-align:right;padding:8px 10px">${fmtCOP(totalIvaAmt)}</td></tr>
-            <tr class="total-row"><td colspan="6" style="text-align:right;padding:10px">TOTAL A FACTURAR</td><td colspan="2" style="text-align:right;padding:10px">${fmtCOP(totalBase+totalIvaAmt)}</td></tr>
-          </tfoot>
-        </table>
-        ${tarifas.length > 1 ? `
-        <div class="resumen">
-          <h2>Resumen por tarifa de IVA</h2>
-          <table>
-            <thead><tr><th>Tarifa</th><th style="text-align:right">Base gravable</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead>
-            <tbody>
-              ${tarifas.map(t=>`<tr>
-                <td>IVA ${t}%</td>
-                <td style="text-align:right">${fmtCOP(porTarifa[t].base)}</td>
-                <td style="text-align:right">${fmtCOP(porTarifa[t].iva)}</td>
-                <td style="text-align:right">${fmtCOP(porTarifa[t].base+porTarifa[t].iva)}</td>
-              </tr>`).join("")}
-            </tbody>
-          </table>
-        </div>` : ""}
-      </body></html>
-    `);
-    w.document.close();
-    w.focus();
-    setTimeout(()=>{ w.print(); }, 400);
-  };
+  // handlePrintInvoice ahora es un helper de nivel superior; aquí solo
+  // se le inyecta la config de la empresa.
+  const printInvoice = (q, ivaItems, totalIva) => handlePrintInvoice(q, ivaItems, totalIva, config);
 
   // ── Datos calculados ─────────────────────────────────────────
   // Proyectos activos en el período (basado en pagos recibidos)
@@ -7316,7 +7451,7 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                           <div style={{ padding:"8px 16px", fontSize:11, color:G.muted, fontStyle:"italic" }}>📝 {st.notas}</div>
                         )}
                         <div style={{ padding:"12px 16px", display:"flex", gap:10, borderTop:`1px solid ${G.border}` }}>
-                          <button onClick={()=>handlePrintInvoice(q, q.ivaItems, q.totalIva)}
+                          <button onClick={()=>printInvoice(q, q.ivaItems, q.totalIva)}
                             style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
                                      padding:"7px 16px", borderRadius:7, cursor:"pointer", fontWeight:600, fontSize:12 }}>
                             🖨️ Imprimir / PDF
@@ -7821,6 +7956,22 @@ export default function App() {
     document.head.appendChild(favicon);
   }, []);
   const [view, setView]         = useState("dashboard");
+  // Flujo "abrir una cotización del proyecto en el editor y, al cerrar,
+  // volver al proyecto de origen".
+  const [quoteEditRequest, setQuoteEditRequest] = useState(null); // { quoteId, projectId }
+  const [projectsInitialSelected, setProjectsInitialSelected] = useState(null);
+  const openProjectQuoteInEditor = (quoteId, projectId) => {
+    setQuoteEditRequest({ quoteId, projectId });
+    setView("quotes");
+  };
+  const returnFromQuoteEditor = () => {
+    const req = quoteEditRequest;
+    setQuoteEditRequest(null);
+    if (req?.projectId != null) {
+      setProjectsInitialSelected(req.projectId);
+      setView("projects");
+    }
+  };
   const [user, setUser]         = useState(null);
   const [profile, setProfile]   = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -8337,6 +8488,7 @@ export default function App() {
                                    addQuoteToProject={addQuoteToProject}
                                    createProject={createProject}
                                    templates={templates}
+                                   editRequest={quoteEditRequest} onEditReturn={returnFromQuoteEditor}
                                    clients={clients} products={products} setProducts={setProducts} config={config} />}
           {view==="clients"   && <ClientsView clients={clients} setClients={setClients}
                                    saveClient={saveClient} deleteClient={deleteClient}
@@ -8351,6 +8503,9 @@ export default function App() {
           {view==="projects"   && <ProjectsView
                                    projects={projects} projectQuotes={projectQuotes}
                                    projectPayments={projectPayments}
+                                   onOpenQuoteInEditor={openProjectQuoteInEditor}
+                                   initialSelected={projectsInitialSelected}
+                                   onInitialSelectedConsumed={()=>setProjectsInitialSelected(null)}
                                    quotes={quotes} clients={clients}
                                    paymentRequests={paymentRequests}
                                    createProject={createProject}
