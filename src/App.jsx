@@ -96,14 +96,14 @@ const G = {
   bg:       "#0d0f14",
   surface:  "#13161e",
   card:     "#1a1e2a",
-  border:   "#252a38",
+  border:   "#333a4d",
   accent:   "#3b82f6",
   accentH:  "#60a5fa",
   success:  "#10b981",
   danger:   "#ef4444",
   warn:     "#f59e0b",
   text:     "#e2e8f0",
-  muted:    "#64748b",
+  muted:    "#94a3b8",
   font:     "'DM Sans', sans-serif",
   mono:     "'JetBrains Mono', monospace",
 };
@@ -472,7 +472,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:10,color:G.border,fontFamily:G.mono }}>v1.6.3</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.6.4</span>
           </p>
         </div>
         {/* Filtro de fechas */}
