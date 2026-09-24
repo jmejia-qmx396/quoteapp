@@ -387,7 +387,7 @@ tr:hover td{background:rgba(59,130,246,.04)}
 `;
 
 // ── NumInput: input numérico con separadores de miles ───────────
-const NumInput = ({ value, onChange, placeholder="", style={} }) => {
+const NumInput = ({ value, onChange, placeholder="", style={}, disabled=false }) => {
   const fmtN = (n) => n ? new Intl.NumberFormat("es-CO",{maximumFractionDigits:2}).format(n) : "";
   const [display, setDisplay] = useState(() => value ? fmtN(value) : "");
   const [focused, setFocused] = useState(false);
@@ -419,6 +419,7 @@ const NumInput = ({ value, onChange, placeholder="", style={} }) => {
         setDisplay(raw);
       }}
       placeholder={placeholder||"0"}
+      disabled={disabled}
       style={{ padding:"4px 8px",width:"100%",fontFamily:"'JetBrains Mono',monospace",
                textAlign:"right",...style }}
     />
@@ -5016,21 +5017,20 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     <div style={{ width:modoFijo?140:90 }}>
                       <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>{modoFijo?"Valor (COP)":"%"}</div>
                       {modoFijo ? (
-                        <input type="number" min="0" step="1000"
+                        // NumInput: mantiene lo que escribes en estado local y solo
+                        // confirma al perder el foco, para que el valor guardado
+                        // (async) no te "pelee" el dígito mientras editas.
+                        <NumInput
                           value={proj.commission_fixed ?? 0}
-                          onChange={e=>updateProjectCommission(proj.id,{ fixed:e.target.value===""?0:e.target.value })}
+                          onChange={v=>updateProjectCommission(proj.id,{ fixed:Math.max(0,v) })}
                           disabled={!proj.commission_technician_id}
-                          style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
-                                   borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
-                                   opacity: proj.commission_technician_id?1:.5 }} />
+                          style={{ opacity: proj.commission_technician_id?1:.5 }} />
                       ) : (
-                        <input type="number" min="0" max="100" step="0.5"
+                        <NumInput
                           value={proj.commission_percent ?? 10}
-                          onChange={e=>updateProjectCommission(proj.id,{ percent:e.target.value })}
+                          onChange={v=>updateProjectCommission(proj.id,{ percent:Math.min(100,Math.max(0,v)) })}
                           disabled={!proj.commission_technician_id}
-                          style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
-                                   borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13,
-                                   opacity: proj.commission_technician_id?1:.5 }} />
+                          style={{ opacity: proj.commission_technician_id?1:.5 }} />
                       )}
                     </div>
                     <div style={{ flex:1,minWidth:150 }}>
