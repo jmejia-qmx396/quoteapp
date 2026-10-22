@@ -720,7 +720,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.7.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3683,11 +3683,155 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   );
 };
 
+// ── TABLERO DE PRIORIDAD (Kanban) ───────────────────────────────
+const KANBAN_STAGES = [
+  { id:"proyectos",    label:"Proyectos",    icon:"📁" },
+  { id:"tareas",       label:"Tareas",       icon:"📝" },
+  { id:"por_comprar",  label:"Por comprar",  icon:"🛒" },
+  { id:"por_instalar", label:"Por instalar", icon:"🔧" },
+  { id:"por_cobrar",   label:"Por cobrar",   icon:"💵" },
+];
+const KANBAN_STAGE_IDS = KANBAN_STAGES.map(s => s.id);
+
+const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoardStage, reorderProjectsBoard, onAddTask, onOpenProject }) => {
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const visible = projects.filter(p => p.board_stage !== "oculto");
+  // Cualquier valor viejo/desconocido (ej. "por_visitar", "hecho" de versiones
+  // anteriores del tablero) cae de vuelta a la columna de entrada "proyectos".
+  const stageOf = (p) => KANBAN_STAGE_IDS.includes(p.board_stage) ? p.board_stage : "proyectos";
+  const orderOf = (p) => p.board_order ?? Infinity;
+
+  const colCards = (stageId) => visible
+    .filter(p => stageOf(p) === stageId)
+    .sort((a,b) => orderOf(a)-orderOf(b) || new Date(a.created_at||0)-new Date(b.created_at||0));
+
+  // Mueve/reordena draggedId dentro de targetStageId, insertándolo justo
+  // antes/después de targetCardId (o al final de la columna si targetCardId es null).
+  const onReorder = (draggedId, targetStageId, targetCardId, insertBefore) => {
+    if (draggedId === targetCardId) return;
+    const dragged = projects.find(p => p.id === draggedId);
+    if (!dragged) return;
+    const sourceStageId = stageOf(dragged);
+    const ids = colCards(targetStageId).filter(p => p.id !== draggedId).map(p => p.id);
+    let insertAt = ids.length;
+    if (targetCardId != null) {
+      const idx = ids.indexOf(targetCardId);
+      if (idx !== -1) insertAt = insertBefore ? idx : idx + 1;
+    }
+    ids.splice(insertAt, 0, draggedId);
+    if (sourceStageId !== targetStageId) updateProjectBoardStage(draggedId, targetStageId);
+    reorderProjectsBoard(ids);
+  };
+
+  const moveWithinColumn = (id, delta) => {
+    const p = projects.find(pr => pr.id === id);
+    if (!p) return;
+    const ids = colCards(stageOf(p)).map(c => c.id);
+    const idx = ids.indexOf(id);
+    const swapIdx = idx + delta;
+    if (swapIdx < 0 || swapIdx >= ids.length) return;
+    [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
+    reorderProjectsBoard(ids);
+  };
+
+  return (
+    <div style={{ display:"flex",gap:14,overflowX:"auto",paddingBottom:8,marginBottom:20 }}>
+      {KANBAN_STAGES.map((stage) => {
+        const cards = colCards(stage.id);
+        return (
+          <div key={stage.id}
+            onDragOver={e=>{ e.preventDefault(); setDragOverCol(stage.id); }}
+            onDragLeave={()=>setDragOverCol(c=>c===stage.id?null:c)}
+            onDrop={e=>{
+              e.preventDefault();
+              setDragOverCol(null);
+              const id = Number(e.dataTransfer.getData("text/plain"));
+              if (id) onReorder(id, stage.id, null, false);
+            }}
+            style={{ flex:"0 0 260px",background: dragOverCol===stage.id?`rgba(59,130,246,.08)`:"transparent",
+                     borderRadius:10,padding:4 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+                          padding:"4px 6px",marginBottom:8 }}>
+              <span style={{ fontSize:13,fontWeight:700 }}>{stage.icon} {stage.label}</span>
+              <span style={{ fontSize:11,color:G.muted,background:G.card,border:`1px solid ${G.border}`,
+                             borderRadius:10,padding:"1px 7px" }}>{cards.length}</span>
+            </div>
+            {cards.map((p, pi) => {
+              const { balance } = calcTotals(p.id);
+              const pendingTasks = projectTasks.filter(t => t.project_id === p.id && !t.done).length;
+              return (
+                <div key={p.id} draggable
+                  onDragStart={e=>e.dataTransfer.setData("text/plain", String(p.id))}
+                  onDragOver={e=>{ e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={e=>{
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragOverCol(null);
+                    const draggedId = Number(e.dataTransfer.getData("text/plain"));
+                    if (!draggedId) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const before = (e.clientY - rect.top) < rect.height/2;
+                    onReorder(draggedId, stage.id, p.id, before);
+                  }}
+                  onClick={()=>onOpenProject(p.id)}
+                  style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:10,
+                           padding:12,marginBottom:8,cursor:"pointer" }}>
+                  <div style={{ fontWeight:700,fontSize:13,marginBottom:2 }}>{p.client_name}</div>
+                  <div style={{ color:G.muted,fontSize:11,marginBottom:6 }}>{p.name}</div>
+                  <div style={{ display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:8 }}>
+                    <span style={{ color:G.muted }}>Saldo</span>
+                    <span style={{ color: balance>0?G.warn:G.success,fontWeight:700 }}>{fmt(balance)}</span>
+                  </div>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                    <div style={{ display:"flex",gap:4 }}>
+                      <button onClick={e=>{ e.stopPropagation(); moveWithinColumn(p.id,-1); }}
+                        disabled={pi===0}
+                        style={{ fontSize:11,background:"none",border:"none",cursor:pi===0?"default":"pointer",
+                                 color:pi===0?G.border:G.muted,padding:2 }}>▲</button>
+                      <button onClick={e=>{ e.stopPropagation(); moveWithinColumn(p.id,1); }}
+                        disabled={pi===cards.length-1}
+                        style={{ fontSize:11,background:"none",border:"none",
+                                 cursor:pi===cards.length-1?"default":"pointer",
+                                 color:pi===cards.length-1?G.border:G.muted,padding:2 }}>▼</button>
+                    </div>
+                    <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                      {pendingTasks > 0 && (
+                        <span title={`${pendingTasks} tarea(s) pendiente(s)`}
+                          style={{ fontSize:10,padding:"2px 6px",borderRadius:10,fontWeight:700,
+                                   background:"rgba(245,158,11,.2)",color:G.warn }}>
+                          📅 {pendingTasks}
+                        </span>
+                      )}
+                      <button onClick={e=>{ e.stopPropagation(); onAddTask(p.id); }}
+                        style={{ fontSize:11,background:"none",border:`1px solid ${G.border}`,
+                                 borderRadius:6,cursor:"pointer",color:G.muted,padding:"2px 6px" }}>
+                        + Tarea
+                      </button>
+                      <button onClick={e=>{ e.stopPropagation(); updateProjectBoardStage(p.id,"oculto"); }}
+                        title="Quitar del tablero"
+                        style={{ fontSize:12,background:"none",border:"none",cursor:"pointer",color:G.muted,padding:2 }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {!cards.length && (
+              <div style={{ fontSize:11,color:G.muted,textAlign:"center",padding:"16px 4px" }}>Sin proyectos</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // ── PROYECTOS ────────────────────────────────────────────────────
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
-                        updateProjectStatus, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
+                        updateProjectStatus, updateProjectBoardStage, reorderProjectsBoard, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
                         updateProjectCommission, techniciansList=[],
                         projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
                         products=[], suppliers=[], config,
@@ -3708,6 +3852,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [newPay, setNewPay] = useState(null);
   const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"" });
   const [search, setSearch] = useState("");
+  const [mode, setMode] = useState("lista"); // lista | tablero
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
   const [copiedProv, setCopiedProv] = useState(null);
@@ -4094,11 +4239,41 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         );
       })()}
 
-      <div style={{ display:"flex",gap:20,minHeight:600 }}>
+      <input placeholder="Buscar proyecto o cliente…" value={search}
+        onChange={e=>setSearch(e.target.value)} style={{ marginBottom:12,maxWidth:320 }} />
+
+      <div style={{ display:"flex",gap:8,marginBottom:14 }}>
+        <button onClick={()=>setMode("lista")}
+          style={{ padding:"6px 14px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",
+                   border:`1px solid ${mode==="lista"?G.accent:G.border}`,
+                   background: mode==="lista" ? `rgba(59,130,246,.14)` : "transparent",
+                   color: mode==="lista" ? G.accentH : G.muted }}>
+          📋 Lista
+        </button>
+        <button onClick={()=>setMode("tablero")}
+          style={{ padding:"6px 14px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",
+                   border:`1px solid ${mode==="tablero"?G.accent:G.border}`,
+                   background: mode==="tablero" ? `rgba(59,130,246,.14)` : "transparent",
+                   color: mode==="tablero" ? G.accentH : G.muted }}>
+          🗂️ Tablero
+        </button>
+      </div>
+
+      {mode === "tablero" && (
+        <KanbanBoard
+          projects={filt}
+          calcTotals={calcTotals}
+          projectTasks={projectTasks}
+          updateProjectBoardStage={updateProjectBoardStage}
+          reorderProjectsBoard={reorderProjectsBoard}
+          onAddTask={(id) => { setEditTask(blankTask(id)); setTaskModal(true); }}
+          onOpenProject={(id) => { setSelected(id); setMode("lista"); }}
+        />
+      )}
+
+      <div style={{ display: mode==="tablero" ? "none" : "flex",gap:20,minHeight:600 }}>
         {/* ── Lista de proyectos ── */}
         <div style={{ width:320,flexShrink:0 }}>
-          <input placeholder="Buscar proyecto o cliente…" value={search}
-            onChange={e=>setSearch(e.target.value)} style={{ marginBottom:12 }} />
           {filt.map(p => {
             const { totalProject, totalPaid, balance } = calcTotals(p.id);
             const isSelected = p.id === selected;
@@ -8324,6 +8499,20 @@ export default function App() {
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
   };
 
+  const updateProjectBoardStage = async (id, boardStage) => {
+    await sb.from("projects").update({ board_stage: boardStage }).eq("id", id);
+    setProjects(ps => ps.map(p => p.id===id ? {...p, board_stage: boardStage} : p));
+  };
+
+  // orderedIds: proyectos de UNA columna del tablero, en el orden visual deseado.
+  const reorderProjectsBoard = async (orderedIds) => {
+    const order = new Map(orderedIds.map((id, idx) => [id, idx]));
+    setProjects(ps => ps.map(p => order.has(p.id) ? {...p, board_order: order.get(p.id)} : p));
+    await Promise.all(orderedIds.map((id, idx) =>
+      sb.from("projects").update({ board_order: idx }).eq("id", id)
+    ));
+  };
+
   // ── Compras: una fila = una ASIGNACIÓN (proveedor + cantidad) de un ítem.
   // Un mismo ítem puede tener varias filas si se reparte entre proveedores.
   // qty NULL = la cantidad completa de la línea de cotización.
@@ -8515,6 +8704,8 @@ export default function App() {
                                    deleteProjectPayment={deleteProjectPayment}
                                    deleteProject={deleteProject}
                                    updateProjectStatus={updateProjectStatus}
+                                   updateProjectBoardStage={updateProjectBoardStage}
+                                   reorderProjectsBoard={reorderProjectsBoard}
                                    projectPurchases={projectPurchases}
                                    savePurchaseRow={savePurchaseRow}
                                    updateProjectCommission={updateProjectCommission}
