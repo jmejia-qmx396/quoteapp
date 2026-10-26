@@ -720,7 +720,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.1</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.2</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4400,7 +4400,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               // asignaciones = filas de project_purchases; resto = cantidad aún sin asignar.
               const allItems = [];
               getProjQuotes(proj.id).forEach(q => {
-                (q.items||[]).filter(i=>i.type!=="header"&&i.name).forEach(item => {
+                (q.items||[]).filter(i=>i.type!=="header"&&i.name&&!esMO(i)).forEach(item => {
                   const qtyTotal = Number(item.qty||1);
                   const filas = projectPurchases
                     .filter(p=>p.project_id===proj.id&&p.quote_id===q.id&&p.item_id===String(item.id))
@@ -5277,7 +5277,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
               // Calcular "por comprar": costo de items NO chuleados en pestaña compras
               const allProjQuotes = getProjQuotes(proj.id);
               const porComprar = allProjQuotes.reduce((total, q) => {
-                return total + (q.items||[]).filter(i=>i.type!=="header"&&i.name).reduce((s,i) => {
+                return total + (q.items||[]).filter(i=>i.type!=="header"&&i.name&&!esMO(i)).reduce((s,i) => {
                   const qtyT = Number(i.qty||1);
                   const compradaQty = (projectPurchases||[])
                     .filter(pp=>pp.project_id===proj.id&&pp.quote_id===q.id&&pp.item_id===String(i.id)&&pp.purchased)
