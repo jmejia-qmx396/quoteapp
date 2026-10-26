@@ -720,7 +720,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.2</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.3</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3695,7 +3695,9 @@ const KANBAN_STAGE_IDS = KANBAN_STAGES.map(s => s.id);
 
 const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoardStage, reorderProjectsBoard, onAddTask, onOpenProject }) => {
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [showHidden, setShowHidden] = useState(false);
   const visible = projects.filter(p => p.board_stage !== "oculto");
+  const hidden = projects.filter(p => p.board_stage === "oculto");
   // Cualquier valor viejo/desconocido (ej. "por_visitar", "hecho" de versiones
   // anteriores del tablero) cae de vuelta a la columna de entrada "proyectos".
   const stageOf = (p) => KANBAN_STAGE_IDS.includes(p.board_stage) ? p.board_stage : "proyectos";
@@ -3735,6 +3737,35 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
   };
 
   return (
+    <div>
+      {hidden.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <button onClick={()=>setShowHidden(s=>!s)}
+            style={{ fontSize:11,background:"none",border:`1px solid ${G.border}`,borderRadius:7,
+                     cursor:"pointer",color:G.muted,padding:"4px 10px" }}>
+            {showHidden ? "▲" : "▼"} {hidden.length} proyecto{hidden.length!==1?"s":""} oculto{hidden.length!==1?"s":""} del tablero
+          </button>
+          {showHidden && (
+            <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:8 }}>
+              {hidden.map(p => (
+                <div key={p.id} style={{ display:"flex",alignItems:"center",gap:8,
+                         background:G.card,border:`1px solid ${G.border}`,borderRadius:10,
+                         padding:"8px 10px" }}>
+                  <span style={{ fontSize:12,cursor:"pointer" }} onClick={()=>onOpenProject(p.id)}>
+                    {p.client_name}
+                  </span>
+                  <button onClick={()=>updateProjectBoardStage(p.id, "proyectos")}
+                    title="Restaurar al tablero"
+                    style={{ fontSize:11,background:"none",border:`1px solid ${G.border}`,borderRadius:6,
+                             cursor:"pointer",color:G.muted,padding:"2px 6px" }}>
+                    ↩ Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     <div style={{ display:"flex",gap:14,overflowX:"auto",paddingBottom:8,marginBottom:20 }}>
       {KANBAN_STAGES.map((stage) => {
         const cards = colCards(stage.id);
@@ -3823,6 +3854,7 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
           </div>
         );
       })}
+    </div>
     </div>
   );
 };
