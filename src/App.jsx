@@ -720,7 +720,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4547,17 +4547,17 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                       const usa = Math.min(disp, falta);
                       if (parte.rowId) {
                         if (usa < disp) {
-                          // Parte la fila: lo pedido queda marcado, el resto sigue pendiente
-                          await savePurchaseRow({ id:parte.rowId, qty:usa, orderedAt:cuando, batch });
+                          // Parte la fila: lo pedido queda marcado como comprado, el resto sigue pendiente
+                          await savePurchaseRow({ id:parte.rowId, qty:usa, orderedAt:cuando, batch, purchased:true });
                           await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
                                                   qty:disp-usa, supplier:prov, purchased:false });
                         } else {
-                          await savePurchaseRow({ id:parte.rowId, orderedAt:cuando, batch });
+                          await savePurchaseRow({ id:parte.rowId, orderedAt:cuando, batch, purchased:true });
                         }
                       } else {
                         // Cantidad sin fila previa (venía de la sugerencia del catálogo)
                         await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
-                                                qty:usa, supplier:prov, purchased:false,
+                                                qty:usa, supplier:prov, purchased:true,
                                                 orderedAt:cuando, batch });
                         if (usa < disp) {
                           await savePurchaseRow({ projectId:proj.id, quoteId:parte.quoteId, itemId:parte.id,
@@ -8497,6 +8497,14 @@ export default function App() {
   const updateProjectStatus = async (id, status) => {
     await sb.from("projects").update({ status }).eq("id", id);
     setProjects(ps => ps.map(p => p.id===id ? {...p,status} : p));
+    // Al archivar un proyecto, sus cotizaciones se archivan con él.
+    if (status === "Archivado") {
+      const qids = projectQuotes.filter(pq => pq.project_id===id).map(pq => pq.quote_id);
+      if (qids.length) {
+        await sb.from("quotes").update({ archived: true }).in("id", qids);
+        setQuotes(qs => qs.map(q => qids.includes(q.id) ? {...q, archived:true} : q));
+      }
+    }
   };
 
   const updateProjectBoardStage = async (id, boardStage) => {
