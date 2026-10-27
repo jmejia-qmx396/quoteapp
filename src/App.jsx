@@ -720,7 +720,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.3</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.4</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3875,6 +3875,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   useEffect(() => {
     if (initialSelected != null) {
       setSelected(initialSelected);
+      setMode("lista");
       onInitialSelectedConsumed?.();
     }
   }, [initialSelected]);
@@ -3884,7 +3885,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [newPay, setNewPay] = useState(null);
   const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"" });
   const [search, setSearch] = useState("");
-  const [mode, setMode] = useState("lista"); // lista | tablero
+  const [mode, setMode] = useState("tablero"); // lista | tablero
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
   const [purchaseEdit, setPurchaseEdit] = useState({}); // {itemId: {date, supplier}}
   const [copiedProv, setCopiedProv] = useState(null);
