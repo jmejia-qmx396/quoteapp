@@ -449,13 +449,14 @@ const ConfirmDialog = ({ message, detail, onConfirm, onCancel, danger=true }) =>
 // ── useConfirm hook ───────────────────────────────────────────────
 function useConfirm() {
   const [state, setState] = useState(null);
-  const confirm = (message, detail) => new Promise(resolve => {
-    setState({ message, detail, resolve });
+  const confirm = (message, detail, danger=true) => new Promise(resolve => {
+    setState({ message, detail, danger, resolve });
   });
   const dialog = state ? (
     <ConfirmDialog
       message={state.message}
       detail={state.detail}
+      danger={state.danger}
       onConfirm={() => { state.resolve(true);  setState(null); }}
       onCancel={() =>  { state.resolve(false); setState(null); }}
     />
@@ -720,7 +721,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.4</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.5</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -987,6 +988,9 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
   // si hay cambios sin guardar sin depender del estado interno de QuoteForm.
   const savedSnapRef = useRef("");
   const isQuoteDirty = () => current != null && JSON.stringify(current) !== savedSnapRef.current;
+  // Evita que un doble clic en Imprimir/Vista previa/Cuenta de cobro dispare
+  // la pregunta "¿guardar cambios?" dos veces en paralelo.
+  const askingSaveRef = useRef(false);
 
   // Cuando el editor se abre desde un proyecto (ProjectsView → ✏️ Abrir),
   // al cerrarlo hay que regresar al proyecto de origen.
@@ -1135,12 +1139,19 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
   // imprimir). Nunca guarda automáticamente. Devuelve true para continuar.
   const askSaveBeforeAction = async () => {
     if (!isQuoteDirty()) return true;
-    const ok = await confirm(
-      "Hay cambios sin guardar en la cotización",
-      "¿Deseas guardarlos antes de continuar?"
-    );
-    if (ok) await save(true);
-    return true;
+    if (askingSaveRef.current) return false; // ya hay una pregunta en curso (doble clic)
+    askingSaveRef.current = true;
+    try {
+      const ok = await confirm(
+        "Hay cambios sin guardar en la cotización",
+        "¿Deseas guardarlos antes de continuar?",
+        false
+      );
+      if (ok) await save(true);
+      return true;
+    } finally {
+      askingSaveRef.current = false;
+    }
   };
 
   // Acciones de la barra del editor de cotizaciones
