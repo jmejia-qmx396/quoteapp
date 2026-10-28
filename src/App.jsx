@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase client ───────────────────────────────────────────────
@@ -721,7 +721,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.8.5</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -7152,6 +7152,8 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
   const [reportTab, setReportTab] = useState("resumen");
   const [invDateFrom, setInvDateFrom] = useState("2020-01-01");
   const [invDateTo, setInvDateTo] = useState(lom);
+  const [selYear, setSelYear] = useState(now.getFullYear());
+  const [hoverMonth, setHoverMonth] = useState(null);
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const pc = config?.primaryColor || "#0d6e6e";
@@ -7280,6 +7282,47 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
     total: techPaymentsInRange.filter(p=>p.technician_id===t.id).reduce((s,p)=>s+Number(p.monto||0),0)
   })).filter(t=>t.total>0);
 
+  // ── Comparativo mensual (ventas aprobadas vs recaudo) ──────────
+  const esMOItem = (item) => item.sku === "M.O." || (item.name||"").toLowerCase().includes("mano de obra");
+  const moVentaDeQuote = (q) => (q.items||[]).filter(i=>i.type!=="header" && esMOItem(i))
+    .reduce((s,i)=>s + Number(i.qty||1)*Number(i.netCOP!==undefined?i.netCOP:(i.priceCOP||0)), 0);
+  const nombreMesLargo = (key) => {
+    const [y,m] = key.split("-");
+    return new Date(+y, +m-1, 1).toLocaleDateString("es-CO", { month:"long" });
+  };
+
+  const availableYears = useMemo(() => {
+    const years = new Set([now.getFullYear()]);
+    quotes.forEach(q => { const y = (q.approval_date||q.date||"").slice(0,4); if (y) years.add(Number(y)); });
+    projectPayments.forEach(p => { const y = (p.date||"").slice(0,4); if (y) years.add(Number(y)); });
+    incomeEntries.forEach(e => { const y = (e.fecha||"").slice(0,4); if (y) years.add(Number(y)); });
+    return [...years].sort((a,b)=>b-a);
+  }, [quotes, projectPayments, incomeEntries]);
+
+  const monthsOfYear = useMemo(() => Array.from({ length:12 }, (_, i) => {
+    const mm = String(i+1).padStart(2,"0");
+    const key = `${selYear}-${mm}`;
+    const approvedThisMonth = quotes.filter(q =>
+      q.status==="Aprobada" && q.isLatest!==false &&
+      (q.approval_date||q.date||"").slice(0,7) === key
+    );
+    const conIva   = approvedThisMonth.reduce((s,q)=>s+(q.subtotalConIva||0),0);
+    const sinIva   = approvedThisMonth.reduce((s,q)=>s+(q.subtotalSinIva||0),0);
+    const manoObra = approvedThisMonth.reduce((s,q)=>s+moVentaDeQuote(q),0);
+    const utilidad = approvedThisMonth.reduce((s,q)=>s+(q.profit||0),0);
+    const total    = approvedThisMonth.reduce((s,q)=>s+(q.total||0),0);
+    const recaudoPagos  = projectPayments.filter(p=>(p.date||"").slice(0,7)===key).reduce((s,p)=>s+(p.amount||0),0);
+    const recaudoManual = incomeEntries.filter(e=>(e.fecha||"").slice(0,7)===key).reduce((s,e)=>s+Number(e.monto||0),0);
+    return { key, label: nombreMesLargo(key), conIva, sinIva, manoObra, utilidad, total, recaudo: recaudoPagos+recaudoManual };
+  }), [selYear, quotes, projectPayments, incomeEntries]);
+
+  const yearTotals = useMemo(() => monthsOfYear.reduce((acc,m) => ({
+    conIva: acc.conIva+m.conIva, sinIva: acc.sinIva+m.sinIva, manoObra: acc.manoObra+m.manoObra,
+    utilidad: acc.utilidad+m.utilidad, recaudo: acc.recaudo+m.recaudo, total: acc.total+m.total,
+  }), { conIva:0, sinIva:0, manoObra:0, utilidad:0, recaudo:0, total:0 }), [monthsOfYear]);
+
+  const chartMax = Math.max(1, ...monthsOfYear.map(m=>Math.max(m.total, m.recaudo)));
+
   return (
     <div style={{ padding:"24px 28px", maxWidth:960 }}>
       {/* Header */}
@@ -7300,6 +7343,13 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
                      border:`1px solid ${reportTab==="facturacion" ? G.accent : G.border}`,
                      padding:"10px 18px", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>
             🧾 Facturación
+          </button>
+          <button onClick={()=>setReportTab("mensual")}
+            style={{ background: reportTab==="mensual" ? G.accent : G.surface,
+                     color: reportTab==="mensual" ? "#fff" : G.muted,
+                     border:`1px solid ${reportTab==="mensual" ? G.accent : G.border}`,
+                     padding:"10px 18px", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:13 }}>
+            📅 Comparativo Mensual
           </button>
         </div>
       </div>
@@ -7523,6 +7573,156 @@ const ReportsView = ({ quotes, projects, projectPayments, projectQuotes, techPay
       )}
       </>
       )}
+
+      {reportTab === "mensual" && (() => {
+        const fmtCompact = (n) => {
+          const abs = Math.abs(n);
+          if (abs >= 1_000_000) return `$${(n/1_000_000).toFixed(1)}M`;
+          if (abs >= 1_000) return `$${Math.round(n/1_000)}K`;
+          return fmtCOP(n);
+        };
+        const CHART_H = 170;
+        const COLOR_TOTAL   = "#3987e5";
+        const COLOR_RECAUDO = "#199e70";
+        return (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:18, fontWeight:700 }}>Comparativo mensual {selYear}</div>
+              <div style={{ color:G.muted, fontSize:12 }}>Ventas aprobadas y recaudo, mes a mes</div>
+            </div>
+            <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))}
+              style={{ background:G.surface, border:`1px solid ${G.border}`, borderRadius:6,
+                       padding:"7px 10px", color:G.text, fontSize:13, width:"auto" }}>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          {/* Indicadores del año */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
+            {[
+              { label:"Vendido con IVA",  value:fmtCOP(yearTotals.conIva),   color:G.text },
+              { label:"Vendido sin IVA",  value:fmtCOP(yearTotals.sinIva),   color:G.text },
+              { label:"Mano de obra",     value:fmtCOP(yearTotals.manoObra), color:"#f59e0b" },
+              { label:"Utilidad presupuestada", value:fmtCOP(yearTotals.utilidad), color:"#a855f7" },
+              { label:"Recaudo",          value:fmtCOP(yearTotals.recaudo),  color:COLOR_RECAUDO },
+            ].map(c=>(
+              <div key={c.label} style={{ background:G.card, border:`1px solid ${G.border}`,
+                                          borderRadius:8, padding:"12px 14px" }}>
+                <div style={{ color:G.muted, fontSize:10, textTransform:"uppercase",
+                               letterSpacing:".06em", marginBottom:6 }}>{c.label}</div>
+                <div style={{ fontSize:15, fontWeight:700, color:c.color }}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gráfica: total vendido vs recaudo */}
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
+                        padding:20, marginBottom:20 }}>
+            <div style={{ display:"flex", gap:16, marginBottom:18, fontSize:12 }}>
+              <span style={{ display:"flex", alignItems:"center", gap:6, color:G.text }}>
+                <span style={{ width:10, height:10, borderRadius:2, background:COLOR_TOTAL, display:"inline-block" }} />
+                Total vendido
+              </span>
+              <span style={{ display:"flex", alignItems:"center", gap:6, color:G.text }}>
+                <span style={{ width:10, height:10, borderRadius:2, background:COLOR_RECAUDO, display:"inline-block" }} />
+                Recaudo
+              </span>
+            </div>
+            <div style={{ display:"flex" }}>
+              {/* Eje Y */}
+              <div style={{ width:56, flexShrink:0, position:"relative", height:CHART_H }}>
+                {[1, 0.5, 0].map(frac => (
+                  <div key={frac} style={{ position:"absolute", bottom:frac*CHART_H, left:0, right:8,
+                                           fontSize:10, color:G.muted, textAlign:"right",
+                                           transform:"translateY(50%)" }}>
+                    {fmtCompact(chartMax*frac)}
+                  </div>
+                ))}
+              </div>
+              {/* Barras */}
+              <div style={{ flex:1, position:"relative", height:CHART_H, display:"flex",
+                            alignItems:"flex-end", gap:4, borderLeft:`1px solid ${G.border}`, paddingLeft:8 }}>
+                {[0, 0.5, 1].map(frac => (
+                  <div key={frac} style={{ position:"absolute", left:8, right:0, bottom:frac*CHART_H,
+                                           height:1, background:G.border, opacity:.4 }} />
+                ))}
+                {monthsOfYear.map(m => (
+                  <div key={m.key} style={{ display:"flex", flexDirection:"column", alignItems:"center",
+                                            flex:1, position:"relative" }}
+                    onMouseEnter={()=>setHoverMonth(m.key)}
+                    onMouseLeave={()=>setHoverMonth(h=>h===m.key?null:h)}>
+                    {hoverMonth === m.key && (
+                      <div style={{ position:"absolute", bottom:"100%", marginBottom:8, left:"50%",
+                                    transform:"translateX(-50%)", background:G.surface,
+                                    border:`1px solid ${G.border}`, borderRadius:8, padding:"8px 10px",
+                                    fontSize:11, whiteSpace:"nowrap", zIndex:10,
+                                    boxShadow:"0 4px 12px rgba(0,0,0,.4)" }}>
+                        <div style={{ fontWeight:700, marginBottom:4, textTransform:"capitalize" }}>
+                          {m.label} {selYear}
+                        </div>
+                        <div style={{ color:COLOR_TOTAL }}>Total vendido: {fmtCOP(m.total)}</div>
+                        <div style={{ color:COLOR_RECAUDO }}>Recaudo: {fmtCOP(m.recaudo)}</div>
+                      </div>
+                    )}
+                    <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:CHART_H }}>
+                      <div style={{ width:14, height:Math.max(2,(m.total/chartMax)*CHART_H),
+                                    background:COLOR_TOTAL, borderRadius:"4px 4px 0 0" }} />
+                      <div style={{ width:14, height:Math.max(2,(m.recaudo/chartMax)*CHART_H),
+                                    background:COLOR_RECAUDO, borderRadius:"4px 4px 0 0" }} />
+                    </div>
+                    <div style={{ fontSize:10, color:G.muted, marginTop:6, textTransform:"capitalize" }}>
+                      {m.label.slice(0,3)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla detallada por mes */}
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, overflowX:"auto" }}>
+            <table style={{ minWidth:720 }}>
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th style={{ textAlign:"right" }}>Con IVA</th>
+                  <th style={{ textAlign:"right" }}>Sin IVA</th>
+                  <th style={{ textAlign:"right" }}>Mano de obra</th>
+                  <th style={{ textAlign:"right" }}>Utilidad presup.</th>
+                  <th style={{ textAlign:"right" }}>Recaudo</th>
+                  <th style={{ textAlign:"right" }}>Total vendido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthsOfYear.map(m => (
+                  <tr key={m.key}>
+                    <td style={{ textTransform:"capitalize", fontWeight:600 }}>{m.label}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono }}>{fmtCOP(m.conIva)}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono }}>{fmtCOP(m.sinIva)}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono, color:"#f59e0b" }}>{fmtCOP(m.manoObra)}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono, color:"#a855f7" }}>{fmtCOP(m.utilidad)}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono, color:COLOR_RECAUDO }}>{fmtCOP(m.recaudo)}</td>
+                    <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700, color:COLOR_TOTAL }}>{fmtCOP(m.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background:"rgba(59,130,246,.06)" }}>
+                  <td style={{ fontWeight:700 }}>Total {selYear}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700 }}>{fmtCOP(yearTotals.conIva)}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700 }}>{fmtCOP(yearTotals.sinIva)}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700, color:"#f59e0b" }}>{fmtCOP(yearTotals.manoObra)}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700, color:"#a855f7" }}>{fmtCOP(yearTotals.utilidad)}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700, color:COLOR_RECAUDO }}>{fmtCOP(yearTotals.recaudo)}</td>
+                  <td style={{ textAlign:"right", fontFamily:G.mono, fontWeight:700, color:COLOR_TOTAL }}>{fmtCOP(yearTotals.total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        );
+      })()}
 
       {reportTab === "facturacion" && (
       <div>
