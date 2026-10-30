@@ -721,7 +721,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.1</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.2</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4984,7 +4984,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                         const ok = await confirm("¿Deshacer esta tanda?",
                                           "Las referencias volverán al panel de pedidos pendientes.");
                                         if (!ok) return;
-                                        for (const x of t.items) await savePurchaseRow({ id:x.rowId, orderedAt:null, batch:null });
+                                        for (const x of t.items) await savePurchaseRow({ id:x.rowId, orderedAt:null, batch:null, purchased:false });
                                       }}
                                       style={{ background:"none", color:G.muted, border:`1px solid ${G.border}`,
                                                padding:"6px 10px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
@@ -5055,12 +5055,12 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                     {suppliers.map(s=><option key={s.id} value={s.name} />)}
                   </datalist>
 
-                  {/* Lista de ítems */}
+                  {/* Lista de ítems — solo lo que falta por comprar; lo ya pedido/comprado
+                      se consulta en "Tandas pedidas" de arriba. */}
                   <div style={{ overflowX:"auto" }}>
                     <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
                       <thead>
                         <tr style={{ background:G.surface }}>
-                          <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>✓</th>
                           <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Ref.</th>
                           <th style={{ padding:"8px 12px",textAlign:"left",color:G.muted,fontWeight:600,fontSize:11 }}>Producto</th>
                           <th style={{ padding:"8px 12px",textAlign:"center",color:G.muted,fontWeight:600,fontSize:11 }}>Qty</th>
@@ -5072,16 +5072,29 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         </tr>
                       </thead>
                       <tbody>
-                        {allItems.map((item)=>{
+                        {(() => {
+                          // Filas visibles por ítem: cada asignación guardada + una fila virtual con
+                          // el resto sin asignar — excluyendo lo ya pedido/comprado (eso vive en
+                          // "Tandas pedidas"), para que esta lista muestre solo lo pendiente.
+                          const itemPendingFilas = (item) => {
+                            const filasTodas = [
+                              ...item.asignaciones.map(a=>({ ...a, virtual:false })),
+                              ...(item.resto > 0 || item.asignaciones.length===0
+                                  ? [{ id:null, virtual:true, qtyAsig:item.resto, supplier:"", purchase_date:"", purchased:false }]
+                                  : [])
+                            ];
+                            return filasTodas.filter(f => !f.ordered_at && !f.purchased);
+                          };
+                          const hayPendientes = allItems.some(item => itemPendingFilas(item).length > 0);
+                          if (!hayPendientes) return (
+                            <tr><td colSpan={8} style={{ textAlign:"center",color:G.success,padding:24,fontWeight:600 }}>
+                              ✓ No hay nada pendiente por comprar.
+                            </td></tr>
+                          );
+                          return allItems.map((item)=>{
                           const costUnit = Number(item.costCOP||item.cost||0);
                           const itemKey = `${item.quoteId}-${item.id}`;
-                          // Filas visibles: cada asignación guardada + una fila virtual con el resto sin asignar
-                          const filas = [
-                            ...item.asignaciones.map(a=>({ ...a, virtual:false })),
-                            ...(item.resto > 0 || item.asignaciones.length===0
-                                ? [{ id:null, virtual:true, qtyAsig:item.resto, supplier:"", purchase_date:"", purchased:false }]
-                                : [])
-                          ];
+                          const filas = itemPendingFilas(item);
                           return filas.map((f, fi) => {
                             const rowKey = f.virtual ? `${itemKey}-nuevo` : `${itemKey}-${f.id}`;
                             const edit = purchaseEdit[rowKey] || {};
@@ -5098,33 +5111,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                               if (f.virtual && saved) setPurchaseEdit(pe=>{ const n={...pe}; delete n[rowKey]; return n; });
                             };
                             return (
-                              <tr key={rowKey} style={{
-                                background: f.purchased?"rgba(16,185,129,.05)":(f.ordered_at?"rgba(245,158,11,.05)":"transparent"),
-                                borderBottom:`1px solid ${G.border}`,
-                                opacity: f.purchased ? 0.75 : 1
-                              }}>
-                                <td style={{ padding:"8px 12px" }}>
-                                  <input type="checkbox" checked={!!f.purchased}
-                                    onChange={async()=>{
-                                      await guardar({ purchased: !f.purchased,
-                                                      date: dateVal || new Date().toISOString().split("T")[0] });
-                                    }}
-                                    style={{ width:16,height:16,cursor:"pointer",accentColor:G.success }} />
-                                </td>
+                              <tr key={rowKey} style={{ borderBottom:`1px solid ${G.border}` }}>
                                 <td style={{ padding:"8px 12px",fontFamily:G.mono,color:primera?G.accent:"transparent",fontSize:11 }}>
                                   {primera ? (item.sku||"—") : "↳"}
                                 </td>
-                                <td style={{ padding:"8px 12px",fontWeight:f.purchased?400:500,
-                                             textDecoration:f.purchased?"line-through":"none",
-                                             color:f.purchased?G.muted:(primera?G.text:G.muted),
+                                <td style={{ padding:"8px 12px",fontWeight:primera?500:400,
+                                             color:primera?G.text:G.muted,
                                              paddingLeft: primera?12:28 }}>
                                   {primera ? item.name : <span style={{fontSize:11,fontStyle:"italic"}}>reparto adicional</span>}
-                                  {f.ordered_at && !f.purchased && (
-                                    <span style={{ background:"rgba(245,158,11,.15)", color:G.warn, fontSize:9,
-                                                   padding:"2px 6px", borderRadius:4, marginLeft:8, whiteSpace:"nowrap" }}>
-                                      📋 Pedido {String(f.ordered_at).split("T")[0]}
-                                    </span>
-                                  )}
                                   {primera && item.sobreAsignado && (
                                     <span style={{ color:G.danger, fontSize:10, marginLeft:8 }}>
                                       ⚠ asignado {item.asignado} de {item.qtyTotal}
@@ -5188,12 +5182,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                               </tr>
                             );
                           });
-                        })}
-                        {!allItems.length && (
-                          <tr><td colSpan={9} style={{ textAlign:"center",color:G.muted,padding:24 }}>
-                            Sin productos en las cotizaciones de este proyecto.
-                          </td></tr>
-                        )}
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>
