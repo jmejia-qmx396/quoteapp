@@ -721,7 +721,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3905,6 +3905,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [confirmando, setConfirmando] = useState(null);
   const [showTandas, setShowTandas] = useState(false);
   const [showPedidos, setShowPedidos] = useState(false);
+  const [viewTanda, setViewTanda] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [taskModal, setTaskModal]   = useState(false);
   const [editTask, setEditTask]     = useState(null);
@@ -4969,6 +4970,11 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                                     <div style={{ fontSize:10, color:G.muted, fontFamily:G.mono }}>{fmt(tt.neto)} + IVA</div>
                                   </div>
                                   <div style={{ display:"flex", gap:8 }}>
+                                    <button onClick={()=>setViewTanda(t)}
+                                      style={{ background:"none", color:G.text, border:`1px solid ${G.border}`,
+                                               padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
+                                      👁️ Ver
+                                    </button>
                                     <button onClick={()=>imprimirPedido(t.supplier, cons, true, t.batch)}
                                       style={{ background:"none", color:G.accent, border:`1px solid ${G.accent}`,
                                                padding:"6px 12px", borderRadius:6, cursor:"pointer", fontWeight:600, fontSize:11 }}>
@@ -4991,6 +4997,57 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                           </div>
                         )}
                       </div>
+                    );
+                  })()}
+
+                  {viewTanda && (() => {
+                    const cons = consolidar(viewTanda.items);
+                    const tt = totalesGrupo(cons);
+                    const recibidas = viewTanda.items.filter(x=>x.purchased).length;
+                    return (
+                      <Modal title={`Pedido${viewTanda.batch?` ${viewTanda.batch}`:""} — ${viewTanda.supplier||"Sin proveedor"}`}
+                        onClose={()=>setViewTanda(null)} width={620}>
+                        <div style={{ fontSize:12, color:G.muted, marginBottom:14 }}>
+                          {String(viewTanda.fecha).split("T")[0]} · Proyecto: {proj.name}
+                          {proj.client_name ? ` — ${proj.client_name}` : ""}
+                          <span style={{ marginLeft:10, color: recibidas===viewTanda.items.length ? G.success : G.warn }}>
+                            {recibidas===viewTanda.items.length ? "✓ recibida completa" : `${recibidas}/${viewTanda.items.length} recibidas`}
+                          </span>
+                        </div>
+                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:`1px solid ${G.border}`, color:G.muted }}>Ref.</th>
+                              <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:`1px solid ${G.border}`, color:G.muted }}>Descripción</th>
+                              <th style={{ textAlign:"center", padding:"6px 8px", borderBottom:`1px solid ${G.border}`, color:G.muted }}>Cant.</th>
+                              <th style={{ textAlign:"center", padding:"6px 8px", borderBottom:`1px solid ${G.border}`, color:G.muted }}>Recibido</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {viewTanda.items.map((it,i)=>(
+                              <tr key={it.rowId||i}>
+                                <td style={{ padding:"6px 8px", borderBottom:`1px solid ${G.border}`, fontFamily:G.mono, color:G.accent }}>{it.sku||"—"}</td>
+                                <td style={{ padding:"6px 8px", borderBottom:`1px solid ${G.border}` }}>{it.name}</td>
+                                <td style={{ padding:"6px 8px", borderBottom:`1px solid ${G.border}`, textAlign:"center" }}>{it.qty} {it.unit||""}</td>
+                                <td style={{ padding:"6px 8px", borderBottom:`1px solid ${G.border}`, textAlign:"center" }}>
+                                  {it.purchased ? <span style={{ color:G.success }}>✓</span> : <span style={{ color:G.muted }}>—</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ display:"flex", justifyContent:"flex-end", gap:20, marginTop:14, fontSize:12 }}>
+                          <span style={{ color:G.muted }}>Subtotal: <strong style={{ color:G.text }}>{fmt(tt.neto)}</strong></span>
+                          <span style={{ color:G.muted }}>IVA: <strong style={{ color:G.text }}>{fmt(tt.iva)}</strong></span>
+                          <span style={{ color:G.muted }}>Total: <strong style={{ color:G.accent }}>{fmt(tt.neto+tt.iva)}</strong></span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:18 }}>
+                          <Btn variant="ghost" onClick={()=>setViewTanda(null)}>Cerrar</Btn>
+                          <Btn variant="outline" onClick={()=>imprimirPedido(viewTanda.supplier, cons, true, viewTanda.batch)}>
+                            🖨️ Reimprimir
+                          </Btn>
+                        </div>
+                      </Modal>
                     );
                   })()}
 
