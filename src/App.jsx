@@ -740,7 +740,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.4</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3124,16 +3124,34 @@ const LoginView = ({ onLogin }) => {
 };
 
 // ── PAYMENT REQUEST MODAL ────────────────────────────────────────
-const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, clients = [], existingPR = null }) => {
-  // Count existing payment requests for this quote to generate number
-  const existing = paymentRequests.filter(p => p.quote_id === quote.id || p.quote_id === quote.parent_id);
-  const prNumber = existingPR ? existingPR.number : `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`;
+const PaymentRequestModal = ({ quote: quoteProp = null, project = null, config, paymentRequests, onSave, onClose, clients = [], existingPR = null }) => {
+  // quote/project son mutuamente excluyentes; sin ninguno de los dos, la
+  // Cuenta de Cobro es standalone (sin cotización ni proyecto/servicio).
+  const quote = quoteProp || {};
+  const mode = quoteProp ? "quote" : (project ? "project" : "standalone");
+
+  // Count existing payment requests to generate number
+  const existing = mode === "quote"
+    ? paymentRequests.filter(p => p.quote_id === quote.id || p.quote_id === quote.parent_id)
+    : mode === "project"
+      ? paymentRequests.filter(p => p.project_id === project.id)
+      : paymentRequests.filter(p => !p.quote_id && !p.project_id);
+  const prNumber = existingPR
+    ? existingPR.number
+    : mode === "quote"
+      ? `${quote.number}-${String(existing.length + 1).padStart(2,"0")}`
+      : mode === "project"
+        ? `SRV-${project.id}-${String(existing.length + 1).padStart(2,"0")}`
+        : `CC-${String(existing.length + 1).padStart(3,"0")}`;
 
   // Look up client RUT from clients list
-  const clientObj = clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
+  const clientObj = mode === "project"
+    ? clients.find(c => String(c.id) === String(project.client_id || project.clientId))
+    : clients.find(c => String(c.id) === String(quote.clientId || quote.client_id));
   const clientRut = quote.clientRut || quote.client_rut || clientObj?.rfc || "";
 
-  const [profile, setProfile] = useState(existingPR?.profile || quote.profile || "empresa");
+  const defaultProfile = mode === "project" ? "personal" : (quote.profile || "empresa");
+  const [profile, setProfile] = useState(existingPR?.profile || defaultProfile);
 
   const getProfileData = (prof) => {
     if (prof === "personal" && config.personal) {
@@ -3157,6 +3175,7 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
   const [pr, setPr] = useState(existingPR ? {
     isNew: false,
     quoteId: existingPR.quote_id,
+    projectId: existingPR.project_id,
     number: existingPR.number,
     date: existingPR.date || new Date().toISOString().split("T")[0],
     clientName: existingPR.client_name || "",
@@ -3169,16 +3188,17 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
     ...getProfileData(existingPR.profile || "empresa"),
   } : {
     isNew: true,
-    quoteId: quote.id,
+    quoteId: mode === "quote" ? quote.id : null,
+    projectId: mode === "project" ? project.id : null,
     number: prNumber,
     date: new Date().toISOString().split("T")[0],
-    clientName: quote.clientName || quote.client_name || "",
+    clientName: mode === "project" ? (project.client_name||"") : (quote.clientName || quote.client_name || ""),
     clientIdNumber: clientRut,
     concept: "",
-    usePercentage: true,
+    usePercentage: mode === "quote",
     percentage: 80,
-    amount: Math.round((quote.total||0) * 0.8),
-    ...getProfileData(quote.profile || "empresa"),
+    amount: mode === "quote" ? Math.round((quote.total||0) * 0.8) : 0,
+    ...getProfileData(defaultProfile),
   });
 
   const set = (k,v) => setPr(p => ({...p, [k]:v}));
@@ -3306,12 +3326,14 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
         <Field label="CC / NIT del Cliente">
           <input value={pr.clientIdNumber} onChange={e=>set("clientIdNumber",e.target.value)} placeholder="CC o NIT" />
         </Field>
-        <Field label="Total Cotización">
-          <div style={{ padding:"7px 10px",background:G.surface,border:`1px solid ${G.border}`,borderRadius:6,
-                        fontFamily:G.mono,color:G.accent,fontWeight:700 }}>
-            {fmt(quote.total||0)}
-          </div>
-        </Field>
+        {mode === "quote" && (
+          <Field label="Total Cotización">
+            <div style={{ padding:"7px 10px",background:G.surface,border:`1px solid ${G.border}`,borderRadius:6,
+                          fontFamily:G.mono,color:G.accent,fontWeight:700 }}>
+              {fmt(quote.total||0)}
+            </div>
+          </Field>
+        )}
         <Field label="Concepto" style={{ gridColumn:"1/-1" }}>
           <textarea rows={2} value={pr.concept} onChange={e=>set("concept",e.target.value)}
             placeholder="Ej: Anticipo trabajos casa 10 Saint Regis" />
@@ -3321,22 +3343,24 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
       {/* Valor */}
       <Card style={{ marginBottom:16,background:G.surface }}>
         <p style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>Valor a Cobrar</p>
-        <div style={{ display:"flex",gap:10,marginBottom:10 }}>
-          <button onClick={()=>set("usePercentage",true)}
-            style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
-                     background: pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
-                     border:`1px solid ${pr.usePercentage?G.accent:G.border}`,
-                     color: pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
-            % de la cotización
-          </button>
-          <button onClick={()=>set("usePercentage",false)}
-            style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
-                     background: !pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
-                     border:`1px solid ${!pr.usePercentage?G.accent:G.border}`,
-                     color: !pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
-            Valor fijo
-          </button>
-        </div>
+        {mode === "quote" && (
+          <div style={{ display:"flex",gap:10,marginBottom:10 }}>
+            <button onClick={()=>set("usePercentage",true)}
+              style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
+                       background: pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
+                       border:`1px solid ${pr.usePercentage?G.accent:G.border}`,
+                       color: pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
+              % de la cotización
+            </button>
+            <button onClick={()=>set("usePercentage",false)}
+              style={{ flex:1,padding:"7px",borderRadius:6,cursor:"pointer",fontFamily:G.font,
+                       background: !pr.usePercentage?"rgba(59,130,246,.15)":"transparent",
+                       border:`1px solid ${!pr.usePercentage?G.accent:G.border}`,
+                       color: !pr.usePercentage?G.accent:G.muted,fontWeight:600 }}>
+              Valor fijo
+            </button>
+          </div>
+        )}
         {pr.usePercentage ? (
           <div style={{ display:"flex",gap:10,alignItems:"center" }}>
             <div style={{ flex:1 }}>
@@ -3397,10 +3421,11 @@ const PaymentRequestModal = ({ quote, config, paymentRequests, onSave, onClose, 
 };
 
 // ── PAYMENT REQUESTS VIEW ─────────────────────────────────────────
-const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, deletePaymentRequest, config }) => {
+const PaymentRequestsView = ({ paymentRequests, quotes, projects=[], savePaymentRequest, deletePaymentRequest, config }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [modal, setModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
+  const [newModal, setNewModal] = useState(false);
   const [search, setSearch] = useState("");
 
   const filt = paymentRequests.filter(p =>
@@ -3410,6 +3435,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
   );
 
   const getQuote = (id) => quotes.find(q => q.id === id);
+  const getProject = (id) => projects.find(p => p.id === id);
 
   return (
     <div style={{ padding:"16px max(16px, min(30px, 3vw))" }}>
@@ -3418,6 +3444,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
           <h1 style={{ fontSize:22,fontWeight:700 }}>Cuentas de Cobro</h1>
           <p style={{ color:G.muted }}>{paymentRequests.length} cuenta(s) generada(s)</p>
         </div>
+        <Btn onClick={()=>setNewModal(true)}>+ Nueva Cuenta de Cobro</Btn>
       </div>
 
       <Card style={{ marginBottom:16 }}>
@@ -3434,6 +3461,7 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
             <tbody>
               {filt.map(p => {
                 const q = getQuote(p.quote_id);
+                const proj = !q ? getProject(p.project_id) : null;
                 return (
                   <tr key={p.id}>
                     <td style={{ fontFamily:G.mono,color:G.accent,fontWeight:600 }}>{p.number}</td>
@@ -3441,7 +3469,13 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
                     <td><strong>{p.client_name}</strong></td>
                     <td style={{ color:G.muted,fontSize:12,maxWidth:200 }}>{p.concept}</td>
                     <td style={{ fontFamily:G.mono,fontWeight:700,color:G.success }}>{fmt(p.amount||0)}</td>
-                    <td>{q ? <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span> : "-"}</td>
+                    <td>
+                      {q
+                        ? <span style={{ fontFamily:G.mono,fontSize:12,color:G.accent }}>#{q.number}</span>
+                        : proj
+                          ? <span style={{ fontSize:12,color:G.warn }}>🔧 {proj.name}</span>
+                          : <span style={{ color:G.muted }}>—</span>}
+                    </td>
                     <td>
                       <div style={{ display:"flex",gap:6 }}>
                         <Btn size="sm" variant="ghost" onClick={()=>setModal(p)}>🖨️</Btn>
@@ -3464,12 +3498,22 @@ const PaymentRequestsView = ({ paymentRequests, quotes, savePaymentRequest, dele
       )}
       {editModal && (
         <PaymentRequestModal
-          quote={quotes.find(q=>q.id===editModal.quote_id)||{id:editModal.quote_id,clientName:editModal.client_name,clientContact:"",clientEmail:""}}
+          quote={editModal.quote_id ? (quotes.find(q=>q.id===editModal.quote_id)||{id:editModal.quote_id,clientName:editModal.client_name,clientContact:"",clientEmail:""}) : null}
+          project={!editModal.quote_id ? getProject(editModal.project_id) : null}
           config={config}
           paymentRequests={paymentRequests}
           existingPR={editModal}
           onSave={async(pr)=>{ await savePaymentRequest({...pr, id:editModal.id}); setEditModal(null); }}
           onClose={()=>setEditModal(null)}
+          clients={[]}
+        />
+      )}
+      {newModal && (
+        <PaymentRequestModal
+          config={config}
+          paymentRequests={paymentRequests}
+          onSave={async(pr)=>{ await savePaymentRequest(pr); setNewModal(false); }}
+          onClose={()=>setNewModal(false)}
           clients={[]}
         />
       )}
@@ -3827,6 +3871,7 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
             </div>
             {cards.map((p, pi) => {
               const { balance } = calcTotals(p.id);
+              const isServicio = p.kind === "servicio";
               const pendingTasks = projectTasks.filter(t => t.project_id === p.id && !t.done).length;
               return (
                 <div key={p.id} draggable
@@ -3846,7 +3891,11 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
                   style={{ background:G.card,border:`1px solid ${G.border}`,borderRadius:10,
                            padding:12,marginBottom:8,cursor:"pointer" }}>
                   <div style={{ fontWeight:700,fontSize:13,marginBottom:2 }}>{p.client_name}</div>
-                  <div style={{ color:G.muted,fontSize:11,marginBottom:6 }}>{p.name}</div>
+                  <div style={{ color:G.muted,fontSize:11,marginBottom:6 }}>
+                    {isServicio && <span style={{ fontSize:10,padding:"1px 6px",borderRadius:10,fontWeight:700,
+                      background:"rgba(245,158,11,.15)",color:G.warn,marginRight:5 }}>🔧 Servicio</span>}
+                    {p.name}
+                  </div>
                   <div style={{ display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:8 }}>
                     <span style={{ color:G.muted }}>Saldo</span>
                     <span style={{ color: balance>0?G.warn:G.success,fontWeight:700 }}>{fmt(balance)}</span>
@@ -3899,10 +3948,10 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
 
 // ── PROYECTOS ────────────────────────────────────────────────────
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
-                        paymentRequests, createProject, addQuoteToProject, saveQuoteDetalle,
+                        paymentRequests, savePaymentRequest, createProject, addQuoteToProject, saveQuoteDetalle,
                         saveProjectPayment, deleteProjectPayment, deleteProject,
                         updateProjectStatus, updateProjectBoardStage, reorderProjectsBoard, projectPurchases=[], savePurchaseRow, deletePurchaseRow,
-                        updateProjectCommission, techniciansList=[],
+                        updateProjectCommission, updateServiceValue, techniciansList=[],
                         projectTasks=[], saveProjectTask, deleteProjectTask, toggleProjectTask,
                         products=[], suppliers=[], config,
                         onOpenQuoteInEditor=null, initialSelected=null, onInitialSelectedConsumed=null }) => {
@@ -3920,8 +3969,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [payModal, setPayModal] = useState(false);
   const [addQuoteModal, setAddQuoteModal] = useState(false);
   const [newProjectModal, setNewProjectModal] = useState(false);
+  const [cxcModal, setCxcModal] = useState(false);
   const [newPay, setNewPay] = useState(null);
-  const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"" });
+  const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"", kind:"proyecto", value:0 });
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState("tablero"); // lista | tablero
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
@@ -4013,16 +4063,18 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
   // Totals
   const calcTotals = (pid) => {
+    const p = projects.find(x=>x.id===pid);
     const qs = getProjQuotes(pid);
     const pps = getProjPayments(pid);
-    const totalProject = qs.reduce((s,q)=>s+(q.total||0),0);
+    const totalProject = p?.kind==="servicio" ? Number(p.service_value||0) : qs.reduce((s,q)=>s+(q.total||0),0);
     const totalPaid    = pps.reduce((s,p)=>s+(p.amount||0),0);
     return { totalProject, totalPaid, balance: totalProject - totalPaid };
   };
 
   const openAddPayment = () => {
     setNewPay({ isNew:true, projectId:selected, concept:"", amount:0,
-                date: new Date().toISOString().split("T")[0], paymentRequestId:null, paymentType:"empresa" });
+                date: new Date().toISOString().split("T")[0], paymentRequestId:null,
+                paymentType: proj?.kind==="servicio" ? "personal" : "empresa" });
     setPayModal(true);
   };
 
@@ -4174,9 +4226,14 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                      display:"flex",alignItems:"center",gap:6 }}>
             📦 {showArchived ? "Ver activos" : `Archivados (${projects.filter(p=>p.status==="Archivado").length})`}
           </button>
-          {!showArchived && <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:""}); setNewProjectModal(true); }}>
-            + Nuevo Proyecto
-          </Btn>}
+          {!showArchived && <>
+            <Btn variant="outline" onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"servicio",value:0}); setNewProjectModal(true); }}>
+              🔧 Crear Servicio
+            </Btn>
+            <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"proyecto",value:0}); setNewProjectModal(true); }}>
+              + Nuevo Proyecto
+            </Btn>
+          </>}
         </div>
       </div>
 
@@ -4417,7 +4474,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </div>
                 <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
                   {proj.status==="Activo" && <>
-                    <Btn size="sm" variant="outline" onClick={()=>setAddQuoteModal(true)}>+ Cotización</Btn>
+                    {proj.kind==="servicio"
+                      ? <Btn size="sm" variant="success" onClick={()=>setCxcModal(true)}>🧾 Generar Cuenta de Cobro</Btn>
+                      : <Btn size="sm" variant="outline" onClick={()=>setAddQuoteModal(true)}>+ Cotización</Btn>}
                     <Btn size="sm" variant="success" onClick={openAddPayment}>+ Pago</Btn>
                   </>}
                   <Btn size="sm" variant="primary" onClick={printStatement}>🖨️ Estado de Cuenta</Btn>
@@ -5219,6 +5278,31 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             })()}
 
             {activeTab==="resumen" && <>
+            {proj.kind === "servicio" && (
+              <Card style={{ marginBottom:16 }}>
+                <div style={{ display:"flex",gap:20,flexWrap:"wrap",alignItems:"flex-end" }}>
+                  <div style={{ minWidth:180 }}>
+                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Valor del Servicio</div>
+                    <NumInput value={proj.service_value||0}
+                      onChange={v=>updateServiceValue(proj.id, v)}
+                      style={{ fontSize:16,fontWeight:700,fontFamily:G.mono,color:G.accent }} />
+                  </div>
+                  <div>
+                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Costo técnico externo</div>
+                    <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.warn }}>
+                      {fmt(Number(proj.commission_fixed||0))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Utilidad estimada</div>
+                    <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.success }}>
+                      {fmt(Number(proj.service_value||0) - Number(proj.commission_fixed||0))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+            {proj.kind !== "servicio" && <>
             {/* Cotizaciones del proyecto */}
             <Card style={{ marginBottom:16,padding:0,overflow:"hidden" }}>
               <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
@@ -5262,19 +5346,22 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </tbody>
               </table>
             </Card>
+            </>}
 
-            {/* Comisión por mano de obra */}
+            {/* Comisión por mano de obra (o costo de técnico externo, en un Servicio) */}
             {(()=>{
-              const baseMO = moVentaBase(proj.id);
+              const isServicio = proj.kind === "servicio";
+              const baseMO = isServicio ? 0 : moVentaBase(proj.id);
               const pct = proj.commission_percent===null||proj.commission_percent===undefined ? 10 : Number(proj.commission_percent);
               // Modo fijo: commission_fixed con valor. Modo porcentaje: NULL.
               const fijo = proj.commission_fixed===null||proj.commission_fixed===undefined ? null : Number(proj.commission_fixed);
               const modoFijo = fijo !== null;
               const comision = modoFijo ? fijo : baseMO * (pct/100);
+              const forceFijo = isServicio || modoFijo;
               return (
                 <Card style={{ padding:0,overflow:"hidden",marginBottom:16 }}>
                   <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
-                    🤝 Comisión por Mano de Obra
+                    {isServicio ? "🔧 Costo — Técnico Externo" : "🤝 Comisión por Mano de Obra"}
                   </div>
                   <div style={{ padding:"14px 16px",display:"flex",gap:14,alignItems:"flex-end",flexWrap:"wrap" }}>
                     <div style={{ flex:2,minWidth:180 }}>
@@ -5283,33 +5370,35 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                         onChange={e=>updateProjectCommission(proj.id,{ technicianId:e.target.value })}
                         style={{ width:"100%",background:G.surface,border:`1px solid ${G.border}`,
                                  borderRadius:6,padding:"7px 10px",color:G.text,fontSize:13 }}>
-                        <option value="">— Sin comisión —</option>
+                        <option value="">— Sin {isServicio?"técnico externo":"comisión"} —</option>
                         {techniciansList.map(t=><option key={t.id} value={t.id}>{t.name||t.email}</option>)}
                       </select>
                     </div>
-                    <div style={{ width:170 }}>
-                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Modo</div>
-                      <div style={{ display:"flex",gap:0 }}>
-                        {[["pct","Porcentaje"],["fijo","Valor fijo"]].map(([k,l],i)=>(
-                          <button key={k}
-                            onClick={()=>updateProjectCommission(proj.id, k==="fijo"
-                              ? { fixed: Math.round(baseMO*(pct/100)) || 0 }
-                              : { fixed: null })}
-                            disabled={!proj.commission_technician_id}
-                            style={{ flex:1,padding:"7px 6px",fontSize:11,fontWeight:600,cursor:"pointer",
-                                     background:(k==="fijo")===modoFijo?G.accent:G.surface,
-                                     color:(k==="fijo")===modoFijo?"#fff":G.muted,
-                                     border:`1px solid ${(k==="fijo")===modoFijo?G.accent:G.border}`,
-                                     borderRadius:i===0?"6px 0 0 6px":"0 6px 6px 0",
-                                     opacity: proj.commission_technician_id?1:.5 }}>
-                            {l}
-                          </button>
-                        ))}
+                    {!isServicio && (
+                      <div style={{ width:170 }}>
+                        <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Modo</div>
+                        <div style={{ display:"flex",gap:0 }}>
+                          {[["pct","Porcentaje"],["fijo","Valor fijo"]].map(([k,l],i)=>(
+                            <button key={k}
+                              onClick={()=>updateProjectCommission(proj.id, k==="fijo"
+                                ? { fixed: Math.round(baseMO*(pct/100)) || 0 }
+                                : { fixed: null })}
+                              disabled={!proj.commission_technician_id}
+                              style={{ flex:1,padding:"7px 6px",fontSize:11,fontWeight:600,cursor:"pointer",
+                                       background:(k==="fijo")===modoFijo?G.accent:G.surface,
+                                       color:(k==="fijo")===modoFijo?"#fff":G.muted,
+                                       border:`1px solid ${(k==="fijo")===modoFijo?G.accent:G.border}`,
+                                       borderRadius:i===0?"6px 0 0 6px":"0 6px 6px 0",
+                                       opacity: proj.commission_technician_id?1:.5 }}>
+                              {l}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ width:modoFijo?140:90 }}>
-                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>{modoFijo?"Valor (COP)":"%"}</div>
-                      {modoFijo ? (
+                    )}
+                    <div style={{ width:forceFijo?140:90 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>{forceFijo?"Valor (COP)":"%"}</div>
+                      {forceFijo ? (
                         // NumInput: mantiene lo que escribes en estado local y solo
                         // confirma al perder el foco, para que el valor guardado
                         // (async) no te "pelee" el dígito mientras editas.
@@ -5326,19 +5415,21 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                           style={{ opacity: proj.commission_technician_id?1:.5 }} />
                       )}
                     </div>
-                    <div style={{ flex:1,minWidth:150 }}>
-                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Base M.O. (venta sin IVA)</div>
-                      <div style={{ fontFamily:G.mono,fontSize:14,fontWeight:600,color:G.text }}>{fmt(baseMO)}</div>
-                    </div>
+                    {!isServicio && (
+                      <div style={{ flex:1,minWidth:150 }}>
+                        <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Base M.O. (venta sin IVA)</div>
+                        <div style={{ fontFamily:G.mono,fontSize:14,fontWeight:600,color:G.text }}>{fmt(baseMO)}</div>
+                      </div>
+                    )}
                     <div style={{ flex:1,minWidth:130 }}>
-                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Comisión causada</div>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>{isServicio?"Costo causado":"Comisión causada"}</div>
                       <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,
                                     color: proj.commission_technician_id ? G.accent : G.muted }}>
                         {proj.commission_technician_id ? fmt(comision) : "—"}
                       </div>
                     </div>
                   </div>
-                  {proj.commission_technician_id && baseMO===0 && !modoFijo && (
+                  {!isServicio && proj.commission_technician_id && baseMO===0 && !modoFijo && (
                     <div style={{ padding:"0 16px 12px",fontSize:11,color:G.warn }}>
                       ⚠ Este proyecto no tiene ítems de mano de obra en sus cotizaciones (ref. "M.O." o nombre con "mano de obra").
                     </div>
@@ -5390,7 +5481,23 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             </Card>
 
             {/* Saldo */}
-            {(() => {
+            {proj.kind === "servicio" && (() => {
+              const { balance } = calcTotals(proj.id);
+              return (
+                <Card style={{ background: balance>0?"rgba(245,158,11,.08)":"rgba(16,185,129,.08)",
+                               border:`1px solid ${balance>0?"rgba(245,158,11,.3)":"rgba(16,185,129,.3)"}` }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                    <span style={{ fontWeight:700,fontSize:16 }}>Saldo Pendiente</span>
+                    <span style={{ fontFamily:G.mono,fontWeight:700,fontSize:22,
+                                   color: balance>0?G.warn:G.success }}>
+                      {fmt(balance)}
+                    </span>
+                  </div>
+                  {balance<=0 && <p style={{ color:G.success,fontSize:12,marginTop:4 }}>✅ Servicio pagado completamente</p>}
+                </Card>
+              );
+            })()}
+            {proj.kind !== "servicio" && (() => {
               const { totalProject, totalPaid, balance } = calcTotals(proj.id);
               // Calcular "por comprar": costo de items NO chuleados en pestaña compras
               const allProjQuotes = getProjQuotes(proj.id);
@@ -5591,7 +5698,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
       {/* Modal: nuevo proyecto */}
       {newProjectModal && (
-        <Modal title="Nuevo Proyecto" onClose={()=>setNewProjectModal(false)}>
+        <Modal title={newProject.kind==="servicio" ? "Nuevo Servicio" : "Nuevo Proyecto"} onClose={()=>setNewProjectModal(false)}>
           <div style={{ display:"grid",gap:14 }}>
             <Field label="Cliente">
               <select value={newProject.clientId}
@@ -5603,12 +5710,17 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="Nombre del Proyecto">
+            <Field label={newProject.kind==="servicio" ? "Descripción del Servicio" : "Nombre del Proyecto"}>
               <input value={newProject.name}
                 onChange={e=>setNewProject({...newProject,name:e.target.value})}
-                placeholder="Ej: Casa 10 Saint Regis — Automatización" />
+                placeholder={newProject.kind==="servicio" ? "Ej: Revisión de cámaras, Instalación parlante…" : "Ej: Casa 10 Saint Regis — Automatización"} />
             </Field>
-            {newProject.clientId && (
+            {newProject.kind==="servicio" && (
+              <Field label="Valor del Servicio (opcional, lo que se cobra)">
+                <NumInput value={newProject.value||0} onChange={v=>setNewProject({...newProject,value:v})} placeholder="0" />
+              </Field>
+            )}
+            {newProject.clientId && newProject.kind!=="servicio" && (
               <Field label="Cotización inicial (opcional)">
                 <select value={newProject.quoteId||""}
                   onChange={e=>setNewProject({...newProject,quoteId:e.target.value})}>
@@ -5629,15 +5741,22 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             <Btn variant="ghost" onClick={()=>setNewProjectModal(false)}>Cancelar</Btn>
             <Btn variant="success" onClick={async()=>{
               if (!newProject.clientId || !newProject.name) { alert("Selecciona cliente y nombre"); return; }
-              const proj = await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name });
+              const proj = await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name, kind:newProject.kind, value:newProject.value });
               if (proj && newProject.quoteId) {
                 await addQuoteToProject(proj.id, Number(newProject.quoteId));
                 setSelected(proj.id);
               }
               setNewProjectModal(false);
-            }}>💾 Crear Proyecto</Btn>
+            }}>{newProject.kind==="servicio" ? "💾 Crear Servicio" : "💾 Crear Proyecto"}</Btn>
           </div>
         </Modal>
+      )}
+
+      {cxcModal && proj && (
+        <PaymentRequestModal project={proj} config={config} paymentRequests={paymentRequests}
+          clients={clients}
+          onSave={async(pr)=>{ await savePaymentRequest(pr); setCxcModal(false); }}
+          onClose={()=>setCxcModal(false)} />
       )}
 
       {confirmDialog}
@@ -8765,6 +8884,8 @@ export default function App() {
   const createProject = async (data) => {
     const row = { name: data.name || (data.clientName + " — " + (data.date||"").substring(0,7)),
                   client_id: data.clientId||null, client_name: data.clientName||"",
+                  kind: data.kind||"proyecto",
+                  service_value: data.kind==="servicio" ? Number(data.value||0) : null,
                   status: "Activo", created_by: user.id };
     const { data: proj } = await sb.from("projects").insert(row).select().single();
     if (proj) {
@@ -8812,6 +8933,12 @@ export default function App() {
     if (patch.percent      !== undefined) row.commission_percent = patch.percent === "" || patch.percent === null ? null : Number(patch.percent);
     if (patch.fixed        !== undefined) row.commission_fixed   = patch.fixed === "" || patch.fixed === null ? null : Number(patch.fixed);
     if (!Object.keys(row).length) return;
+    await sb.from("projects").update(row).eq("id", id);
+    setProjects(ps => ps.map(p => p.id===id ? {...p, ...row} : p));
+  };
+
+  const updateServiceValue = async (id, value) => {
+    const row = { service_value: value===""||value===null ? 0 : Number(value) };
     await sb.from("projects").update(row).eq("id", id);
     setProjects(ps => ps.map(p => p.id===id ? {...p, ...row} : p));
   };
@@ -8943,7 +9070,7 @@ export default function App() {
   // ── CRUD: Payment Requests ─────────────────────────────────
   const savePaymentRequest = async (pr) => {
     const row = {
-      quote_id: pr.quoteId||null, number: pr.number, date: pr.date,
+      quote_id: pr.quoteId||null, project_id: pr.projectId||null, number: pr.number, date: pr.date,
       client_name: pr.clientName, client_id_number: pr.clientIdNumber||"",
       concept: pr.concept, amount: pr.amount||0, percentage: pr.percentage||null,
       account_holder: pr.accountHolder, nit: pr.nit, bank_name: pr.bankName,
@@ -9027,6 +9154,7 @@ export default function App() {
                                    onInitialSelectedConsumed={()=>setProjectsInitialSelected(null)}
                                    quotes={quotes} clients={clients}
                                    paymentRequests={paymentRequests}
+                                   savePaymentRequest={savePaymentRequest}
                                    createProject={createProject}
                                    addQuoteToProject={addQuoteToProject}
                                    saveQuoteDetalle={saveQuoteDetalle}
@@ -9039,6 +9167,7 @@ export default function App() {
                                    projectPurchases={projectPurchases}
                                    savePurchaseRow={savePurchaseRow}
                                    updateProjectCommission={updateProjectCommission}
+                                   updateServiceValue={updateServiceValue}
                                    techniciansList={techniciansList}
                                    deletePurchaseRow={deletePurchaseRow}
                                    products={products}
@@ -9050,7 +9179,7 @@ export default function App() {
                                    config={config} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
-          {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes}
+          {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes} projects={projects}
                                    savePaymentRequest={savePaymentRequest} deletePaymentRequest={deletePaymentRequest}
                                    config={config} />}
           {view==="config"    && <ConfigView config={config} setConfig={saveConfigDB} />}
