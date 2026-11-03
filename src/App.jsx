@@ -257,7 +257,7 @@ function printQuoteDoc(quote, config = {}) {
         </div>
         <div class="info-box">
           <div class="lbl">Vendedor</div>
-          ${prof.companyName?`<strong style="font-size:11px">${prof.companyName}</strong><div style="color:#64748b">${prof.vendorName||""}</div>`:`<strong>${prof.vendorName||""}</strong>`}
+          ${prof.accountHolder?`<strong style="font-size:11px">${prof.accountHolder}</strong><div style="color:#64748b">${prof.vendorName||""}</div>`:`<strong>${prof.vendorName||""}</strong>`}
           <div style="color:#64748b">${prof.vendorPhone||""}</div>
           <div style="color:#64748b">${prof.vendorEmail||""}</div>
           ${prof.nit?`<div style="color:#64748b"><strong style="color:#475569">NIT:</strong> ${prof.nit}</div>`:""}
@@ -740,7 +740,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.3</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.4</span>
           </p>
         </div>
         {/* Filtro de fechas */}
