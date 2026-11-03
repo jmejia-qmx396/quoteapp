@@ -740,7 +740,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3972,6 +3972,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [cxcModal, setCxcModal] = useState(false);
   const [newPay, setNewPay] = useState(null);
   const [newProject, setNewProject] = useState({ name:"", clientId:"", clientName:"", quoteId:"", kind:"proyecto", value:0 });
+  const [newProjClientSearch, setNewProjClientSearch] = useState(undefined);
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState("tablero"); // lista | tablero
   const [activeTab, setActiveTab] = useState("resumen"); // resumen | compras
@@ -4227,10 +4228,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             📦 {showArchived ? "Ver activos" : `Archivados (${projects.filter(p=>p.status==="Archivado").length})`}
           </button>
           {!showArchived && <>
-            <Btn variant="outline" onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"servicio",value:0}); setNewProjectModal(true); }}>
+            <Btn variant="outline" onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"servicio",value:0}); setNewProjClientSearch(undefined); setNewProjectModal(true); }}>
               🔧 Crear Servicio
             </Btn>
-            <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"proyecto",value:0}); setNewProjectModal(true); }}>
+            <Btn onClick={()=>{ setNewProject({name:"",clientId:"",clientName:"",quoteId:"",kind:"proyecto",value:0}); setNewProjClientSearch(undefined); setNewProjectModal(true); }}>
               + Nuevo Proyecto
             </Btn>
           </>}
@@ -5701,14 +5702,54 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
         <Modal title={newProject.kind==="servicio" ? "Nuevo Servicio" : "Nuevo Proyecto"} onClose={()=>setNewProjectModal(false)}>
           <div style={{ display:"grid",gap:14 }}>
             <Field label="Cliente">
-              <select value={newProject.clientId}
-                onChange={e=>{
-                  const c = clients.find(x=>String(x.id)===e.target.value);
-                  setNewProject({...newProject, clientId:e.target.value, clientName:c?.name||"", quoteId:""});
-                }}>
-                <option value="">— Seleccionar cliente —</option>
-                {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div style={{ position:"relative" }}>
+                <input
+                  value={newProjClientSearch !== undefined ? newProjClientSearch : (newProject.clientName||"")}
+                  onChange={e => {
+                    setNewProjClientSearch(e.target.value);
+                    if (!e.target.value) setNewProject(p=>({...p,clientId:"",clientName:"",quoteId:""}));
+                  }}
+                  onFocus={e => { setNewProjClientSearch(newProject.clientName||""); e.target.select(); }}
+                  onBlur={() => {
+                    setTimeout(()=>{
+                      if (newProjClientSearch !== undefined) {
+                        setNewProject(p => ({...p, clientName: newProjClientSearch||p.clientName}));
+                      }
+                      setNewProjClientSearch(undefined);
+                    }, 200);
+                  }}
+                  placeholder="Buscar o escribir nombre…"
+                  autoComplete="off"
+                />
+                {newProjClientSearch !== undefined && newProjClientSearch.length > 0 && (
+                  <div style={{ position:"absolute",top:"100%",left:0,right:0,zIndex:100,
+                                background:G.card,border:`1px solid ${G.accent}`,borderRadius:6,
+                                maxHeight:200,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,.4)" }}>
+                    {clients
+                      .filter(c=>(c.name||"").toLowerCase().includes((newProjClientSearch||"").toLowerCase()))
+                      .map(c=>(
+                        <div key={c.id}
+                          onMouseDown={()=>{ setNewProject(p=>({...p, clientId:c.id, clientName:c.name, quoteId:""})); setNewProjClientSearch(undefined); }}
+                          style={{ padding:"8px 12px",cursor:"pointer",fontSize:13,
+                                   borderBottom:`1px solid ${G.border}` }}
+                          onMouseOver={e=>e.currentTarget.style.background="rgba(59,130,246,.1)"}
+                          onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                          <span style={{ fontWeight:600 }}>{c.name}</span>
+                        </div>
+                      ))
+                    }
+                    {!clients.filter(c=>(c.name||"").toLowerCase().includes((newProjClientSearch||"").toLowerCase())).length && (
+                      <div style={{ padding:"8px 12px",color:G.muted,fontSize:12 }}>
+                        Sin resultados —{" "}
+                        <span style={{ color:G.accent,cursor:"pointer" }}
+                          onMouseDown={()=>{ setNewProject(p=>({...p,clientName:newProjClientSearch,clientId:"",quoteId:""})); setNewProjClientSearch(undefined); }}>
+                          usar "{newProjClientSearch}" como cliente ocasional
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </Field>
             <Field label={newProject.kind==="servicio" ? "Descripción del Servicio" : "Nombre del Proyecto"}>
               <input value={newProject.name}
@@ -5740,8 +5781,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
             <Btn variant="ghost" onClick={()=>setNewProjectModal(false)}>Cancelar</Btn>
             <Btn variant="success" onClick={async()=>{
-              if (!newProject.clientId || !newProject.name) { alert("Selecciona cliente y nombre"); return; }
-              const proj = await createProject({ clientId:newProject.clientId, clientName:newProject.clientName, name:newProject.name, kind:newProject.kind, value:newProject.value });
+              if (!newProject.clientName || !newProject.name) { alert("Escribe el cliente y el nombre"); return; }
+              const proj = await createProject({ clientId:newProject.clientId||null, clientName:newProject.clientName, name:newProject.name, kind:newProject.kind, value:newProject.value });
               if (proj && newProject.quoteId) {
                 await addQuoteToProject(proj.id, Number(newProject.quoteId));
                 setSelected(proj.id);
