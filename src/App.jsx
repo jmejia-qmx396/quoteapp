@@ -30,6 +30,7 @@ const INIT_CONFIG = {
   vendorEmail: "jmejia@casainteligente.com",
   website: "www.casainteligente.com",
   nit: "901.841.945-1",
+  address: "",
   bankName: "Bancolombia",
   bankAccount: "259.000.026.54",
   bankType: "Ahorros",
@@ -46,6 +47,7 @@ const INIT_CONFIG = {
     vendorEmail: "jmejia@casainteligente.com",
     website: "",
     nit: "",
+    address: "",
     bankName: "Bancolombia",
     bankAccount: "",
     bankType: "Ahorros",
@@ -66,6 +68,8 @@ const normalizeQuote = (q) => {
   clientName:    q.client_name    || q.clientName    || "",
   clientEmail:   q.client_email   || q.clientEmail   || "",
   clientContact: q.client_contact || q.clientContact || "",
+  clientRut:     q.client_rut     || q.clientRut     || "",
+  clientAddress: q.client_address || q.clientAddress || "",
   clientId:      q.client_id      || q.clientId      || null,
   validUntil:    q.valid_until    || q.validUntil    || "",
   totalDisc:     q.total_disc     || q.totalDisc     || 0,
@@ -188,6 +192,16 @@ function printQuoteDoc(quote, config = {}) {
     : config;
   const pc = prof.primaryColor || "#0d6e6e";
   const fmtCOP = (n) => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n);
+  // Dirección y ciudad se escriben en un solo campo ("Calle…, Ciudad") — se
+  // separan por la última coma para mostrarlas como dos renglones (DIR/CIUDAD).
+  const splitAddr = (addr) => {
+    const s = (addr||"").trim();
+    if (!s) return { dir:"", city:"" };
+    const idx = s.lastIndexOf(",");
+    if (idx === -1) return { dir:s, city:"" };
+    return { dir: s.slice(0,idx).trim(), city: s.slice(idx+1).trim() };
+  };
+  const { dir: clientDir, city: clientCity } = splitAddr(quote.clientAddress);
   w.document.write(`
     <html><head><title>Cotización #${quote.number}</title>
     <style>
@@ -237,12 +251,17 @@ function printQuoteDoc(quote, config = {}) {
           <strong style="font-size:11px">${quote.clientName}</strong>
           <div style="color:#64748b">${quote.clientContact||""}</div>
           <div style="color:#64748b">${quote.clientEmail||""}</div>
+          ${quote.clientRut?`<div style="color:#64748b"><strong style="color:#475569">NIT:</strong> ${quote.clientRut}</div>`:""}
+          ${clientDir?`<div style="color:#64748b"><strong style="color:#475569">DIR:</strong> ${clientDir}</div>`:""}
+          ${clientCity?`<div style="color:#64748b"><strong style="color:#475569">CIUDAD:</strong> ${clientCity}</div>`:""}
         </div>
         <div class="info-box">
           <div class="lbl">Vendedor</div>
-          <strong>${prof.vendorName||""}</strong>
+          ${prof.companyName?`<strong style="font-size:11px">${prof.companyName}</strong><div style="color:#64748b">${prof.vendorName||""}</div>`:`<strong>${prof.vendorName||""}</strong>`}
           <div style="color:#64748b">${prof.vendorPhone||""}</div>
           <div style="color:#64748b">${prof.vendorEmail||""}</div>
+          ${prof.nit?`<div style="color:#64748b"><strong style="color:#475569">NIT:</strong> ${prof.nit}</div>`:""}
+          ${prof.address?`<div style="color:#64748b"><strong style="color:#475569">DIR:</strong> ${prof.address}</div>`:""}
           <div style="margin-top:8px;font-size:11px;color:#94a3b8">
             Fecha: <strong style="color:#1e293b">${quote.date}</strong> &nbsp;|&nbsp;
             Válida hasta: <strong style="color:#1e293b">${quote.validUntil}</strong>
@@ -721,7 +740,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.2</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.9.3</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -1016,6 +1035,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
         date: today(), validUntil: addDays(today(), 30),
         clientId: c.id, clientName: c.name,
         clientContact: c.contact, clientEmail: c.email, clientRut: c.rfc||"",
+        clientAddress: c.address||"",
         status: "Pendiente", notes: config?.defaultNotes||"",
         discount: 0, tax: 19, trm: 4200, items: [], currency: "COP",
       });
@@ -1077,6 +1097,7 @@ const QuotesView = ({ quotes, setQuotes, saveQuote, deleteQuote, archiveQuote, c
       clientContact: q.clientContact||q.client_contact||"",
       clientEmail: q.clientEmail||q.client_email||"",
       clientRut: q.clientRut||q.client_rut||"",
+      clientAddress: q.clientAddress||q.client_address||"",
       status: "Pendiente",
       notes: q.notes||"", discount: q.discount||0,
       trm: q.trm||4200, currency: q.currency||"COP",
@@ -1563,7 +1584,7 @@ const QuoteForm = ({ quote, setQuote, clients, products, onSave, onClose, isNew,
     const c = clients.find(c => String(c.id) === String(id));
     if (c) setQuote(q => ({ ...q, clientId: c.id, clientName: c.name,
                              clientContact: c.contact, clientEmail: c.email,
-                             clientRut: c.rfc||"" }));
+                             clientRut: c.rfc||"", clientAddress: c.address||"" }));
   };
 
   const filtProd = products.filter(p => {
@@ -2461,8 +2482,8 @@ const ClientsView = ({ clients, setClients, saveClient, deleteClient, onNewQuote
             <Field label="Edificio / Conjunto Residencial" style={{ gridColumn:"1/-1" }}>
               <input value={cur.building||""} onChange={e=>setCur({...cur,building:e.target.value})} placeholder="Ej: Torre Norte, Conjunto Los Pinos" />
             </Field>
-            <Field label="Dirección" style={{ gridColumn:"1/-1" }}>
-              <input value={cur.address||""} onChange={e=>setCur({...cur,address:e.target.value})} placeholder="Calle, Carrera, Avenida…" />
+            <Field label="Dirección (opcional, aparece en la cotización bajo el cliente — termina con la ciudad después de la última coma)" style={{ gridColumn:"1/-1" }}>
+              <input value={cur.address||""} onChange={e=>setCur({...cur,address:e.target.value})} placeholder="Ej: Cl 10 Sur 50 F F 28 Of 407, Medellín Antioquia" />
             </Field>
           </div>
           <div style={{ display:"flex",gap:10,justifyContent:"flex-end",marginTop:16 }}>
@@ -2793,7 +2814,7 @@ const ConfigView = ({ config, setConfig }) => {
   // Local state — only saves to DB when user clicks Save
   const [local, setLocal] = useState(() => ({ ...config }));
   const [personal, setPersonal] = useState(() => config.personal || {
-    companyName:"", vendorName:"", vendorEmail:"", vendorPhone:"", nit:"",
+    companyName:"", vendorName:"", vendorEmail:"", vendorPhone:"", nit:"", address:"",
     primaryColor:"#0d6e6e", logoUrl:"", bankName:"", bankType:"Ahorros", bankAccount:"", accountHolder:""
   });
 
@@ -2831,6 +2852,9 @@ const ConfigView = ({ config, setConfig }) => {
         </Field>
         <Field label="NIT / RUT">
           <input value={local.nit||""} onChange={e=>set("nit",e.target.value)} placeholder="900.000.000-1" />
+        </Field>
+        <Field label="Dirección" style={{ gridColumn:"1/-1" }}>
+          <input value={local.address||""} onChange={e=>set("address",e.target.value)} placeholder="Cra 72 # 39 sur -38" />
         </Field>
         <Field label="Sitio Web" style={{ gridColumn:"1/-1" }}>
           <input value={local.website||""} onChange={e=>set("website",e.target.value)} placeholder="www.miempresa.com" />
@@ -2928,6 +2952,9 @@ const ConfigView = ({ config, setConfig }) => {
         </Field>
         <Field label="CC / Cédula">
           <input value={personal.nit||""} onChange={e=>setP("nit",e.target.value)} placeholder="Número de cédula" />
+        </Field>
+        <Field label="Dirección" style={{ gridColumn:"1/-1" }}>
+          <input value={personal.address||""} onChange={e=>setP("address",e.target.value)} placeholder="Dirección (opcional)" />
         </Field>
         <Field label="Color Principal">
           <div style={{ display:"flex",gap:10,alignItems:"center" }}>
@@ -8593,7 +8620,9 @@ export default function App() {
       : (q.approval_date || null);
     const row = { number:q.number, date:q.date, valid_until:q.validUntil, profile:q.profile||'empresa',
       client_id:q.clientId||null, client_name:q.clientName, client_contact:q.clientContact,
-      client_email:q.clientEmail, client_rut:q.clientRut||"", status:q.status, notes:q.notes, discount:q.discount||0,
+      client_email:q.clientEmail, client_rut:q.clientRut||"",
+      client_address:q.clientAddress||"",
+      status:q.status, notes:q.notes, discount:q.discount||0,
       trm:q.trm||4200, subtotal:q.subtotal||0, total_disc:q.totalDisc||0,
       tax_amt:q.taxAmt||0, total:q.total||0, total_cost:q.totalCost||0,
       profit:q.profit||0, profit_pct:q.profitPct||0, items:q.items||[], created_by:user.id,
@@ -8664,6 +8693,8 @@ export default function App() {
         clientName: q.clientName||q.client_name||"",
         clientContact: q.clientContact||q.client_contact||"",
         clientEmail: q.clientEmail||q.client_email||"",
+        clientRut: q.clientRut||q.client_rut||"",
+        clientAddress: q.clientAddress||q.client_address||"",
         status: "Pendiente",
         notes: q.notes||"", discount: q.discount||0,
         trm: q.trm||4200, currency: q.currency||"COP",
