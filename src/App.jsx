@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.2</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.3</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4222,7 +4222,9 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
   const [sidebarSearch, setSidebarSearch] = useState("");
 
   const activeProjects = projects.filter(p => p.status === "Activo");
-  const sidebarProjects = activeProjects.filter(p =>
+  const scheduledProjectIds = new Set(projectTasks.map(t => String(t.project_id)));
+  const pendingProjects = activeProjects.filter(p => !scheduledProjectIds.has(String(p.id)));
+  const sidebarProjects = pendingProjects.filter(p =>
     !sidebarSearch ||
     (p.name||"").toLowerCase().includes(sidebarSearch.toLowerCase()) ||
     (p.client_name||"").toLowerCase().includes(sidebarSearch.toLowerCase()));
@@ -4243,6 +4245,9 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
 
       <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
         <div style={{ width:220, flexShrink:0 }}>
+          <div style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",marginBottom:6 }}>
+            Sin programar ({pendingProjects.length})
+          </div>
           <input value={sidebarSearch} onChange={e=>setSidebarSearch(e.target.value)}
             placeholder="Buscar proyecto…" style={{ marginBottom:8,fontSize:12 }} />
           <div style={{ maxHeight:600,overflowY:"auto",display:"flex",flexDirection:"column",gap:6 }}>
@@ -4259,7 +4264,9 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
               </div>
             ))}
             {!sidebarProjects.length && (
-              <p style={{ color:G.muted,fontSize:12,padding:"8px 2px" }}>Sin proyectos activos.</p>
+              <p style={{ color:G.muted,fontSize:12,padding:"8px 2px" }}>
+                {pendingProjects.length ? "Sin resultados." : "Todos los proyectos activos ya tienen algo programado."}
+              </p>
             )}
           </div>
         </div>
