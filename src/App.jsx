@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.3</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.4</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4230,10 +4230,13 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
     (p.client_name||"").toLowerCase().includes(sidebarSearch.toLowerCase()));
   const projectsLite = projects.map(p => ({ id:p.id, name:p.name, client_name:p.client_name, kind:p.kind }));
 
-  const blankTaskFor = (projId, date) => ({
-    id: Date.now(), project_id: projId, title:"", type:"tarea",
-    date: date || today(), time:"09:00", duration:60, notes:"", done:false, technician_id:null,
-  });
+  const blankTaskFor = (projId, date) => {
+    const proj = projects.find(p => String(p.id) === String(projId));
+    return {
+      id: Date.now(), project_id: projId, title: proj?.name || "", type:"tarea",
+      date: date || today(), time:"09:00", duration:60, notes:"", done:false, technician_id:null,
+    };
+  };
 
   return (
     <div>
