@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.6</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.7</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3790,6 +3790,13 @@ const minutesBetween = (start, end) => {
   if (diff <= 0) diff += 1440;
   return diff;
 };
+// Lista desplegable de horas cada 15 min (estilo Google Calendar) para "Hora" y "Hora de fin"
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) =>
+  `${String(Math.floor(i/4)).padStart(2,"0")}:${String((i%4)*15).padStart(2,"0")}`);
+const fmtTimeLabel = (hhmm) => {
+  const [h,m] = (hhmm||"09:00").split(":").map(Number);
+  return new Date(2000,0,1,h,m).toLocaleTimeString("es-CO",{ hour:"numeric", minute:"2-digit", hour12:true });
+};
 
 const gcalLink = (task, projName) => {
   const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
@@ -3842,11 +3849,15 @@ const TaskModal = ({ task, onChange, onSave, onClose, projectName, techniciansLi
           <input type="date" value={task.date||""} onChange={e=>onChange(t=>({...t,date:e.target.value}))} />
         </Field>
         <Field label="Hora">
-          <input type="time" value={task.time||""} onChange={e=>onChange(t=>({...t,time:e.target.value}))} />
+          <select value={task.time||"09:00"} onChange={e=>onChange(t=>({...t,time:e.target.value}))}>
+            {TIME_OPTIONS.map(tm=><option key={tm} value={tm}>{fmtTimeLabel(tm)}</option>)}
+          </select>
         </Field>
         <Field label="Hora de fin">
-          <input type="time" value={addMinutesToTime(task.time, task.duration||60)}
-            onChange={e=>onChange(t=>({...t, duration: minutesBetween(t.time, e.target.value)}))} />
+          <select value={addMinutesToTime(task.time, task.duration||60)}
+            onChange={e=>onChange(t=>({...t, duration: minutesBetween(t.time, e.target.value)}))}>
+            {TIME_OPTIONS.map(tm=><option key={tm} value={tm}>{fmtTimeLabel(tm)}</option>)}
+          </select>
         </Field>
       </div>
       <Field label="Notas (opcional)">
