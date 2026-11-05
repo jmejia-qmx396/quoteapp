@@ -579,6 +579,7 @@ const NAV_GROUPS = [
       { id:"dashboard",  label:"Dashboard",     icon:"📊" },
       { id:"quotes",     label:"Cotizaciones",  icon:"📋" },
       { id:"projects",   label:"Proyectos",     icon:"🏗️" },
+      { id:"calendar",   label:"Calendario",    icon:"📅" },
       { id:"payments",   label:"Cuentas Cobro", icon:"🧾" },
       { id:"kits",       label:"Kits",          icon:"🧩" },
       { id:"reports",    label:"Informes",     icon:"📈" },
@@ -740,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.2</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3765,6 +3766,113 @@ const CategoriesView = ({ categories, saveCategory, deleteCategory }) => {
   );
 };
 
+// ── Tipos de tarea/cita (compartido entre ProjectsView, CalendarBoard y TechnicianView) ──
+const TASK_TYPES = [
+  { id:"reunion",     label:"Reunión",      icon:"🤝" },
+  { id:"visita",      label:"Visita",        icon:"🏠" },
+  { id:"entrega",     label:"Entrega",       icon:"📦" },
+  { id:"seguimiento", label:"Seguimiento",   icon:"📞" },
+  { id:"tarea",       label:"Tarea",         icon:"✅" },
+  { id:"otro",        label:"Otro",          icon:"📌" },
+];
+const taskTypeIcon = (type) => TASK_TYPES.find(t=>t.id===type)?.icon || "📌";
+
+const gcalLink = (task, projName) => {
+  const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+  const title = encodeURIComponent(`[${projName}] ${task.title}`);
+  const details = encodeURIComponent(task.notes || "");
+  const pad = n => String(n).padStart(2,"0");
+  let dates = "";
+  if (task.date) {
+    const [y,m,d] = task.date.split("-");
+    if (task.time) {
+      const [hh,mm] = task.time.split(":");
+      const start = `${y}${m}${d}T${hh}${mm}00`;
+      const dur = parseInt(task.duration||60);
+      const endMin = parseInt(mm) + dur;
+      const endHH = parseInt(hh) + Math.floor(endMin/60);
+      const endMM = endMin % 60;
+      const end = `${y}${m}${d}T${pad(endHH)}${pad(endMM)}00`;
+      dates = `${start}/${end}`;
+    } else {
+      dates = `${y}${m}${d}/${y}${m}${d}`;
+    }
+  }
+  return `${base}&text=${title}&details=${details}${dates?`&dates=${dates}`:""}`;
+};
+
+// ── Modal compartido para crear/editar una Tarea (usado por ProjectsView y CalendarAdminView) ──
+const TaskModal = ({ task, onChange, onSave, onClose, projectName, techniciansList=[] }) => (
+  <Modal title={task.id && typeof task.id==="number" && task.id < 1e12 ? "Editar Tarea" : "Nueva Tarea"} onClose={onClose} width={520}>
+    <div style={{ display:"grid",gap:14 }}>
+      <Field label="Título *">
+        <input value={task.title} onChange={e=>onChange(t=>({...t,title:e.target.value}))}
+          placeholder="Ej: Reunión de avance, Visita de instalación…" autoFocus />
+      </Field>
+      <Field label="Tipo">
+        <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+          {TASK_TYPES.map(tt => (
+            <button key={tt.id} onClick={()=>onChange(t=>({...t,type:tt.id}))}
+              style={{ padding:"5px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:G.font,
+                       fontWeight:task.type===tt.id?700:400,
+                       background:task.type===tt.id?`rgba(59,130,246,.15)`:"transparent",
+                       border:`1px solid ${task.type===tt.id?G.accent:G.border}`,
+                       color:task.type===tt.id?G.accent:G.muted }}>
+              {tt.icon} {tt.label}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
+        <Field label="Fecha">
+          <input type="date" value={task.date||""} onChange={e=>onChange(t=>({...t,date:e.target.value}))} />
+        </Field>
+        <Field label="Hora">
+          <input type="time" value={task.time||""} onChange={e=>onChange(t=>({...t,time:e.target.value}))} />
+        </Field>
+        <Field label="Duración (min)">
+          <select value={task.duration||60} onChange={e=>onChange(t=>({...t,duration:Number(e.target.value)}))}>
+            {[15,30,45,60,90,120,180,240].map(d=>(
+              <option key={d} value={d}>{d < 60 ? `${d} min` : `${d/60}h` + (d%60 ? ` ${d%60}min` : "")}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <Field label="Notas (opcional)">
+        <textarea value={task.notes||""} onChange={e=>onChange(t=>({...t,notes:e.target.value}))}
+          rows={3} placeholder="Agenda, instrucciones, dirección…"
+          style={{ width:"100%",resize:"vertical" }} />
+      </Field>
+      <Field label="Técnico asignado (opcional)">
+        <select value={task.technician_id||""} onChange={e=>onChange(t=>({...t,technician_id:e.target.value||null}))}>
+          <option value="">— Sin asignar —</option>
+          {techniciansList.map(t=><option key={t.id} value={t.id}>{t.name||t.email}</option>)}
+        </select>
+      </Field>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4 }}>
+        {task.date ? (
+          <a href={gcalLink(task, projectName||"")}
+            target="_blank" rel="noopener noreferrer"
+            style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 14px",
+                     borderRadius:7,border:`1px solid #dadce0`,background:"#fff",
+                     color:"#1a73e8",fontSize:12,fontWeight:600,textDecoration:"none" }}>
+            <img src="https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_20_2x.png"
+              style={{ width:16,height:16 }} alt="" />
+            Abrir en Google Calendar
+          </a>
+        ) : <div />}
+        <div style={{ display:"flex",gap:8 }}>
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={()=>{
+            if (!task.title.trim()) { alert("La tarea necesita un título."); return; }
+            onSave(task);
+          }}>💾 Guardar</Btn>
+        </div>
+      </div>
+    </div>
+  </Modal>
+);
+
 // ── TABLERO DE PRIORIDAD (Kanban) ───────────────────────────────
 const KANBAN_STAGES = [
   { id:"proyectos",    label:"Proyectos",    icon:"📁" },
@@ -3946,6 +4054,225 @@ const KanbanBoard = ({ projects, calcTotals, projectTasks=[], updateProjectBoard
   );
 };
 
+// ── CALENDARIO (cuadrícula tipo mes, usado por admin y por el técnico) ──
+const TECH_COLORS = ["#3b82f6","#f59e0b","#10b981","#a855f7","#ef4444","#06b6d4","#ec4899","#84cc16"];
+const techColorFor = (id, technicians) => {
+  if (!id) return "#64748b";
+  const idx = technicians.findIndex(t=>t.id===id);
+  return TECH_COLORS[(idx<0?0:idx) % TECH_COLORS.length];
+};
+
+const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin",
+                          onToggleDone, onEditTask, onDeleteTask, onCreateTask }) => {
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [cursor, setCursor] = useState(() => { const d=new Date(); d.setDate(1); return d; });
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [techFilter, setTechFilter] = useState("");
+
+  const year = cursor.getFullYear(), month = cursor.getMonth();
+  const monthLabel = cursor.toLocaleDateString("es-CO",{month:"long",year:"numeric"});
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Dom
+  const daysInMonth  = new Date(year, month+1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+
+  const cells = [];
+  for (let i=0; i<totalCells; i++) {
+    const dayNum = i - firstWeekday + 1;
+    if (dayNum < 1) cells.push({ day: daysInPrevMonth + dayNum, inMonth:false, dateStr:null });
+    else if (dayNum > daysInMonth) cells.push({ day: dayNum - daysInMonth, inMonth:false, dateStr:null });
+    else cells.push({ day: dayNum, inMonth:true, dateStr: `${year}-${String(month+1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}` });
+  }
+
+  const filteredTasks = techFilter ? tasks.filter(t=>t.technician_id===techFilter) : tasks;
+  const tasksByDate = {};
+  filteredTasks.forEach(t => { if (t.date) (tasksByDate[t.date] = tasksByDate[t.date]||[]).push(t); });
+  Object.values(tasksByDate).forEach(arr => arr.sort((a,b)=>(a.time||"").localeCompare(b.time||"")));
+
+  const projName = (pid) => {
+    const p = projectsLite.find(x=>String(x.id)===String(pid));
+    return p ? (p.client_name || p.name) : "";
+  };
+  const techName = (id) => technicians.find(t=>t.id===id)?.name || "Técnico";
+  const dayTasks = selectedDate ? (tasksByDate[selectedDate]||[]) : [];
+
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:14 }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <Btn size="sm" variant="outline" onClick={()=>setCursor(c=>{ const d=new Date(c); d.setMonth(d.getMonth()-1); return d; })}>‹</Btn>
+          <span style={{ fontWeight:700,fontSize:16,textTransform:"capitalize",minWidth:160,textAlign:"center" }}>{monthLabel}</span>
+          <Btn size="sm" variant="outline" onClick={()=>setCursor(c=>{ const d=new Date(c); d.setMonth(d.getMonth()+1); return d; })}>›</Btn>
+          <Btn size="sm" variant="ghost" onClick={()=>{ const d=new Date(); d.setDate(1); setCursor(d); setSelectedDate(todayStr); }}>Hoy</Btn>
+        </div>
+        {technicians.length > 0 && (
+          <select value={techFilter} onChange={e=>setTechFilter(e.target.value)} style={{ maxWidth:220 }}>
+            <option value="">Técnico: Todos</option>
+            {technicians.map(t=><option key={t.id} value={t.id}>{t.name||t.email}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:6 }}>
+        {["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(d=>(
+          <div key={d} style={{ textAlign:"center",fontSize:11,fontWeight:700,color:G.muted,padding:"2px 0" }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6 }}>
+        {cells.map((c,i) => {
+          const dayList = c.dateStr ? (tasksByDate[c.dateStr]||[]) : [];
+          const isToday = c.dateStr === todayStr;
+          const isSelected = c.dateStr && c.dateStr === selectedDate;
+          return (
+            <div key={i} onClick={()=>c.dateStr && setSelectedDate(c.dateStr)}
+              style={{ minHeight:78,borderRadius:8,padding:6,cursor:c.dateStr?"pointer":"default",
+                       background: isSelected ? "rgba(59,130,246,.12)" : G.card,
+                       border:`1px solid ${isSelected?G.accent:G.border}`,
+                       opacity: c.inMonth?1:.35 }}>
+              <div style={{ fontSize:11,fontWeight:isToday?700:500,color:isToday?G.accent:G.muted,marginBottom:4 }}>
+                {isToday ? <span style={{ background:G.accent,color:"#fff",borderRadius:10,padding:"1px 6px" }}>{c.day}</span> : c.day}
+              </div>
+              <div style={{ display:"flex",flexDirection:"column",gap:2 }}>
+                {dayList.slice(0,3).map(t=>(
+                  <div key={t.id} style={{ fontSize:10,padding:"1px 4px",borderRadius:4,
+                                            background:techColorFor(t.technician_id,technicians)+"26",
+                                            color:techColorFor(t.technician_id,technicians),
+                                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+                                            textDecoration:t.done?"line-through":"none",opacity:t.done?.6:1 }}>
+                    {taskTypeIcon(t.type)} {t.time?`${t.time} `:""}{t.title}
+                  </div>
+                ))}
+                {dayList.length>3 && <div style={{ fontSize:10,color:G.muted }}>+{dayList.length-3} más</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedDate && (
+        <Card style={{ marginTop:16 }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8 }}>
+            <span style={{ fontWeight:700,fontSize:14,textTransform:"capitalize" }}>
+              {new Date(selectedDate+"T12:00:00").toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"})}
+            </span>
+            {mode==="admin" && <Btn size="sm" onClick={()=>onCreateTask?.(selectedDate)}>+ Nueva tarea este día</Btn>}
+          </div>
+          {!dayTasks.length && <p style={{ color:G.muted,fontSize:13 }}>Sin tareas programadas este día.</p>}
+          {dayTasks.map(t => (
+            <div key={t.id} style={{ display:"flex",gap:10,alignItems:"flex-start",
+                                      padding:"10px 0",borderBottom:`1px solid ${G.border}` }}>
+              <input type="checkbox" checked={!!t.done} onChange={e=>onToggleDone?.(t.id, e.target.checked)}
+                style={{ marginTop:3,flexShrink:0,width:16,height:16,cursor:"pointer" }} />
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" }}>
+                  <span>{taskTypeIcon(t.type)}</span>
+                  <span style={{ fontWeight:700,fontSize:13,textDecoration:t.done?"line-through":"none" }}>{t.title}</span>
+                  {t.technician_id && (
+                    <span style={{ fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:600,
+                                   background:techColorFor(t.technician_id,technicians)+"26",
+                                   color:techColorFor(t.technician_id,technicians) }}>
+                      🔧 {techName(t.technician_id)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display:"flex",gap:12,flexWrap:"wrap",fontSize:12,color:G.muted,marginTop:3 }}>
+                  {projName(t.project_id) && <span>📁 {projName(t.project_id)}</span>}
+                  {t.time && <span>🕐 {t.time}</span>}
+                  {t.duration && <span>⏱️ {t.duration} min</span>}
+                </div>
+                {t.notes && <p style={{ fontSize:12,color:G.muted,marginTop:4,fontStyle:"italic" }}>{t.notes}</p>}
+              </div>
+              {mode==="admin" && (
+                <div style={{ display:"flex",gap:6,flexShrink:0 }}>
+                  <button onClick={()=>onEditTask?.(t)} title="Editar"
+                    style={{ background:"transparent",border:`1px solid ${G.border}`,borderRadius:6,
+                             padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.muted }}>✏️</button>
+                  <button onClick={()=>onDeleteTask?.(t)} title="Eliminar"
+                    style={{ background:"transparent",border:`1px solid rgba(239,68,68,.3)`,borderRadius:6,
+                             padding:"4px 8px",cursor:"pointer",fontSize:13,color:G.danger }}>🗑️</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// ── Vista Admin: Calendario global de servicios/actividades ─────
+const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjectTask, deleteProjectTask, toggleProjectTask }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [taskModal, setTaskModal] = useState(false);
+  const [editTask, setEditTask]   = useState(null);
+  const [pickerDate, setPickerDate]     = useState(null);
+  const [pickerSearch, setPickerSearch] = useState("");
+
+  const activeProjects = projects.filter(p => p.status === "Activo");
+  const projectsLite = projects.map(p => ({ id:p.id, name:p.name, client_name:p.client_name, kind:p.kind }));
+
+  const blankTaskFor = (projId, date) => ({
+    id: Date.now(), project_id: projId, title:"", type:"tarea",
+    date: date || today(), time:"09:00", duration:60, notes:"", done:false, technician_id:null,
+  });
+
+  return (
+    <div>
+      <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>📅 Calendario</h2>
+      <p style={{ color:G.muted, fontSize:13, marginBottom:16 }}>
+        Agenda de servicios y actividades de todos los proyectos — los técnicos la ven al entrar con su usuario.
+      </p>
+
+      <CalendarBoard
+        tasks={projectTasks}
+        projectsLite={projectsLite}
+        technicians={techniciansList}
+        mode="admin"
+        onToggleDone={toggleProjectTask}
+        onEditTask={(t)=>{ setEditTask({...t}); setTaskModal(true); }}
+        onDeleteTask={async(t)=>{
+          const ok = await confirm(`¿Eliminar "${t.title}"?`, "Esta acción no se puede deshacer.");
+          if (ok) deleteProjectTask(t.id);
+        }}
+        onCreateTask={(dateStr)=>{ setPickerDate(dateStr); setPickerSearch(""); }}
+      />
+      {confirmDialog}
+
+      {pickerDate && (
+        <Modal title="¿Para cuál Proyecto o Servicio?" onClose={()=>setPickerDate(null)} width={480}>
+          <input autoFocus value={pickerSearch} onChange={e=>setPickerSearch(e.target.value)}
+            placeholder="Buscar proyecto o cliente…" style={{ marginBottom:12,width:"100%" }} />
+          <div style={{ maxHeight:360,overflowY:"auto" }}>
+            {activeProjects
+              .filter(p => !pickerSearch ||
+                (p.name||"").toLowerCase().includes(pickerSearch.toLowerCase()) ||
+                (p.client_name||"").toLowerCase().includes(pickerSearch.toLowerCase()))
+              .map(p => (
+                <div key={p.id}
+                  onClick={()=>{ setEditTask(blankTaskFor(p.id, pickerDate)); setPickerDate(null); setTaskModal(true); }}
+                  style={{ padding:"8px 10px",borderBottom:`1px solid ${G.border}`,cursor:"pointer",fontSize:13 }}
+                  onMouseOver={e=>e.currentTarget.style.background="rgba(59,130,246,.08)"}
+                  onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{ fontWeight:600 }}>{p.client_name}</span>
+                  <span style={{ color:G.muted,marginLeft:8 }}>{p.kind==="servicio"?"🔧 ":""}{p.name}</span>
+                </div>
+              ))
+            }
+            {!activeProjects.length && <p style={{ color:G.muted,fontSize:13 }}>No hay proyectos activos.</p>}
+          </div>
+        </Modal>
+      )}
+
+      {taskModal && editTask && (
+        <TaskModal task={editTask} onChange={setEditTask} techniciansList={techniciansList}
+          projectName={projects.find(p=>p.id===editTask.project_id)?.name||""}
+          onClose={()=>{ setTaskModal(false); setEditTask(null); }}
+          onSave={async(t)=>{ await saveProjectTask(t); setTaskModal(false); setEditTask(null); }} />
+      )}
+    </div>
+  );
+};
+
 // ── PROYECTOS ────────────────────────────────────────────────────
 const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, clients,
                         paymentRequests, savePaymentRequest, createProject, addQuoteToProject, saveQuoteDetalle,
@@ -3988,44 +4315,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
   const [taskModal, setTaskModal]   = useState(false);
   const [editTask, setEditTask]     = useState(null);
 
-  const TASK_TYPES = [
-    { id:"reunion",     label:"Reunión",      icon:"🤝" },
-    { id:"visita",      label:"Visita",        icon:"🏠" },
-    { id:"entrega",     label:"Entrega",       icon:"📦" },
-    { id:"seguimiento", label:"Seguimiento",   icon:"📞" },
-    { id:"tarea",       label:"Tarea",         icon:"✅" },
-    { id:"otro",        label:"Otro",          icon:"📌" },
-  ];
-
-  const taskTypeIcon = (type) => TASK_TYPES.find(t=>t.id===type)?.icon || "📌";
-
-  const gcalLink = (task, projName) => {
-    const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
-    const title = encodeURIComponent(`[${projName}] ${task.title}`);
-    const details = encodeURIComponent(task.notes || "");
-    const pad = n => String(n).padStart(2,"0");
-    let dates = "";
-    if (task.date) {
-      const [y,m,d] = task.date.split("-");
-      if (task.time) {
-        const [hh,mm] = task.time.split(":");
-        const start = `${y}${m}${d}T${hh}${mm}00`;
-        const dur = parseInt(task.duration||60);
-        const endMin = parseInt(mm) + dur;
-        const endHH = parseInt(hh) + Math.floor(endMin/60);
-        const endMM = endMin % 60;
-        const end = `${y}${m}${d}T${pad(endHH)}${pad(endMM)}00`;
-        dates = `${start}/${end}`;
-      } else {
-        dates = `${y}${m}${d}/${y}${m}${d}`;
-      }
-    }
-    return `${base}&text=${title}&details=${details}${dates?`&dates=${dates}`:""}`;
-  };
-
   const blankTask = (projId) => ({
     id: Date.now(), project_id: projId, title:"", type:"tarea",
-    date: today(), time:"09:00", duration:60, notes:"", done:false,
+    date: today(), time:"09:00", duration:60, notes:"", done:false, technician_id:null,
   });
 
   const filt = projects.filter(p => {
@@ -5620,6 +5912,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                             )}
                             {task.time && <span>🕐 {task.time}</span>}
                             {task.duration && <span>⏱️ {task.duration} min</span>}
+                            {task.technician_id && (
+                              <span>🔧 {techniciansList.find(t=>t.id===task.technician_id)?.name||"Técnico"}</span>
+                            )}
                           </div>
                           {task.notes && (
                             <p style={{ fontSize:12,color:G.muted,marginTop:6,
@@ -5673,7 +5968,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                             <div style={{ display:"flex",gap:10,alignItems:"center" }}>
                               <input type="checkbox" checked={true}
                                 onChange={e => toggleProjectTask(task.id, e.target.checked)}
-                                style={{ flexShrink:0,cursor:"pointer" }} />
+                                style={{ flexShrink:0,width:16,height:16,cursor:"pointer" }} />
                               <span style={{ fontSize:14,textDecoration:"line-through",color:G.muted }}>
                                 {taskTypeIcon(task.type)} {task.title}
                               </span>
@@ -5811,69 +6106,10 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
 
       {/* Modal: nueva / editar tarea */}
       {taskModal && editTask && (
-        <Modal title={editTask.id && typeof editTask.id==="number" && editTask.id < 1e12 ? "Editar Tarea" : "Nueva Tarea"} onClose={()=>{ setTaskModal(false); setEditTask(null); }} width={520}>
-          <div style={{ display:"grid",gap:14 }}>
-            <Field label="Título *">
-              <input value={editTask.title} onChange={e=>setEditTask(t=>({...t,title:e.target.value}))}
-                placeholder="Ej: Reunión de avance, Visita de instalación…" autoFocus />
-            </Field>
-            <Field label="Tipo">
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                {TASK_TYPES.map(tt => (
-                  <button key={tt.id} onClick={()=>setEditTask(t=>({...t,type:tt.id}))}
-                    style={{ padding:"5px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontFamily:G.font,
-                             fontWeight:editTask.type===tt.id?700:400,
-                             background:editTask.type===tt.id?`rgba(59,130,246,.15)`:"transparent",
-                             border:`1px solid ${editTask.type===tt.id?G.accent:G.border}`,
-                             color:editTask.type===tt.id?G.accent:G.muted }}>
-                    {tt.icon} {tt.label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12 }}>
-              <Field label="Fecha">
-                <input type="date" value={editTask.date||""} onChange={e=>setEditTask(t=>({...t,date:e.target.value}))} />
-              </Field>
-              <Field label="Hora">
-                <input type="time" value={editTask.time||""} onChange={e=>setEditTask(t=>({...t,time:e.target.value}))} />
-              </Field>
-              <Field label="Duración (min)">
-                <select value={editTask.duration||60} onChange={e=>setEditTask(t=>({...t,duration:Number(e.target.value)}))}>
-                  {[15,30,45,60,90,120,180,240].map(d=>(
-                    <option key={d} value={d}>{d < 60 ? `${d} min` : `${d/60}h` + (d%60 ? ` ${d%60}min` : "")}</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <Field label="Notas (opcional)">
-              <textarea value={editTask.notes||""} onChange={e=>setEditTask(t=>({...t,notes:e.target.value}))}
-                rows={3} placeholder="Agenda, instrucciones, dirección…"
-                style={{ width:"100%",resize:"vertical" }} />
-            </Field>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4 }}>
-              {editTask.date ? (
-                <a href={gcalLink(editTask, projects.find(p=>p.id===editTask.project_id)?.name||"")}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 14px",
-                           borderRadius:7,border:`1px solid #dadce0`,background:"#fff",
-                           color:"#1a73e8",fontSize:12,fontWeight:600,textDecoration:"none" }}>
-                  <img src="https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_20_2x.png"
-                    style={{ width:16,height:16 }} alt="" />
-                  Abrir en Google Calendar
-                </a>
-              ) : <div />}
-              <div style={{ display:"flex",gap:8 }}>
-                <Btn variant="ghost" onClick={()=>{ setTaskModal(false); setEditTask(null); }}>Cancelar</Btn>
-                <Btn onClick={async()=>{
-                  if (!editTask.title.trim()) { alert("La tarea necesita un título."); return; }
-                  await saveProjectTask(editTask);
-                  setTaskModal(false); setEditTask(null);
-                }}>💾 Guardar</Btn>
-              </div>
-            </div>
-          </div>
-        </Modal>
+        <TaskModal task={editTask} onChange={setEditTask} techniciansList={techniciansList}
+          projectName={projects.find(p=>p.id===editTask.project_id)?.name||""}
+          onClose={()=>{ setTaskModal(false); setEditTask(null); }}
+          onSave={async(t)=>{ await saveProjectTask(t); setTaskModal(false); setEditTask(null); }} />
       )}
 
       {/* Modal: registrar pago */}
@@ -6270,7 +6506,8 @@ const KitsView = ({ templates, saveTemplate, deleteTemplate, updateTemplate, pro
 // ── APP ROOT ──────────────────────────────────────────────────────
 
 // ── Vista Técnico ────────────────────────────────────────────────
-const TechnicianView = ({ user, profile, logout }) => {
+const TechnicianView = ({ user, profile, logout, projectTasks=[], projectsLite=[], technicians=[], toggleProjectTask }) => {
+  const [tab, setTab]           = useState("calendario");
   const [jobs, setJobs]         = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -6323,9 +6560,9 @@ const TechnicianView = ({ user, profile, logout }) => {
                 borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
 
   return (
-    <div style={{ minHeight:"100vh", background:G.bg, padding:"20px 16px", maxWidth:700, margin:"0 auto" }}>
+    <div style={{ minHeight:"100vh", background:G.bg, padding:"20px 16px", maxWidth:820, margin:"0 auto" }}>
       <style>{css}</style>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
         <div>
           <div style={{ fontFamily:G.mono, fontWeight:700, fontSize:18, color:G.accent }}>◈ QuoteApp</div>
           <div style={{ color:G.muted, fontSize:12, marginTop:2 }}>Hola, {profile?.name || user.email}</div>
@@ -6337,6 +6574,24 @@ const TechnicianView = ({ user, profile, logout }) => {
         </button>
       </div>
 
+      <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+        {[{id:"calendario",label:"📅 Calendario"},{id:"trabajos",label:"💰 Mis Trabajos"}].map(t => (
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{ padding:"7px 16px", borderRadius:7, cursor:"pointer", fontSize:13, fontWeight:600,
+                     background: tab===t.id ? G.accent : "transparent",
+                     color: tab===t.id ? "#fff" : G.muted,
+                     border:`1px solid ${tab===t.id?G.accent:G.border}` }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab==="calendario" && (
+        <CalendarBoard tasks={projectTasks} projectsLite={projectsLite} technicians={technicians}
+          mode="technician" onToggleDone={toggleProjectTask} />
+      )}
+
+      {tab==="trabajos" && <>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:24 }}>
         {[
           { label:"Total acordado",  value:fmtCOP(totalAcordado),  color:G.text },
@@ -6438,6 +6693,7 @@ const TechnicianView = ({ user, profile, logout }) => {
           })}
         </div>
       )}
+      </>}
     </div>
   );
 };
@@ -8693,8 +8949,17 @@ export default function App() {
       }
       setProfile(prof);
 
-      // Si es técnico, no cargar datos de la app principal
-      if (prof.role === 'technician') { setLoading(false); return; }
+      // Si es técnico, solo cargar lo que necesita el Calendario (sin datos financieros)
+      if (prof.role === 'technician') {
+        const { data: ptasks } = await sb.from("project_tasks").select("*").order("date", { ascending: true });
+        if (ptasks) setProjectTasks(ptasks);
+        const { data: projsLite } = await sb.from("projects").select("id,name,client_name,kind");
+        if (projsLite) setProjects(projsLite);
+        const { data: techs } = await sb.from("profiles").select("id,name").eq("role","technician");
+        if (techs) setTechniciansList(techs);
+        setLoading(false);
+        return;
+      }
 
       // Quotes
       const { data: qs } = await sb.from("quotes").select("*").order("number", { ascending: false });
@@ -9074,6 +9339,7 @@ export default function App() {
       duration:    task.duration || 60,
       notes:       task.notes || "",
       done:        task.done  || false,
+      technician_id: task.technician_id || null,
       created_by:  user.id,
     };
     if (task.id && typeof task.id === "number" && task.id < 1e12) {
@@ -9150,7 +9416,9 @@ export default function App() {
 
   // ── Render ───────────────────────────────────────────────────
   if (!user) return <><style>{css}</style><LoginView onLogin={u=>{setUser(u);loadAll(u);}} /></>;
-  if (user && profile?.role === 'technician') return <TechnicianView user={user} profile={profile} logout={logout} />;
+  if (user && profile?.role === 'technician') return <TechnicianView user={user} profile={profile} logout={logout}
+                                                          projectTasks={projectTasks} projectsLite={projects}
+                                                          technicians={techniciansList} toggleProjectTask={toggleProjectTask} />;
 
   if (loading) return (
     <div style={{ minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -9225,6 +9493,9 @@ export default function App() {
                                    deleteProjectTask={deleteProjectTask}
                                    toggleProjectTask={toggleProjectTask}
                                    config={config} />}
+          {view==="calendar"   && <CalendarAdminView projects={projects} projectTasks={projectTasks}
+                                   techniciansList={techniciansList} saveProjectTask={saveProjectTask}
+                                   deleteProjectTask={deleteProjectTask} toggleProjectTask={toggleProjectTask} />}
           {view==="categories" && <CategoriesView categories={categories} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
           {view==="suppliers"  && <SuppliersView suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} />}
           {view==="payments"   && <PaymentRequestsView paymentRequests={paymentRequests} quotes={quotes} projects={projects}
