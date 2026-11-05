@@ -740,7 +740,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.1</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.10.2</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4067,7 +4067,8 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
     const p = projects.find(x=>x.id===pid);
     const qs = getProjQuotes(pid);
     const pps = getProjPayments(pid);
-    const totalProject = p?.kind==="servicio" ? Number(p.service_value||0) : qs.reduce((s,q)=>s+(q.total||0),0);
+    const qsTotal = qs.reduce((s,q)=>s+(q.total||0),0);
+    const totalProject = p?.kind==="servicio" ? (qs.length ? qsTotal : Number(p.service_value||0)) : qsTotal;
     const totalPaid    = pps.reduce((s,p)=>s+(p.amount||0),0);
     return { totalProject, totalPaid, balance: totalProject - totalPaid };
   };
@@ -4475,9 +4476,9 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </div>
                 <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
                   {proj.status==="Activo" && <>
-                    {proj.kind==="servicio"
-                      ? <Btn size="sm" variant="success" onClick={()=>setCxcModal(true)}>🧾 Generar Cuenta de Cobro</Btn>
-                      : <Btn size="sm" variant="outline" onClick={()=>setAddQuoteModal(true)}>+ Cotización</Btn>}
+                    <Btn size="sm" variant="outline" onClick={()=>setAddQuoteModal(true)}>+ Cotización</Btn>
+                    {proj.kind==="servicio" &&
+                      <Btn size="sm" variant="success" onClick={()=>setCxcModal(true)}>🧾 Generar Cuenta de Cobro</Btn>}
                     <Btn size="sm" variant="success" onClick={openAddPayment}>+ Pago</Btn>
                   </>}
                   <Btn size="sm" variant="primary" onClick={printStatement}>🖨️ Estado de Cuenta</Btn>
@@ -5279,32 +5280,39 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
             })()}
 
             {activeTab==="resumen" && <>
-            {proj.kind === "servicio" && (
-              <Card style={{ marginBottom:16 }}>
-                <div style={{ display:"flex",gap:20,flexWrap:"wrap",alignItems:"flex-end" }}>
-                  <div style={{ minWidth:180 }}>
-                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Valor del Servicio</div>
-                    <NumInput value={proj.service_value||0}
-                      onChange={v=>updateServiceValue(proj.id, v)}
-                      style={{ fontSize:16,fontWeight:700,fontFamily:G.mono,color:G.accent }} />
-                  </div>
-                  <div>
-                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Costo técnico externo</div>
-                    <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.warn }}>
-                      {fmt(Number(proj.commission_fixed||0))}
+            {proj.kind === "servicio" && (() => {
+              const svcHasQuotes = getProjQuotes(proj.id).length > 0;
+              const svcValue = svcHasQuotes ? calcTotals(proj.id).totalProject : Number(proj.service_value||0);
+              return (
+                <Card style={{ marginBottom:16 }}>
+                  <div style={{ display:"flex",gap:20,flexWrap:"wrap",alignItems:"flex-end" }}>
+                    <div style={{ minWidth:180 }}>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>
+                        Valor del Servicio{svcHasQuotes?" (desde cotización)":""}
+                      </div>
+                      {svcHasQuotes
+                        ? <div style={{ fontSize:16,fontWeight:700,fontFamily:G.mono,color:G.accent }}>{fmt(svcValue)}</div>
+                        : <NumInput value={proj.service_value||0}
+                            onChange={v=>updateServiceValue(proj.id, v)}
+                            style={{ fontSize:16,fontWeight:700,fontFamily:G.mono,color:G.accent }} />}
+                    </div>
+                    <div>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Costo técnico externo</div>
+                      <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.warn }}>
+                        {fmt(Number(proj.commission_fixed||0))}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Utilidad estimada</div>
+                      <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.success }}>
+                        {fmt(svcValue - Number(proj.commission_fixed||0))}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div style={{ color:G.muted,fontSize:11,marginBottom:4 }}>Utilidad estimada</div>
-                    <div style={{ fontFamily:G.mono,fontSize:16,fontWeight:700,color:G.success }}>
-                      {fmt(Number(proj.service_value||0) - Number(proj.commission_fixed||0))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
-            {proj.kind !== "servicio" && <>
-            {/* Cotizaciones del proyecto */}
+                </Card>
+              );
+            })()}
+            {/* Cotizaciones del proyecto/servicio */}
             <Card style={{ marginBottom:16,padding:0,overflow:"hidden" }}>
               <div style={{ padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontWeight:700,fontSize:13 }}>
                 📋 Cotizaciones
@@ -5347,7 +5355,6 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 </tbody>
               </table>
             </Card>
-            </>}
 
             {/* Comisión por mano de obra (o costo de técnico externo, en un Servicio) */}
             {(()=>{
@@ -5761,7 +5768,7 @@ const ProjectsView = ({ projects, projectQuotes, projectPayments, quotes, client
                 <NumInput value={newProject.value||0} onChange={v=>setNewProject({...newProject,value:v})} placeholder="0" />
               </Field>
             )}
-            {newProject.clientId && newProject.kind!=="servicio" && (
+            {newProject.clientId && (
               <Field label="Cotización inicial (opcional)">
                 <select value={newProject.quoteId||""}
                   onChange={e=>setNewProject({...newProject,quoteId:e.target.value})}>
