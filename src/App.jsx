@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.4</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.5</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4145,12 +4145,13 @@ const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin"
               </div>
               <div style={{ display:"flex",flexDirection:"column",gap:2 }}>
                 {dayList.slice(0,3).map(t=>(
-                  <div key={t.id} style={{ fontSize:10,padding:"1px 4px",borderRadius:4,
-                                            background:techColorFor(t.technician_id,technicians)+"26",
-                                            color:techColorFor(t.technician_id,technicians),
-                                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                                            textDecoration:t.done?"line-through":"none",opacity:t.done?.6:1 }}>
-                    {taskTypeIcon(t.type)} {t.time?`${t.time} `:""}{t.title}
+                  <div key={t.id} title={`${projName(t.project_id) || ""} — ${t.title}`}
+                    style={{ fontSize:10,padding:"1px 4px",borderRadius:4,
+                             background:techColorFor(t.technician_id,technicians)+"26",
+                             color:techColorFor(t.technician_id,technicians),
+                             whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+                             textDecoration:t.done?"line-through":"none",opacity:t.done?.6:1 }}>
+                    {taskTypeIcon(t.type)} {t.time?`${t.time} `:""}{projName(t.project_id) || t.title}
                   </div>
                 ))}
                 {dayList.length>3 && <div style={{ fontSize:10,color:G.muted }}>+{dayList.length-3} más</div>}
