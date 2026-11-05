@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.7</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.8</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4084,10 +4084,9 @@ const techColorFor = (id, technicians) => {
   return TECH_COLORS[(idx<0?0:idx) % TECH_COLORS.length];
 };
 
-const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin",
+const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin", cursor, setCursor,
                           onToggleDone, onEditTask, onDeleteTask, onCreateTask, onDropProject }) => {
   const todayStr = new Date().toISOString().split("T")[0];
-  const [cursor, setCursor] = useState(() => { const d=new Date(); d.setDate(1); return d; });
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [techFilter, setTechFilter] = useState("");
   const [dragOverDate, setDragOverDate] = useState(null);
@@ -4243,10 +4242,13 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
   const [pickerSearch, setPickerSearch] = useState("");
 
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [cursor, setCursor] = useState(() => { const d=new Date(); d.setDate(1); return d; });
 
   const activeProjects = projects.filter(p => p.status === "Activo");
-  const scheduledProjectIds = new Set(projectTasks.map(t => String(t.project_id)));
-  const pendingProjects = activeProjects.filter(p => !scheduledProjectIds.has(String(p.id)));
+  const monthStr = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,"0")}`;
+  const scheduledProjectIdsThisMonth = new Set(
+    projectTasks.filter(t => (t.date||"").startsWith(monthStr)).map(t => String(t.project_id)));
+  const pendingProjects = activeProjects.filter(p => !scheduledProjectIdsThisMonth.has(String(p.id)));
   const sidebarProjects = pendingProjects.filter(p =>
     !sidebarSearch ||
     (p.name||"").toLowerCase().includes(sidebarSearch.toLowerCase()) ||
@@ -4272,7 +4274,7 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
       <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
         <div style={{ width:220, flexShrink:0 }}>
           <div style={{ fontSize:11,fontWeight:700,color:G.muted,textTransform:"uppercase",marginBottom:6 }}>
-            Sin programar ({pendingProjects.length})
+            Sin programar en {cursor.toLocaleDateString("es-CO",{month:"long",year:"numeric"})} ({pendingProjects.length})
           </div>
           <input value={sidebarSearch} onChange={e=>setSidebarSearch(e.target.value)}
             placeholder="Buscar proyecto…" style={{ marginBottom:8,fontSize:12 }} />
@@ -4291,7 +4293,7 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
             ))}
             {!sidebarProjects.length && (
               <p style={{ color:G.muted,fontSize:12,padding:"8px 2px" }}>
-                {pendingProjects.length ? "Sin resultados." : "Todos los proyectos activos ya tienen algo programado."}
+                {pendingProjects.length ? "Sin resultados." : "Todos los proyectos activos ya tienen algo programado este mes."}
               </p>
             )}
           </div>
@@ -4303,6 +4305,8 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
             projectsLite={projectsLite}
             technicians={techniciansList}
             mode="admin"
+            cursor={cursor}
+            setCursor={setCursor}
             onToggleDone={toggleProjectTask}
             onEditTask={(t)=>{ setEditTask({...t}); setTaskModal(true); }}
             onDeleteTask={async(t)=>{
@@ -6586,6 +6590,7 @@ const KitsView = ({ templates, saveTemplate, deleteTemplate, updateTemplate, pro
 // ── Vista Técnico ────────────────────────────────────────────────
 const TechnicianView = ({ user, profile, logout, projectTasks=[], projectsLite=[], technicians=[], toggleProjectTask }) => {
   const [tab, setTab]           = useState("calendario");
+  const [calCursor, setCalCursor] = useState(() => { const d=new Date(); d.setDate(1); return d; });
   const [jobs, setJobs]         = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -6666,7 +6671,7 @@ const TechnicianView = ({ user, profile, logout, projectTasks=[], projectsLite=[
 
       {tab==="calendario" && (
         <CalendarBoard tasks={projectTasks} projectsLite={projectsLite} technicians={technicians}
-          mode="technician" onToggleDone={toggleProjectTask} />
+          mode="technician" cursor={calCursor} setCursor={setCalCursor} onToggleDone={toggleProjectTask} />
       )}
 
       {tab==="trabajos" && <>
