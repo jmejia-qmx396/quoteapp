@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.5</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.6</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -3777,6 +3777,20 @@ const TASK_TYPES = [
 ];
 const taskTypeIcon = (type) => TASK_TYPES.find(t=>t.id===type)?.icon || "📌";
 
+// Hora de fin ↔ duración (minutos), para el campo "Hora de fin" del formulario de tarea
+const addMinutesToTime = (time, mins) => {
+  const [h,m] = (time||"09:00").split(":").map(Number);
+  const total = (((h*60 + m + Number(mins||0)) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`;
+};
+const minutesBetween = (start, end) => {
+  const [h1,m1] = (start||"09:00").split(":").map(Number);
+  const [h2,m2] = (end||"10:00").split(":").map(Number);
+  let diff = (h2*60+m2) - (h1*60+m1);
+  if (diff <= 0) diff += 1440;
+  return diff;
+};
+
 const gcalLink = (task, projName) => {
   const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
   const title = encodeURIComponent(`[${projName}] ${task.title}`);
@@ -3830,12 +3844,9 @@ const TaskModal = ({ task, onChange, onSave, onClose, projectName, techniciansLi
         <Field label="Hora">
           <input type="time" value={task.time||""} onChange={e=>onChange(t=>({...t,time:e.target.value}))} />
         </Field>
-        <Field label="Duración (min)">
-          <select value={task.duration||60} onChange={e=>onChange(t=>({...t,duration:Number(e.target.value)}))}>
-            {[15,30,45,60,90,120,180,240].map(d=>(
-              <option key={d} value={d}>{d < 60 ? `${d} min` : `${d/60}h` + (d%60 ? ` ${d%60}min` : "")}</option>
-            ))}
-          </select>
+        <Field label="Hora de fin">
+          <input type="time" value={addMinutesToTime(task.time, task.duration||60)}
+            onChange={e=>onChange(t=>({...t, duration: minutesBetween(t.time, e.target.value)}))} />
         </Field>
       </div>
       <Field label="Notas (opcional)">
