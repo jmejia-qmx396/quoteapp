@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4063,11 +4063,12 @@ const techColorFor = (id, technicians) => {
 };
 
 const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin",
-                          onToggleDone, onEditTask, onDeleteTask, onCreateTask }) => {
+                          onToggleDone, onEditTask, onDeleteTask, onCreateTask, onDropProject }) => {
   const todayStr = new Date().toISOString().split("T")[0];
   const [cursor, setCursor] = useState(() => { const d=new Date(); d.setDate(1); return d; });
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [techFilter, setTechFilter] = useState("");
+  const [dragOverDate, setDragOverDate] = useState(null);
 
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const monthLabel = cursor.toLocaleDateString("es-CO",{month:"long",year:"numeric"});
@@ -4123,11 +4124,21 @@ const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin"
           const dayList = c.dateStr ? (tasksByDate[c.dateStr]||[]) : [];
           const isToday = c.dateStr === todayStr;
           const isSelected = c.dateStr && c.dateStr === selectedDate;
+          const isDragOver = c.dateStr && c.dateStr === dragOverDate;
           return (
             <div key={i} onClick={()=>c.dateStr && setSelectedDate(c.dateStr)}
+              onDragOver={e=>{ if (c.dateStr && onDropProject) { e.preventDefault(); setDragOverDate(c.dateStr); } }}
+              onDragLeave={()=>{ if (isDragOver) setDragOverDate(null); }}
+              onDrop={e=>{
+                if (!c.dateStr || !onDropProject) return;
+                e.preventDefault();
+                setDragOverDate(null);
+                const pid = e.dataTransfer.getData("text/plain");
+                if (pid) onDropProject(pid, c.dateStr);
+              }}
               style={{ minHeight:78,borderRadius:8,padding:6,cursor:c.dateStr?"pointer":"default",
-                       background: isSelected ? "rgba(59,130,246,.12)" : G.card,
-                       border:`1px solid ${isSelected?G.accent:G.border}`,
+                       background: isDragOver ? "rgba(16,185,129,.18)" : isSelected ? "rgba(59,130,246,.12)" : G.card,
+                       border:`1px solid ${isDragOver?G.success:isSelected?G.accent:G.border}`,
                        opacity: c.inMonth?1:.35 }}>
               <div style={{ fontSize:11,fontWeight:isToday?700:500,color:isToday?G.accent:G.muted,marginBottom:4 }}>
                 {isToday ? <span style={{ background:G.accent,color:"#fff",borderRadius:10,padding:"1px 6px" }}>{c.day}</span> : c.day}
@@ -4208,7 +4219,13 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
   const [pickerDate, setPickerDate]     = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
 
+  const [sidebarSearch, setSidebarSearch] = useState("");
+
   const activeProjects = projects.filter(p => p.status === "Activo");
+  const sidebarProjects = activeProjects.filter(p =>
+    !sidebarSearch ||
+    (p.name||"").toLowerCase().includes(sidebarSearch.toLowerCase()) ||
+    (p.client_name||"").toLowerCase().includes(sidebarSearch.toLowerCase()));
   const projectsLite = projects.map(p => ({ id:p.id, name:p.name, client_name:p.client_name, kind:p.kind }));
 
   const blankTaskFor = (projId, date) => ({
@@ -4221,21 +4238,49 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
       <h2 style={{ fontSize:20, fontWeight:700, marginBottom:4 }}>📅 Calendario</h2>
       <p style={{ color:G.muted, fontSize:13, marginBottom:16 }}>
         Agenda de servicios y actividades de todos los proyectos — los técnicos la ven al entrar con su usuario.
+        Arrastra un proyecto a un día para programarle una tarea.
       </p>
 
-      <CalendarBoard
-        tasks={projectTasks}
-        projectsLite={projectsLite}
-        technicians={techniciansList}
-        mode="admin"
-        onToggleDone={toggleProjectTask}
-        onEditTask={(t)=>{ setEditTask({...t}); setTaskModal(true); }}
-        onDeleteTask={async(t)=>{
-          const ok = await confirm(`¿Eliminar "${t.title}"?`, "Esta acción no se puede deshacer.");
-          if (ok) deleteProjectTask(t.id);
-        }}
-        onCreateTask={(dateStr)=>{ setPickerDate(dateStr); setPickerSearch(""); }}
-      />
+      <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
+        <div style={{ width:220, flexShrink:0 }}>
+          <input value={sidebarSearch} onChange={e=>setSidebarSearch(e.target.value)}
+            placeholder="Buscar proyecto…" style={{ marginBottom:8,fontSize:12 }} />
+          <div style={{ maxHeight:600,overflowY:"auto",display:"flex",flexDirection:"column",gap:6 }}>
+            {sidebarProjects.map(p => (
+              <div key={p.id} draggable
+                onDragStart={e=>e.dataTransfer.setData("text/plain", String(p.id))}
+                style={{ padding:"7px 9px",borderRadius:7,border:`1px solid ${G.border}`,
+                         background:G.card,cursor:"grab",fontSize:12 }}>
+                <div style={{ fontWeight:600 }}>
+                  {p.kind==="servicio"?"🔧 ":"📁 "}{p.client_name}
+                </div>
+                <div style={{ color:G.muted,fontSize:11,marginTop:1,whiteSpace:"nowrap",
+                              overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
+              </div>
+            ))}
+            {!sidebarProjects.length && (
+              <p style={{ color:G.muted,fontSize:12,padding:"8px 2px" }}>Sin proyectos activos.</p>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex:1,minWidth:0 }}>
+          <CalendarBoard
+            tasks={projectTasks}
+            projectsLite={projectsLite}
+            technicians={techniciansList}
+            mode="admin"
+            onToggleDone={toggleProjectTask}
+            onEditTask={(t)=>{ setEditTask({...t}); setTaskModal(true); }}
+            onDeleteTask={async(t)=>{
+              const ok = await confirm(`¿Eliminar "${t.title}"?`, "Esta acción no se puede deshacer.");
+              if (ok) deleteProjectTask(t.id);
+            }}
+            onCreateTask={(dateStr)=>{ setPickerDate(dateStr); setPickerSearch(""); }}
+            onDropProject={(projId, dateStr)=>{ setEditTask(blankTaskFor(projId, dateStr)); setTaskModal(true); }}
+          />
+        </div>
+      </div>
       {confirmDialog}
 
       {pickerDate && (
