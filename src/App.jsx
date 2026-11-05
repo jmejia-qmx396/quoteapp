@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.1</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.2</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4072,7 +4072,7 @@ const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin"
 
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const monthLabel = cursor.toLocaleDateString("es-CO",{month:"long",year:"numeric"});
-  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Dom
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Lun
   const daysInMonth  = new Date(year, month+1, 0).getDate();
   const daysInPrevMonth = new Date(year, month, 0).getDate();
   const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
@@ -4115,7 +4115,7 @@ const CalendarBoard = ({ tasks=[], projectsLite=[], technicians=[], mode="admin"
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:6 }}>
-        {["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(d=>(
+        {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d=>(
           <div key={d} style={{ textAlign:"center",fontSize:11,fontWeight:700,color:G.muted,padding:"2px 0" }}>{d}</div>
         ))}
       </div>
