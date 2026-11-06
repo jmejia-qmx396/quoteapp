@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.11.8</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.12.0</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -6807,6 +6807,12 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
   const [jobForm, setJobForm]   = useState({ technician_id:"", tipo:"servicio", descripcion:"", fecha:new Date().toISOString().split("T")[0], valor_acordado:"", project_id:"", notas:"" });
   const [selectedMO, setSelectedMO] = useState([]);
   const [techForm, setTechForm] = useState({ name:"", email:"", password:"" });
+  const [batches, setBatches] = useState([]);
+  const [selectedComIds, setSelectedComIds] = useState(new Set());
+  const [batchModal, setBatchModal] = useState(null);
+  const [savingBatch, setSavingBatch] = useState(false);
+  const [showBatchHistorial, setShowBatchHistorial] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const fmtCOP = n => new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(n||0);
   const inp = { width:"100%", background:G.surface, border:`1px solid ${G.border}`, borderRadius:6, padding:"7px 10px", color:G.text, fontSize:13 };
@@ -6836,7 +6842,8 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     const { data: techs } = await sb.from("profiles").select("*").eq("role","technician").order("name");
     const { data: js }    = await sb.from("technician_jobs").select("*").order("fecha",{ascending:false});
     const { data: ps }    = await sb.from("technician_payments").select("*").order("fecha",{ascending:false});
-    setTechnicians(techs||[]); setJobs(js||[]); setPayments(ps||[]);
+    const { data: bs }    = await sb.from("commission_payment_batches").select("*").order("fecha",{ascending:false});
+    setTechnicians(techs||[]); setJobs(js||[]); setPayments(ps||[]); setBatches(bs||[]);
     setLoading(false);
   };
 
@@ -6929,6 +6936,136 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
     setShowPayModal(false);
     setPayForm({ monto:"", fecha:new Date().toISOString().split("T")[0], notas:"", job_id:"" });
     setSaving(false); loadData();
+  };
+
+  // ── Lotes de pago de comisiones ──────────────────────────────
+  const toggleComSelected = (projectId) => {
+    setSelectedComIds(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId); else next.add(projectId);
+      return next;
+    });
+  };
+
+  const openBatchModal = (tech, comisiones) => {
+    const items = comisiones.filter(c => selectedComIds.has(String(c.project.id)));
+    if (!items.length) return;
+    setBatchModal({ tech, items, fecha:new Date().toISOString().split("T")[0], notas:"" });
+  };
+
+  const siguienteLoteCodigo = () => {
+    const nums = batches.map(b => /^LOTE-(\d+)$/.exec(b.codigo||"")).filter(Boolean).map(m=>parseInt(m[1],10));
+    const max = nums.length ? Math.max(...nums) : 0;
+    return `LOTE-${String(max+1).padStart(4,"0")}`;
+  };
+
+  const generarLoteComision = async () => {
+    if (!batchModal || !batchModal.items.length) return;
+    setSavingBatch(true);
+    const { tech, items, fecha, notas } = batchModal;
+    const total = items.reduce((s,c)=>s+Math.round(c.saldo),0);
+    const codigo = siguienteLoteCodigo();
+    const { data: batch } = await sb.from("commission_payment_batches")
+      .insert({ codigo, technician_id: tech.id, fecha, total, notas: notas||null })
+      .select().single();
+    for (const c of items) {
+      await sb.from("technician_payments").insert({
+        technician_id: tech.id, job_id: null, project_id: c.project.id,
+        payment_type: "comision", fecha, monto: Math.round(c.saldo),
+        notas: notas||null, batch_id: batch.id
+      });
+    }
+    setSelectedComIds(new Set());
+    setBatchModal(null);
+    setSavingBatch(false);
+    await loadData();
+    imprimirLote(tech, { ...batch, codigo, fecha, total, notas }, items);
+  };
+
+  const imprimirLote = (tech, batch, items) => {
+    const pc = config?.primaryColor || G.accent;
+    const conDetalle = items.every(it => it.base !== undefined);
+    const w = window.open("","_blank","width=800,height=600");
+    if (!w) { alert("Permite las ventanas emergentes para generar el documento."); return; }
+    w.document.write(`
+      <html><head><title>Lote de pago ${batch.codigo}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;color:#1e293b;padding:30px;font-size:12px}
+        h1{font-size:18px;color:${pc};margin-bottom:4px}
+        .sub{color:#64748b;font-size:11px;margin-bottom:16px}
+        .info{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:16px;font-size:12px}
+        .info div{margin-bottom:3px}
+        .info strong{color:#1e293b}
+        table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11px}
+        th{background:${pc};color:#fff;padding:7px 10px;text-align:left;font-size:10px}
+        td{padding:7px 10px;border-bottom:1px solid #e2e8f0}
+        tr:nth-child(even) td{background:#f8fafc}
+        .tot td{font-weight:700;border-top:2px solid ${pc};color:${pc};background:#fff}
+        .nota{font-size:10px;color:#64748b;font-style:italic;margin:4px 0 16px}
+        .firmas{display:flex;gap:40px;margin-top:50px}
+        .firma{flex:1;border-top:1px solid #1e293b;padding-top:6px;font-size:10px;color:#475569;text-align:center}
+        @media print{body{padding:16px}}
+      </style></head><body>
+        <h1>LOTE DE PAGO DE COMISIONES ${batch.codigo}</h1>
+        <div class="sub">${config?.companyName||"Casa Inteligente"}${config?.nit?` — NIT ${config.nit}`:""}</div>
+        <div class="info">
+          <div><strong>Técnico:</strong> ${tech.name}</div>
+          <div><strong>Fecha:</strong> ${batch.fecha}</div>
+          <div><strong>Lote N°:</strong> ${batch.codigo}</div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Proyecto</th>
+            ${conDetalle ? `<th style="text-align:right">Base M.O.</th><th style="text-align:right">%</th>` : ""}
+            <th style="text-align:right">Monto pagado</th>
+          </tr></thead>
+          <tbody>
+            ${items.map(it=>`<tr>
+              <td>${it.project.name}${it.project.client_name?` — ${it.project.client_name}`:""}</td>
+              ${conDetalle ? `
+                <td style="text-align:right">${fmtCOP(it.base)}</td>
+                <td style="text-align:right">${it.fijo!==null&&it.fijo!==undefined?"fijo":`${it.pct}%`}</td>
+              ` : ""}
+              <td style="text-align:right"><strong>${fmtCOP(it.monto!==undefined?it.monto:Math.round(it.saldo))}</strong></td>
+            </tr>`).join("")}
+          </tbody>
+          <tfoot>
+            <tr class="tot">
+              <td colspan="${conDetalle?3:1}" style="text-align:right">Total del lote</td>
+              <td style="text-align:right">${fmtCOP(batch.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        ${batch.notas ? `<div class="nota">Notas: ${batch.notas}</div>` : ""}
+        <div class="firmas">
+          <div class="firma">Elaborado por</div>
+          <div class="firma">Recibido por contabilidad</div>
+        </div>
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); }, 400);
+  };
+
+  const reimprimirLote = (batch) => {
+    const tech = technicians.find(t=>t.id===batch.technician_id);
+    if (!tech) return;
+    const items = payments.filter(p=>p.batch_id===batch.id).map(p=>{
+      const proj = projects.find(pr=>String(pr.id)===String(p.project_id));
+      return { project: proj || { name:"Proyecto eliminado" }, monto: Number(p.monto||0) };
+    });
+    imprimirLote(tech, batch, items);
+  };
+
+  const deleteBatch = async (batch) => {
+    const ok = await confirm(`¿Eliminar el lote ${batch.codigo}?`,
+      "Se eliminarán los pagos de comisión asociados y esos montos volverán a quedar pendientes.");
+    if (!ok) return;
+    await sb.from("technician_payments").delete().eq("batch_id", batch.id);
+    await sb.from("commission_payment_batches").delete().eq("id", batch.id);
+    loadData();
   };
 
   const handleSaveJob = async () => {
@@ -7304,6 +7441,57 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
         })()}
       </div>
 
+      {/* Lotes de pago generados */}
+      <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:10, marginBottom:16, overflow:"hidden" }}>
+        <div onClick={()=>setShowBatchHistorial(v=>!v)}
+          style={{ padding:"10px 18px", display:"flex", justifyContent:"space-between", alignItems:"center",
+                   cursor:"pointer", background:G.surface }}>
+          <span style={{ fontSize:12, fontWeight:700 }}>🧾 Lotes de pago generados</span>
+          <span style={{ color:G.muted, fontSize:11 }}>{showBatchHistorial?"▲":"▼"}</span>
+        </div>
+        {showBatchHistorial && (
+          batches.length === 0 ? (
+            <div style={{ padding:20, textAlign:"center", color:G.muted, fontSize:12 }}>Aún no se han generado lotes de pago.</div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ background:G.surface }}>
+                  {["Técnico","Código","Fecha","Total","# comisiones",""].map((h,i)=>(
+                    <th key={h+i} style={{ padding:"7px 14px", color:G.muted, fontWeight:600, fontSize:10,
+                                           textAlign:i===0?"left":i===5?"center":"right" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map(b=>{
+                  const tech = technicians.find(t=>t.id===b.technician_id);
+                  const n = payments.filter(p=>p.batch_id===b.id).length;
+                  return (
+                    <tr key={b.id} style={{ borderTop:`1px solid ${G.border}` }}>
+                      <td style={{ padding:"7px 14px" }}>{tech?.name||"—"}</td>
+                      <td style={{ padding:"7px 14px", fontFamily:G.mono, color:G.muted }}>{b.codigo}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right" }}>{b.fecha}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right", fontFamily:G.mono, fontWeight:700 }}>{fmtCOP(b.total)}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"center", color:G.muted }}>{n}</td>
+                      <td style={{ padding:"7px 14px", textAlign:"right" }}>
+                        <div style={{ display:"flex", gap:4, justifyContent:"flex-end" }}>
+                          <button onClick={()=>reimprimirLote(b)}
+                            style={{ background:"none", border:`1px solid ${G.accent}`, color:G.accent,
+                                     padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>🖨️</button>
+                          <button onClick={()=>deleteBatch(b)}
+                            style={{ background:"none", border:`1px solid ${G.danger}`, color:G.danger,
+                                     padding:"3px 8px", borderRadius:5, cursor:"pointer", fontSize:10 }}>🗑️</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )
+        )}
+      </div>
+
       {/* Filtros */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
         {FILTERS.map(f=>(
@@ -7343,7 +7531,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                 <div style={{ padding:"12px 18px", display:"flex", justifyContent:"space-between",
                               alignItems:"center", borderBottom: isOpen?`1px solid ${G.border}`:"none" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", flex:1 }}
-                       onClick={()=>setSelectedTech(isOpen?null:t)}>
+                       onClick={()=>{ setSelectedTech(isOpen?null:t); setSelectedComIds(new Set()); }}>
                     <div style={{ width:34, height:34, borderRadius:"50%", background:G.accent, color:"#fff",
                                   display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13 }}>
                       {(t.name||"T")[0].toUpperCase()}
@@ -7368,7 +7556,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                                padding:"5px 10px", borderRadius:6, cursor:"pointer", fontSize:11 }}>
                       🗑️
                     </button>
-                    <span onClick={()=>setSelectedTech(isOpen?null:t)}
+                    <span onClick={()=>{ setSelectedTech(isOpen?null:t); setSelectedComIds(new Set()); }}
                       style={{ color:G.muted, cursor:"pointer" }}>{isOpen?"▲":"▼"}</span>
                   </div>
                 </div>
@@ -7379,7 +7567,7 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                     <div style={{ padding:"10px 18px", display:"flex", justifyContent:"space-between",
                                   alignItems:"center", flexWrap:"wrap", gap:10 }}>
                       <span style={{ fontSize:12, fontWeight:700, color:G.accent }}>🤝 Comisiones por mano de obra</span>
-                      <div style={{ display:"flex", gap:14 }}>
+                      <div style={{ display:"flex", gap:14, alignItems:"center" }}>
                         {[{l:"Causado",v:comCausado,c:G.text},
                           {l:"Pagado",v:comPagado,c:"#22c55e"},
                           {l:"Saldo",v:comSaldo,c:comSaldo>0?"#f59e0b":G.muted}].map(x=>(
@@ -7388,11 +7576,37 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                             <div style={{ fontWeight:700, fontSize:13, color:x.c }}>{fmtCOP(x.v)}</div>
                           </div>
                         ))}
+                        {(() => {
+                          const seleccionadas = comisiones.filter(c=>c.saldo>0 && selectedComIds.has(String(c.project.id)));
+                          if (!seleccionadas.length) return null;
+                          const totalSel = seleccionadas.reduce((s,c)=>s+Math.round(c.saldo),0);
+                          return (
+                            <button onClick={()=>openBatchModal(t, comisiones)}
+                              style={{ background:"#a855f7", color:"#fff", border:"none", padding:"7px 14px",
+                                       borderRadius:6, cursor:"pointer", fontSize:12, fontWeight:600, whiteSpace:"nowrap" }}>
+                              📦 Generar lote ({seleccionadas.length} · {fmtCOP(totalSel)})
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                     <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                       <thead>
                         <tr style={{ background:G.surface }}>
+                          <th style={{ padding:"6px 12px", width:30 }}>
+                            {(() => {
+                              const pagables = comisiones.filter(c=>c.saldo>0);
+                              const todasSel = pagables.length>0 && pagables.every(c=>selectedComIds.has(String(c.project.id)));
+                              return (
+                                <input type="checkbox" checked={todasSel}
+                                  onChange={()=>setSelectedComIds(prev => {
+                                    if (todasSel) return new Set();
+                                    return new Set(pagables.map(c=>String(c.project.id)));
+                                  })}
+                                  style={{ width:14, height:14, cursor:"pointer" }} />
+                              );
+                            })()}
+                          </th>
                           {["Proyecto","Base M.O. (venta sin IVA)","%","Causado","Pagado","Saldo",""].map((h,i)=>(
                             <th key={h+i} style={{ padding:"6px 12px", color:G.muted, fontWeight:600, fontSize:10,
                                                    textAlign: i===0?"left":"right" }}>{h}</th>
@@ -7402,6 +7616,13 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
                       <tbody>
                         {comisiones.map(c=>(
                           <tr key={c.project.id} style={{ borderTop:`1px solid ${G.border}` }}>
+                            <td style={{ padding:"7px 12px" }}>
+                              {c.saldo > 0 && (
+                                <input type="checkbox" checked={selectedComIds.has(String(c.project.id))}
+                                  onChange={()=>toggleComSelected(String(c.project.id))}
+                                  style={{ width:14, height:14, cursor:"pointer" }} />
+                              )}
+                            </td>
                             <td style={{ padding:"7px 12px" }}>{c.project.name}</td>
                             <td style={{ padding:"7px 12px", textAlign:"right", fontFamily:G.mono, color:G.muted }}>{fmtCOP(c.base)}</td>
                             <td style={{ padding:"7px 12px", textAlign:"right", color:G.muted }}>
@@ -7710,6 +7931,73 @@ const TechniciansAdminView = ({ config, projects = [], quotes = [], projectQuote
           </div>
         </div>
       )}
+
+      {/* Modal lote de pago */}
+      {batchModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
+                      display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
+             onClick={e=>e.target===e.currentTarget&&setBatchModal(null)}>
+          <div style={{ background:G.card, border:`1px solid ${G.border}`, borderRadius:12, padding:24, width:560 }}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>📦 Generar lote de pago</div>
+            <div style={{ color:G.muted, fontSize:12, marginBottom:16 }}>
+              Técnico: <strong style={{color:G.text}}>{batchModal.tech.name}</strong>
+            </div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:16 }}>
+              <thead>
+                <tr style={{ background:G.surface }}>
+                  {["Proyecto","Base M.O.","%","Monto"].map((h,i)=>(
+                    <th key={h} style={{ padding:"6px 10px", color:G.muted, fontWeight:600, fontSize:10,
+                                         textAlign: i===0?"left":"right" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {batchModal.items.map(c=>(
+                  <tr key={c.project.id} style={{ borderTop:`1px solid ${G.border}` }}>
+                    <td style={{ padding:"6px 10px" }}>{c.project.name}</td>
+                    <td style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>{fmtCOP(c.base)}</td>
+                    <td style={{ padding:"6px 10px", textAlign:"right", color:G.muted }}>
+                      {c.fijo !== null ? "fijo" : `${c.pct}%`}
+                    </td>
+                    <td style={{ padding:"6px 10px", textAlign:"right", fontWeight:600 }}>{fmtCOP(Math.round(c.saldo))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop:`2px solid ${G.accent}` }}>
+                  <td colSpan={3} style={{ padding:"6px 10px", textAlign:"right", fontWeight:700 }}>Total</td>
+                  <td style={{ padding:"6px 10px", textAlign:"right", fontWeight:700, color:G.accent }}>
+                    {fmtCOP(batchModal.items.reduce((s,c)=>s+Math.round(c.saldo),0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginBottom:20 }}>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Fecha</div>
+                <input type="date" value={batchModal.fecha}
+                  onChange={e=>setBatchModal({...batchModal, fecha:e.target.value})} style={inp} />
+              </div>
+              <div>
+                <div style={{ color:G.muted, fontSize:11, marginBottom:4 }}>Notas (opcional)</div>
+                <input value={batchModal.notas} onChange={e=>setBatchModal({...batchModal, notas:e.target.value})}
+                  placeholder="Observaciones para el lote" style={inp} />
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={()=>setBatchModal(null)}
+                style={{ background:"none", border:`1px solid ${G.border}`, color:G.muted,
+                         padding:"8px 18px", borderRadius:7, cursor:"pointer" }}>Cancelar</button>
+              <button onClick={generarLoteComision} disabled={savingBatch}
+                style={{ background:"#a855f7", color:"#fff", border:"none", padding:"8px 22px",
+                         borderRadius:7, cursor:"pointer", fontWeight:600, opacity:savingBatch?0.5:1 }}>
+                {savingBatch?"Generando...":"📦 Generar lote y registrar pagos"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDialog}
     </div>
   );
 };
