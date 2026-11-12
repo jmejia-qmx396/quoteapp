@@ -741,7 +741,7 @@ const Dashboard = ({ quotes, clients, products, projects, projectPayments, proje
           <h1 style={{ fontSize:22,fontWeight:700,marginBottom:4 }}>Dashboard</h1>
           <p style={{ color:G.muted,fontSize:13 }}>
             Resumen del período seleccionado
-            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.12.0</span>
+            <span style={{ marginLeft:10,fontSize:11,color:G.muted,fontFamily:G.mono,fontWeight:600 }}>v1.12.1</span>
           </p>
         </div>
         {/* Filtro de fechas */}
@@ -4324,6 +4324,13 @@ const CalendarAdminView = ({ projects, projectTasks, techniciansList, saveProjec
         <Modal title="¿Para cuál Proyecto o Servicio?" onClose={()=>setPickerDate(null)} width={480}>
           <input autoFocus value={pickerSearch} onChange={e=>setPickerSearch(e.target.value)}
             placeholder="Buscar proyecto o cliente…" style={{ marginBottom:12,width:"100%" }} />
+          <div onClick={()=>{ setEditTask(blankTaskFor(null, pickerDate)); setPickerDate(null); setTaskModal(true); }}
+            style={{ padding:"8px 10px",borderRadius:8,marginBottom:10,cursor:"pointer",fontSize:13,fontWeight:600,
+                     background:"rgba(59,130,246,.08)",border:`1px dashed ${G.accent}`,color:G.accent }}
+            onMouseOver={e=>e.currentTarget.style.background="rgba(59,130,246,.16)"}
+            onMouseOut={e=>e.currentTarget.style.background="rgba(59,130,246,.08)"}>
+            ✎ Cliente libre (sin proyecto asociado)
+          </div>
           <div style={{ maxHeight:360,overflowY:"auto" }}>
             {activeProjects
               .filter(p => !pickerSearch ||
